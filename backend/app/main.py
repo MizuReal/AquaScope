@@ -1,8 +1,10 @@
 from pathlib import Path
 import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.routes.ocr import router as ocr_router
@@ -18,6 +20,23 @@ logging.getLogger("app.routes.fiducial").setLevel(logging.DEBUG)
 settings = get_settings()
 
 app = FastAPI(title="ML App Backend")
+
+allowed_origins = [
+	origin.strip()
+	for origin in os.getenv(
+		"BACKEND_CORS_ORIGINS",
+		"http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
+	).split(",")
+	if origin.strip()
+]
+
+app.add_middleware(
+	CORSMiddleware,
+	allow_origins=allowed_origins,
+	allow_credentials=True,
+	allow_methods=["*"],
+	allow_headers=["*"],
+)
 
 
 _CONFIRM_TEMPLATE_PATH = (
