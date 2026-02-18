@@ -441,9 +441,6 @@ export default function DashboardPage() {
               </span>
               Start a conversation
             </button>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-500">
-              Endpoint: /chat/message
-            </span>
           </div>
         </div>
       </div>
