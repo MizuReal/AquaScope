@@ -16,6 +16,8 @@ if (!isSupabaseConfigured) {
 export const supabase = isSupabaseConfigured
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
+        storageKey: "aquascope-auth",
+        autoRefreshToken: true,
         detectSessionInUrl: true,
         persistSession: true,
       },

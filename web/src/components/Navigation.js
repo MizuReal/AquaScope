@@ -11,7 +11,28 @@ export default function Navigation() {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState("login");
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [sessionUser, setSessionUser] = useState(null);
+
+  const getDisplayName = (user) => {
+    const metadata = user?.user_metadata || {};
+    return (
+      metadata.display_name ||
+      metadata.full_name ||
+      metadata.name ||
+      user?.email?.split("@")[0] ||
+      "User"
+    );
+  };
+
+  const getInitials = (name) => {
+    const tokens = String(name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!tokens.length) return "U";
+    if (tokens.length === 1) return tokens[0].slice(0, 1).toUpperCase();
+    return `${tokens[0][0]}${tokens[1][0]}`.toUpperCase();
+  };
 
   const openModal = (selectedMode = "login") => {
     setMode(selectedMode);
@@ -32,16 +53,23 @@ export default function Navigation() {
       if (!isMounted) {
         return;
       }
-      setIsAuthenticated(Boolean(data?.session));
+      setSessionUser(data?.session?.user || null);
     };
 
     syncSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) {
         return;
       }
-      setIsAuthenticated(Boolean(session));
+      if (session?.user) {
+        setSessionUser(session.user);
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        setSessionUser(null);
+      }
     });
 
     return () => {
@@ -51,11 +79,6 @@ export default function Navigation() {
   }, []);
 
   const handleDashboardClick = async () => {
-    if (!isAuthenticated) {
-      openModal("login");
-      return;
-    }
-
     if (!supabase) {
       router.push("/dashboard");
       return;
@@ -65,13 +88,56 @@ export default function Navigation() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      if (!session) {
+        openModal("login");
+        return;
+      }
+
       const userId = session?.user?.id;
       const role = userId ? await getUserRole(userId) : null;
+      router.push(isAdminRole(role) ? "/admin/dashboard" : "/dashboard");
+    } catch {
+      openModal("login");
+    }
+  };
+
+  const handleProfileClick = async () => {
+    if (!supabase) {
+      router.push("/dashboard");
+      return;
+    }
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.user?.id) {
+        openModal("login");
+        return;
+      }
+
+      const role = await getUserRole(session.user.id);
       router.push(isAdminRole(role) ? "/admin/dashboard" : "/dashboard");
     } catch {
       router.push("/dashboard");
     }
   };
+
+  const handleLogout = async () => {
+    if (!supabase) {
+      setSessionUser(null);
+      return;
+    }
+
+    await supabase.auth.signOut();
+    setSessionUser(null);
+    router.refresh();
+  };
+
+  const displayName = getDisplayName(sessionUser);
+  const initials = getInitials(displayName);
 
   return (
     <>
@@ -91,20 +157,43 @@ export default function Navigation() {
             >
               Dashboard
             </button>
-            <button
-              className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-              type="button"
-              onClick={() => openModal("login")}
-            >
-              Login
-            </button>
-            <button
-              className="rounded-full bg-sky-600 px-4 py-2 text-white transition hover:-translate-y-0.5 hover:bg-sky-700"
-              type="button"
-              onClick={() => openModal("register")}
-            >
-              Register
-            </button>
+            {sessionUser ? (
+              <>
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-xs font-semibold tracking-normal text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                  type="button"
+                  onClick={handleProfileClick}
+                  aria-label="Open profile"
+                  title={displayName}
+                >
+                  {initials}
+                </button>
+                <button
+                  className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                  type="button"
+                  onClick={handleLogout}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                  type="button"
+                  onClick={() => openModal("login")}
+                >
+                  Login
+                </button>
+                <button
+                  className="rounded-full bg-sky-600 px-4 py-2 text-white transition hover:-translate-y-0.5 hover:bg-sky-700"
+                  type="button"
+                  onClick={() => openModal("register")}
+                >
+                  Register
+                </button>
+              </>
+            )}
           </div>
         </nav>
       </header>

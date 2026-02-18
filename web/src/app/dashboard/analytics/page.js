@@ -1,18 +1,30 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
 const WATER_SAMPLES_TABLE = process.env.NEXT_PUBLIC_SUPABASE_SAMPLES_TABLE || "field_samples";
-const CONTAINER_SAMPLES_TABLE = process.env.NEXT_PUBLIC_CONTAINER_SAMPLES_TABLE || "container_samples";
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 const configMissing = !supabase || !isSupabaseConfigured;
 
 const numeric = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseAnomalyChecks = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 };
 
 const formatPercent = (value) => {
@@ -115,39 +127,47 @@ const buildRecentDayBuckets = (samples, days = 7) => {
   return buckets;
 };
 
-const buildSparklinePath = (values, width = 520, height = 180, padding = 12) => {
-  if (!values.length) return "";
-
-  const safeValues = values.map((value) => (Number.isFinite(value) ? Number(value) : 0));
-  const min = Math.min(...safeValues);
-  const max = Math.max(...safeValues);
-  const span = max - min || 1;
-  const stepX = safeValues.length > 1 ? (width - padding * 2) / (safeValues.length - 1) : 0;
-
-  return safeValues
-    .map((value, index) => {
-      const x = padding + index * stepX;
-      const y = height - padding - ((value - min) / span) * (height - padding * 2);
-      return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
-};
-
 const formatMetric = (value, digits = 2) => {
   if (!Number.isFinite(value)) return "--";
   return Number(value).toFixed(digits);
 };
 
-const statusBarStyle = {
-  Cleared: "bg-sky-500",
-  Review: "bg-amber-500",
-  Alert: "bg-rose-500",
-};
-
-const statusBadgeStyle = {
-  Cleared: "border-sky-200 bg-sky-50 text-sky-700",
-  Review: "border-amber-200 bg-amber-50 text-amber-700",
-  Alert: "border-rose-200 bg-rose-50 text-rose-700",
+const PARAMETER_REFERENCE_META = {
+  ph: {
+    key: "ph",
+    label: "pH",
+    unit: "pH",
+    referenceType: "range",
+    lower: 6.5,
+    upper: 8.5,
+    color: "#0ea5e9",
+  },
+  turbidity: {
+    key: "turbidity",
+    label: "Turbidity",
+    unit: "NTU",
+    referenceType: "max",
+    threshold: 5,
+    color: "#14b8a6",
+  },
+  conductivity: {
+    key: "conductivity",
+    label: "Conductivity",
+    unit: "µS/cm",
+    referenceType: "range",
+    lower: 250,
+    upper: 600,
+    color: "#8b5cf6",
+  },
+  hardness: {
+    key: "hardness",
+    label: "Hardness",
+    unit: "mg/L",
+    referenceType: "range",
+    lower: 60,
+    upper: 180,
+    color: "#f59e0b",
+  },
 };
 
 export default function AnalyticsPage() {
@@ -170,50 +190,22 @@ export default function AnalyticsPage() {
       setError("");
 
       const sharedSelect =
-        "id, created_at, source, risk_level, prediction_probability, prediction_is_potable, ph, turbidity, conductivity, hardness, solids, chloramines, sulfate, organic_carbon, trihalomethanes, microbial_risk, microbial_score";
+        "id, created_at, source, risk_level, prediction_probability, prediction_is_potable, ph, turbidity, conductivity, hardness, solids, chloramines, sulfate, organic_carbon, trihalomethanes, microbial_risk, microbial_score, anomaly_checks";
 
       try {
-        const [waterResult, containerResult] = await Promise.allSettled([
-          supabase
-            .from(WATER_SAMPLES_TABLE)
-            .select(sharedSelect)
-            .eq("user_id", userId)
-            .order("created_at", { ascending: false })
-            .limit(180),
-          supabase
-            .from(CONTAINER_SAMPLES_TABLE)
-            .select("*")
-            .eq("user_id", userId)
-            .order("created_at", { ascending: false })
-            .limit(120),
-        ]);
+        const { data, error: queryError } = await supabase
+          .from(WATER_SAMPLES_TABLE)
+          .select(sharedSelect)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(120);
 
-        const merged = [];
-
-        if (waterResult.status === "fulfilled") {
-          if (waterResult.value.error) throw waterResult.value.error;
-          merged.push(...(waterResult.value.data || []));
+        if (queryError) {
+          throw queryError;
         }
-
-        if (containerResult.status === "fulfilled") {
-          if (containerResult.value.error) {
-            throw containerResult.value.error;
-          }
-          merged.push(...(containerResult.value.data || []));
-        }
-
-        if (waterResult.status === "rejected" && containerResult.status === "rejected") {
-          throw new Error("Unable to load analytics records from your sample tables.");
-        }
-
-        merged.sort((a, b) => {
-          const timeA = a?.created_at ? new Date(a.created_at).getTime() : 0;
-          const timeB = b?.created_at ? new Date(b.created_at).getTime() : 0;
-          return timeB - timeA;
-        });
 
         if (isMounted) {
-          setSamples(merged);
+          setSamples(data || []);
         }
       } catch (fetchError) {
         if (isMounted) {
@@ -253,12 +245,14 @@ export default function AnalyticsPage() {
 
     bootstrap();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
       if (!session?.user?.id) {
-        setAuthReady(false);
-        setSamples([]);
+        if (event === "SIGNED_OUT") {
+          setAuthReady(false);
+          setSamples([]);
+        }
         return;
       }
 
@@ -318,6 +312,50 @@ export default function AnalyticsPage() {
     const conductivityValues = samples.map((row) => numeric(row?.conductivity)).filter((value) => Number.isFinite(value));
     const hardnessValues = samples.map((row) => numeric(row?.hardness)).filter((value) => Number.isFinite(value));
 
+    const chronologicalSamples = [...samples]
+      .filter((row) => row?.created_at && !Number.isNaN(new Date(row.created_at).getTime()))
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    const parameterPlots = Object.values(PARAMETER_REFERENCE_META).map((meta) => {
+      const points = chronologicalSamples
+        .map((row) => {
+          const y = numeric(row?.[meta.key]);
+          if (!Number.isFinite(y)) return null;
+          return {
+            x: row.created_at,
+            y,
+            source: row?.source || "Unknown source",
+            riskLevel: String(row?.risk_level || "unknown").toLowerCase(),
+          };
+        })
+        .filter(Boolean)
+        .slice(-60);
+
+      const pointValues = points.map((point) => point.y);
+      const avg = average(pointValues);
+      const med = median(pointValues);
+
+      let outOfReference = 0;
+      points.forEach((point) => {
+        if (meta.referenceType === "range") {
+          if (point.y < meta.lower || point.y > meta.upper) outOfReference += 1;
+          return;
+        }
+        if (meta.referenceType === "max" && point.y > meta.threshold) {
+          outOfReference += 1;
+        }
+      });
+
+      return {
+        ...meta,
+        points,
+        count: points.length,
+        avg,
+        median: med,
+        outOfReference,
+      };
+    });
+
     const parameterCards = [
       {
         key: "ph",
@@ -349,14 +387,38 @@ export default function AnalyticsPage() {
       },
     ];
 
-    const microbialCounts = { low: 0, medium: 0, high: 0, unknown: 0 };
-    samples.forEach((row) => {
-      const risk = String(row?.microbial_risk || "").toLowerCase();
-      if (risk === "low" || risk === "medium" || risk === "high") {
-        microbialCounts[risk] += 1;
-      } else {
-        microbialCounts.unknown += 1;
+    const anomalyStatusCounts = { ok: 0, warning: 0, critical: 0, missing: 0, unknown: 0 };
+    let totalAnomalyChecks = 0;
+    let flaggedAnomalyChecks = 0;
+
+    const anomalyRecentTrend = recent.map((row) => {
+      const checks = parseAnomalyChecks(row?.anomaly_checks);
+      if (!checks.length) {
+        anomalyStatusCounts.missing += 1;
       }
+
+      let flaggedForSample = 0;
+      checks.forEach((check) => {
+        const status = String(check?.status || "ok").toLowerCase();
+        if (status === "ok") anomalyStatusCounts.ok += 1;
+        else if (status === "warning") {
+          anomalyStatusCounts.warning += 1;
+          flaggedForSample += 1;
+          flaggedAnomalyChecks += 1;
+        } else if (status === "critical") {
+          anomalyStatusCounts.critical += 1;
+          flaggedForSample += 1;
+          flaggedAnomalyChecks += 1;
+        } else {
+          anomalyStatusCounts.unknown += 1;
+        }
+      });
+
+      totalAnomalyChecks += checks.length;
+      return {
+        label: compactTimeLabel(row?.created_at),
+        flagged: flaggedForSample,
+      };
     });
 
     const insights = [];
@@ -388,16 +450,16 @@ export default function AnalyticsPage() {
       dayBuckets,
       statusDistribution,
       parameterCards,
-      microbialCounts,
+      parameterPlots,
+      anomalyStatusCounts,
+      anomalyRecentTrend,
+      totalAnomalyChecks,
+      flaggedAnomalyChecks,
       insights,
     };
   }, [samples]);
 
   const hasChartData = analytics.total > 0;
-  const riskDistTotal = analytics.statusDistribution.reduce((sum, row) => sum + row.population, 0);
-  const confidencePath = buildSparklinePath(analytics.confidenceTrend.map((entry) => entry.value));
-  const riskPath = buildSparklinePath(analytics.riskTrend.map((entry) => entry.value));
-  const maxDaily = Math.max(1, ...analytics.dayBuckets.map((bucket) => bucket.count));
 
   if (configMissing) {
     return (
@@ -510,18 +572,68 @@ export default function AnalyticsPage() {
                 <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Confidence trend</p>
                 <p className="mt-1 text-sm text-slate-500">Latest prediction confidence sequence from recent samples.</p>
                 {hasChartData ? (
-                  <div className="mt-4 space-y-3">
-                    <svg viewBox="0 0 520 180" className="w-full rounded-xl border border-sky-200 bg-sky-50/40 p-2">
-                      <path d={confidencePath} fill="none" stroke="#0284c7" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                    </svg>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 md:grid-cols-4">
-                      {analytics.confidenceTrend.map((point) => (
-                        <div key={`${point.label}-${point.value}`} className="rounded-lg border border-sky-100 bg-sky-50/60 px-2 py-1.5">
-                          <p className="text-[10px] uppercase text-slate-500">{point.label}</p>
-                          <p className="font-semibold text-sky-700">{formatPercent(point.value)}</p>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/30 p-2">
+                    <Plot
+                      data={[
+                        {
+                          x: analytics.confidenceTrend.map((point) => point.label),
+                          y: analytics.confidenceTrend.map((point) => point.value),
+                          type: "scatter",
+                          mode: "lines+markers",
+                          name: "Observed confidence",
+                          line: { color: "#0284c7", width: 2 },
+                          marker: { color: "#0284c7", size: 6 },
+                          hovertemplate: "%{x}<br>Confidence: %{y:.3f}<extra></extra>",
+                        },
+                        {
+                          x: analytics.confidenceTrend.map((point) => point.label),
+                          y: analytics.confidenceTrend.map(() => 0.5),
+                          type: "scatter",
+                          mode: "lines",
+                          name: "Reference floor (0.50)",
+                          line: { color: "#f59e0b", width: 1.5, dash: "dot" },
+                          hovertemplate: "Reference: %{y:.2f}<extra></extra>",
+                        },
+                        {
+                          x: analytics.confidenceTrend.map((point) => point.label),
+                          y: analytics.confidenceTrend.map(() => 0.7),
+                          type: "scatter",
+                          mode: "lines",
+                          name: "High-confidence mark (0.70)",
+                          line: { color: "#16a34a", width: 1.5, dash: "dot" },
+                          hovertemplate: "Reference: %{y:.2f}<extra></extra>",
+                        },
+                      ]}
+                      layout={{
+                        autosize: true,
+                        height: 290,
+                        margin: { l: 46, r: 16, t: 10, b: 42 },
+                        paper_bgcolor: "rgba(255,255,255,0)",
+                        plot_bgcolor: "#ffffff",
+                        xaxis: {
+                          title: "Recent sample sequence",
+                          gridcolor: "#e2e8f0",
+                          tickfont: { size: 10, color: "#475569" },
+                        },
+                        yaxis: {
+                          title: "Confidence",
+                          range: [0, 1],
+                          tick0: 0,
+                          dtick: 0.1,
+                          gridcolor: "#e2e8f0",
+                          tickfont: { size: 10, color: "#475569" },
+                        },
+                        legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } },
+                      }}
+                      config={{
+                        responsive: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                        scrollZoom: false,
+                      }}
+                      useResizeHandler
+                      style={{ width: "100%", height: "290px" }}
+                    />
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-slate-500">No chart data yet.</p>
@@ -532,18 +644,77 @@ export default function AnalyticsPage() {
                 <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Risk index trajectory</p>
                 <p className="mt-1 text-sm text-slate-500">Safe → unsafe mapped to a 0.15 → 0.88 risk proxy.</p>
                 {hasChartData ? (
-                  <div className="mt-4 space-y-3">
-                    <svg viewBox="0 0 520 180" className="w-full rounded-xl border border-rose-200 bg-rose-50/50 p-2">
-                      <path d={riskPath} fill="none" stroke="#f43f5e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                    </svg>
-                    <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 md:grid-cols-4">
-                      {analytics.riskTrend.map((point) => (
-                        <div key={`${point.label}-${point.value}`} className="rounded-lg border border-rose-100 bg-rose-50/60 px-2 py-1.5">
-                          <p className="text-[10px] uppercase text-slate-500">{point.label}</p>
-                          <p className="font-semibold text-rose-700">{point.value.toFixed(2)}</p>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/30 p-2">
+                    <Plot
+                      data={[
+                        {
+                          x: analytics.riskTrend.map((point) => point.label),
+                          y: analytics.riskTrend.map((point) => point.value),
+                          type: "scatter",
+                          mode: "lines+markers",
+                          name: "Observed risk index",
+                          line: { color: "#e11d48", width: 2 },
+                          marker: { color: "#e11d48", size: 6 },
+                          hovertemplate: "%{x}<br>Risk index: %{y:.3f}<extra></extra>",
+                        },
+                        {
+                          x: analytics.riskTrend.map((point) => point.label),
+                          y: analytics.riskTrend.map(() => 0.35),
+                          type: "scatter",
+                          mode: "lines",
+                          name: "Borderline marker (0.35)",
+                          line: { color: "#f59e0b", width: 1.5, dash: "dot" },
+                          hovertemplate: "Reference: %{y:.2f}<extra></extra>",
+                        },
+                        {
+                          x: analytics.riskTrend.map((point) => point.label),
+                          y: analytics.riskTrend.map(() => 0.65),
+                          type: "scatter",
+                          mode: "lines",
+                          name: "Watch marker (0.65)",
+                          line: { color: "#fb923c", width: 1.5, dash: "dot" },
+                          hovertemplate: "Reference: %{y:.2f}<extra></extra>",
+                        },
+                        {
+                          x: analytics.riskTrend.map((point) => point.label),
+                          y: analytics.riskTrend.map(() => 0.88),
+                          type: "scatter",
+                          mode: "lines",
+                          name: "Unsafe marker (0.88)",
+                          line: { color: "#7f1d1d", width: 1.5, dash: "dot" },
+                          hovertemplate: "Reference: %{y:.2f}<extra></extra>",
+                        },
+                      ]}
+                      layout={{
+                        autosize: true,
+                        height: 290,
+                        margin: { l: 46, r: 16, t: 10, b: 42 },
+                        paper_bgcolor: "rgba(255,255,255,0)",
+                        plot_bgcolor: "#ffffff",
+                        xaxis: {
+                          title: "Recent sample sequence",
+                          gridcolor: "#e2e8f0",
+                          tickfont: { size: 10, color: "#475569" },
+                        },
+                        yaxis: {
+                          title: "Risk index",
+                          range: [0, 1],
+                          tick0: 0,
+                          dtick: 0.1,
+                          gridcolor: "#e2e8f0",
+                          tickfont: { size: 10, color: "#475569" },
+                        },
+                        legend: { orientation: "h", y: 1.2, x: 0, font: { size: 10, color: "#475569" } },
+                      }}
+                      config={{
+                        responsive: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                        scrollZoom: false,
+                      }}
+                      useResizeHandler
+                      style={{ width: "100%", height: "290px" }}
+                    />
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-slate-500">No risk trend data yet.</p>
@@ -555,45 +726,94 @@ export default function AnalyticsPage() {
               <article className="rounded-2xl border border-slate-300 bg-white p-6">
                 <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Daily sample volume (7 days)</p>
                 <p className="mt-1 text-sm text-slate-600">Operational throughput from your records.</p>
-                <div className="mt-5 flex items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  {analytics.dayBuckets.map((bucket) => {
-                    const heightPercent = Math.max(8, Math.round((bucket.count / maxDaily) * 100));
-                    return (
-                      <div key={bucket.key} className="flex flex-1 flex-col items-center gap-2">
-                        <p className="text-xs font-semibold text-slate-700">{bucket.count}</p>
-                        <div className="flex h-40 w-full items-end rounded-md bg-slate-100 px-1">
-                          <div className="w-full rounded-md bg-sky-500" style={{ height: `${heightPercent}%` }} />
-                        </div>
-                        <p className="text-[11px] text-slate-500">{compactDateLabel(bucket.date)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
+                {hasChartData ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <Plot
+                      data={[
+                        {
+                          x: analytics.dayBuckets.map((bucket) => compactDateLabel(bucket.date)),
+                          y: analytics.dayBuckets.map((bucket) => bucket.count),
+                          type: "bar",
+                          name: "Daily samples",
+                          marker: { color: "#0ea5e9" },
+                          text: analytics.dayBuckets.map((bucket) => String(bucket.count)),
+                          textposition: "outside",
+                          hovertemplate: "%{x}<br>Samples: %{y}<extra></extra>",
+                        },
+                      ]}
+                      layout={{
+                        autosize: true,
+                        height: 300,
+                        margin: { l: 44, r: 16, t: 10, b: 42 },
+                        paper_bgcolor: "rgba(255,255,255,0)",
+                        plot_bgcolor: "#ffffff",
+                        xaxis: { title: "Day", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } },
+                        yaxis: {
+                          title: "Sample count",
+                          rangemode: "tozero",
+                          dtick: 1,
+                          gridcolor: "#e2e8f0",
+                          tickfont: { size: 10, color: "#475569" },
+                        },
+                        showlegend: false,
+                      }}
+                      config={{
+                        responsive: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                        scrollZoom: false,
+                      }}
+                      useResizeHandler
+                      style={{ width: "100%", height: "300px" }}
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">No volume data yet.</p>
+                )}
               </article>
 
               <article className="rounded-2xl border border-sky-200 bg-white p-6">
                 <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Outcome mix</p>
                 <p className="mt-1 text-sm text-slate-500">Cleared, review, and alert distribution.</p>
-                {riskDistTotal > 0 ? (
-                  <div className="mt-4 space-y-3">
-                    {analytics.statusDistribution.map((row) => {
-                      const ratio = Math.round((row.population / riskDistTotal) * 100);
-                      return (
-                        <div key={row.name} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className={`rounded-full border px-2 py-0.5 ${statusBadgeStyle[row.name]}`}>
-                              {row.name}
-                            </span>
-                            <span className="font-semibold text-slate-600">
-                              {row.population} ({ratio}%)
-                            </span>
-                          </div>
-                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                            <div className={`h-full ${statusBarStyle[row.name]}`} style={{ width: `${ratio}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })}
+                {analytics.statusDistribution.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <Plot
+                      data={[
+                        {
+                          labels: analytics.statusDistribution.map((row) => row.name),
+                          values: analytics.statusDistribution.map((row) => row.population),
+                          type: "pie",
+                          hole: 0.44,
+                          sort: false,
+                          direction: "clockwise",
+                          marker: {
+                            colors: analytics.statusDistribution.map((row) => {
+                              if (row.name === "Cleared") return "#0ea5e9";
+                              if (row.name === "Review") return "#f59e0b";
+                              return "#f43f5e";
+                            }),
+                          },
+                          textinfo: "percent+label",
+                          hovertemplate: "%{label}<br>Count: %{value}<br>Share: %{percent}<extra></extra>",
+                        },
+                      ]}
+                      layout={{
+                        autosize: true,
+                        height: 300,
+                        margin: { l: 16, r: 16, t: 10, b: 10 },
+                        paper_bgcolor: "rgba(255,255,255,0)",
+                        showlegend: true,
+                        legend: { orientation: "h", y: -0.12, x: 0.1, font: { size: 11, color: "#475569" } },
+                      }}
+                      config={{
+                        responsive: true,
+                        displaylogo: false,
+                        modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                        scrollZoom: false,
+                      }}
+                      useResizeHandler
+                      style={{ width: "100%", height: "300px" }}
+                    />
                   </div>
                 ) : (
                   <p className="mt-4 text-sm text-slate-500">No distribution data yet.</p>
@@ -603,52 +823,251 @@ export default function AnalyticsPage() {
 
             <article className="rounded-2xl border border-sky-200 bg-white p-6">
               <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Parameter intelligence</p>
-              <p className="mt-1 text-sm text-slate-500">Aggregated central tendency and interpretation for core model features.</p>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                {analytics.parameterCards.map((param) => (
-                  <div key={param.key} className="rounded-xl border border-sky-100 bg-sky-50/50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-sky-900">{param.label}</p>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
-                        {param.descriptor}
-                      </span>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-lg border border-sky-100 bg-white px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Avg</p>
-                        <p className="mt-1 font-semibold text-slate-700">{formatMetric(param.avg)}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Plotly scatter trend charts using observed sample values with explicit reference thresholds for each model feature.
+              </p>
+              <div className="mt-4 grid gap-5 xl:grid-cols-2">
+                {analytics.parameterPlots.map((plot) => {
+                  const xSeries = plot.points.map((point) => point.x);
+                  const ySeries = plot.points.map((point) => point.y);
+                  const hasPoints = plot.count > 0;
+                  const minX = xSeries[0] || new Date().toISOString();
+                  const maxX = xSeries[xSeries.length - 1] || new Date().toISOString();
+
+                  const referenceTraces = [];
+                  if (hasPoints && plot.referenceType === "range") {
+                    referenceTraces.push(
+                      {
+                        x: [minX, maxX],
+                        y: [plot.lower, plot.lower],
+                        type: "scatter",
+                        mode: "lines",
+                        name: `${plot.label} lower ref`,
+                        line: { color: "#0f172a", dash: "dot", width: 1.5 },
+                        hovertemplate: `Lower reference: %{y:.2f} ${plot.unit}<extra></extra>`,
+                      },
+                      {
+                        x: [minX, maxX],
+                        y: [plot.upper, plot.upper],
+                        type: "scatter",
+                        mode: "lines",
+                        name: `${plot.label} upper ref`,
+                        line: { color: "#0f172a", dash: "dot", width: 1.5 },
+                        hovertemplate: `Upper reference: %{y:.2f} ${plot.unit}<extra></extra>`,
+                      },
+                    );
+                  }
+
+                  if (hasPoints && plot.referenceType === "max") {
+                    referenceTraces.push({
+                      x: [minX, maxX],
+                      y: [plot.threshold, plot.threshold],
+                      type: "scatter",
+                      mode: "lines",
+                      name: `${plot.label} max ref`,
+                      line: { color: "#0f172a", dash: "dot", width: 1.5 },
+                      hovertemplate: `Reference max: %{y:.2f} ${plot.unit}<extra></extra>`,
+                    });
+                  }
+
+                  const referenceDescriptor =
+                    plot.referenceType === "range"
+                      ? `Reference band: ${plot.lower}-${plot.upper} ${plot.unit}`
+                      : `Reference max: ≤ ${plot.threshold} ${plot.unit}`;
+
+                  return (
+                    <div key={plot.key} className="rounded-xl border border-sky-100 bg-sky-50/40 p-4">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-sky-900">{plot.label}</p>
+                        <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">
+                          Points: {plot.count}
+                        </span>
                       </div>
-                      <div className="rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-600">Median</p>
-                        <p className="mt-1 font-semibold text-amber-700">{formatMetric(param.median)}</p>
-                      </div>
+
+                      {hasPoints ? (
+                        <>
+                          <Plot
+                            data={[
+                              {
+                                x: xSeries,
+                                y: ySeries,
+                                type: "scatter",
+                                mode: "lines+markers",
+                                name: `${plot.label} observed`,
+                                line: { color: plot.color, width: 2 },
+                                marker: { color: plot.color, size: 6, opacity: 0.85 },
+                                customdata: plot.points.map((point) => [point.source, point.riskLevel]),
+                                hovertemplate:
+                                  "%{x|%b %d, %Y %H:%M}<br>Value: %{y:.3f} " +
+                                  plot.unit +
+                                  "<br>Source: %{customdata[0]}<br>Risk: %{customdata[1]}<extra></extra>",
+                              },
+                              ...referenceTraces,
+                            ]}
+                            layout={{
+                              autosize: true,
+                              height: 280,
+                              margin: { l: 48, r: 20, t: 10, b: 38 },
+                              paper_bgcolor: "rgba(255,255,255,0)",
+                              plot_bgcolor: "#ffffff",
+                              xaxis: {
+                                title: "Sample timestamp",
+                                type: "date",
+                                gridcolor: "#e2e8f0",
+                                tickfont: { size: 10, color: "#475569" },
+                                titlefont: { size: 11, color: "#334155" },
+                              },
+                              yaxis: {
+                                title: `${plot.label} (${plot.unit})`,
+                                gridcolor: "#e2e8f0",
+                                zeroline: false,
+                                tickfont: { size: 10, color: "#475569" },
+                                titlefont: { size: 11, color: "#334155" },
+                              },
+                              legend: {
+                                orientation: "h",
+                                y: 1.14,
+                                x: 0,
+                                font: { size: 10, color: "#475569" },
+                              },
+                              hoverlabel: { bgcolor: "#0f172a", font: { color: "#f8fafc" } },
+                            }}
+                            config={{
+                              responsive: true,
+                              displaylogo: false,
+                              modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                              scrollZoom: false,
+                            }}
+                            useResizeHandler
+                            style={{ width: "100%", height: "280px" }}
+                          />
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Average</p>
+                              <p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.avg)} {plot.unit}</p>
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Median</p>
+                              <p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.median)} {plot.unit}</p>
+                            </div>
+                            <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                              <p className="text-[10px] uppercase tracking-[0.22em] text-amber-700">Reference</p>
+                              <p className="mt-1 font-medium text-amber-700">{referenceDescriptor}</p>
+                              <p className="mt-1 text-[11px] text-amber-700">Out-of-reference points: {plot.outOfReference} / {plot.count}</p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-3 text-sm text-slate-500">No valid values recorded yet for this parameter.</p>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </article>
 
             <div className="grid gap-6 xl:grid-cols-2">
               <article className="rounded-2xl border border-sky-200 bg-white p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Microbial risk snapshot</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
-                    <p className="text-xs text-slate-500">Low</p>
-                    <p className="mt-1 text-2xl font-semibold text-sky-700">{analytics.microbialCounts.low}</p>
+                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Anomaly checks</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Distribution of anomaly-check outcomes and recent flagged-check intensity.
+                </p>
+                {(analytics.totalAnomalyChecks > 0 || analytics.anomalyStatusCounts.missing > 0) ? (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <Plot
+                        data={[
+                          {
+                            labels: ["OK", "Warning", "Critical", "Missing", "Unknown"],
+                            values: [
+                              analytics.anomalyStatusCounts.ok,
+                              analytics.anomalyStatusCounts.warning,
+                              analytics.anomalyStatusCounts.critical,
+                              analytics.anomalyStatusCounts.missing,
+                              analytics.anomalyStatusCounts.unknown,
+                            ],
+                            type: "pie",
+                            hole: 0.44,
+                            marker: {
+                              colors: ["#0ea5e9", "#f59e0b", "#f43f5e", "#94a3b8", "#64748b"],
+                            },
+                            textinfo: "percent+label",
+                            hovertemplate: "%{label}<br>Count: %{value}<br>Share: %{percent}<extra></extra>",
+                          },
+                        ]}
+                        layout={{
+                          autosize: true,
+                          height: 250,
+                          margin: { l: 16, r: 16, t: 8, b: 8 },
+                          paper_bgcolor: "rgba(255,255,255,0)",
+                          showlegend: false,
+                        }}
+                        config={{
+                          responsive: true,
+                          displaylogo: false,
+                          modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                          scrollZoom: false,
+                        }}
+                        useResizeHandler
+                        style={{ width: "100%", height: "250px" }}
+                      />
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <Plot
+                        data={[
+                          {
+                            x: analytics.anomalyRecentTrend.map((entry) => entry.label),
+                            y: analytics.anomalyRecentTrend.map((entry) => entry.flagged),
+                            type: "scatter",
+                            mode: "lines+markers",
+                            name: "Flagged checks per sample",
+                            line: { color: "#f43f5e", width: 2 },
+                            marker: { color: "#f43f5e", size: 6 },
+                            hovertemplate: "%{x}<br>Flagged checks: %{y}<extra></extra>",
+                          },
+                        ]}
+                        layout={{
+                          autosize: true,
+                          height: 240,
+                          margin: { l: 44, r: 16, t: 8, b: 40 },
+                          paper_bgcolor: "rgba(255,255,255,0)",
+                          plot_bgcolor: "#ffffff",
+                          xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } },
+                          yaxis: {
+                            title: "Flagged checks",
+                            rangemode: "tozero",
+                            dtick: 1,
+                            gridcolor: "#e2e8f0",
+                            tickfont: { size: 10, color: "#475569" },
+                          },
+                          showlegend: false,
+                        }}
+                        config={{
+                          responsive: true,
+                          displaylogo: false,
+                          modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"],
+                          scrollZoom: false,
+                        }}
+                        useResizeHandler
+                        style={{ width: "100%", height: "240px" }}
+                      />
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Total checks</p>
+                        <p className="mt-1 text-lg font-semibold text-slate-700">{analytics.totalAnomalyChecks}</p>
+                      </div>
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-rose-700">Flagged checks</p>
+                        <p className="mt-1 text-lg font-semibold text-rose-700">{analytics.flaggedAnomalyChecks}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
-                    <p className="text-xs text-slate-500">Medium</p>
-                    <p className="mt-1 text-2xl font-semibold text-amber-700">{analytics.microbialCounts.medium}</p>
-                  </div>
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3">
-                    <p className="text-xs text-slate-500">High</p>
-                    <p className="mt-1 text-2xl font-semibold text-rose-700">{analytics.microbialCounts.high}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p className="text-xs text-slate-500">Unknown</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-700">{analytics.microbialCounts.unknown}</p>
-                  </div>
-                </div>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No anomaly checks available yet.</p>
+                )}
               </article>
 
               <article className="rounded-2xl border border-emerald-300 bg-emerald-50 p-6">

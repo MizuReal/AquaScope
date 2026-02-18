@@ -70,11 +70,13 @@ export default function AdminLayout({ children }) {
     bootstrap();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!isMounted) return;
 
         if (!session) {
-          router.replace("/");
+          if (event === "SIGNED_OUT") {
+            router.replace("/");
+          }
           return;
         }
 

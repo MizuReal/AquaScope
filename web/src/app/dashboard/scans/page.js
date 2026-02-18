@@ -41,9 +41,11 @@ export default function ScansPage() {
 
     bootstrap();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
-        setAuthReady(false);
+        if (event === "SIGNED_OUT") {
+          setAuthReady(false);
+        }
       } else {
         setAuthReady(true);
       }

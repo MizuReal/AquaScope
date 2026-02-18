@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   { label: "My scans", href: "/dashboard/scans", icon: "scans" },
+  { label: "Community", href: "/dashboard/community", icon: "community" },
   { label: "Analytics", href: "/dashboard/analytics", icon: "analytics" },
   { label: "Settings", href: "/dashboard/settings", icon: "settings" },
   { label: "Logout", href: "/logout", icon: "logout" },
@@ -57,6 +58,17 @@ function NavIcon({ icon }) {
         <rect x="6" y="11" width="3" height="7" rx="0.8" />
         <rect x="11" y="8" width="3" height="10" rx="0.8" />
         <rect x="16" y="5" width="3" height="13" rx="0.8" />
+      </svg>
+    );
+  }
+
+  if (icon === "community") {
+    return (
+      <svg {...commonProps}>
+        <circle cx="8" cy="9" r="2" />
+        <circle cx="16" cy="9" r="2" />
+        <path d="M4.5 18a3.5 3.5 0 0 1 7 0" />
+        <path d="M12.5 18a3.5 3.5 0 0 1 7 0" />
       </svg>
     );
   }

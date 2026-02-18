@@ -5,40 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import Lottie from "lottie-react";
 
-import { getUserRole, isAdminRole } from "@/lib/profileRole";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { chatWithCopilot } from "@/lib/api";
 import UserSamples from "./user_samples";
 import cuteRobotAnim from "../../../public/CuteRobot.json";
 import aiAnim from "../../../public/AI.json";
-
-/* ── Real system stat cards ───────────────────────────────── */
-const statCards = [
-  {
-    label: "ML parameters",
-    value: "9",
-    detail: "pH, hardness, solids, chloramines, sulfate, conductivity, organic carbon, trihalomethanes, turbidity",
-    icon: "🧪",
-  },
-  {
-    label: "OCR extraction",
-    value: "<6s",
-    detail: "Fiducial-aligned form scanning with EasyOCR engine",
-    icon: "📄",
-  },
-  {
-    label: "WHO risk levels",
-    value: "4",
-    detail: "Conformity, Low, Moderate, High / Very High risk bands",
-    icon: "⚠️",
-  },
-  {
-    label: "AI model",
-    value: "70B",
-    detail: "Groq Llama 3.3 for contextual chat & filtration advice",
-    icon: "🤖",
-  },
-];
 
 /* ── Water parameters analyzed by the ML model ────────────── */
 const waterParameters = [
@@ -92,6 +63,7 @@ const pipelineSteps = [
 ];
 
 const configMissing = !supabase || !isSupabaseConfigured;
+const SUPABASE_PROFILES_TABLE = process.env.NEXT_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const CHAT_TABS = {
   WATER: "water_quality",
   DATA: "my_data",
@@ -121,6 +93,20 @@ const buildInitials = (name) => {
   if (!tokens.length) return "U";
   if (tokens.length === 1) return tokens[0].slice(0, 1).toUpperCase();
   return `${tokens[0][0]}${tokens[1][0]}`.toUpperCase();
+};
+
+const formatRelativeTime = (value) => {
+  if (!value) return "";
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "";
+  const diffMs = Date.now() - timestamp;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
 };
 
 const IconBot = ({ className = "h-4 w-4" }) => (
@@ -162,6 +148,35 @@ const IconClose = ({ className = "h-4 w-4" }) => (
   </svg>
 );
 
+const IconSpark = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path d="M12 3v4" />
+    <path d="M12 17v4" />
+    <path d="M3 12h4" />
+    <path d="M17 12h4" />
+    <path d="m6.5 6.5 2.8 2.8" />
+    <path d="m14.7 14.7 2.8 2.8" />
+    <path d="m17.5 6.5-2.8 2.8" />
+    <path d="m9.3 14.7-2.8 2.8" />
+  </svg>
+);
+
+const IconUsers = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+    <circle cx="17" cy="9" r="2.5" />
+    <path d="M14.5 19a4.5 4.5 0 0 1 6 0" />
+  </svg>
+);
+
+const IconClock = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
 export default function DashboardPage() {
   const router = useRouter();
   const [authReady, setAuthReady] = useState(false);
@@ -179,6 +194,7 @@ export default function DashboardPage() {
   const [chatHistory, setChatHistory] = useState([]);
   const [chatTab, setChatTab] = useState(CHAT_TABS.WATER);
   const [chatModalActive, setChatModalActive] = useState(false);
+  const [forumSpotlight, setForumSpotlight] = useState(null);
 
   useEffect(() => {
     if (configMissing) return;
@@ -203,19 +219,6 @@ export default function DashboardPage() {
       setAvatarUrl(pickAvatarUrl(data.session.user));
       setAvatarFailed(false);
 
-      try {
-        const role = await getUserRole(data.session.user.id);
-        if (!isMounted) return;
-
-        if (isAdminRole(role)) {
-          setRedirecting(true);
-          router.replace("/admin/dashboard");
-          return;
-        }
-      } catch {
-        /* role lookup failure should not block regular dashboard */
-      }
-
       setAuthReady(true);
       setChecking(false);
 
@@ -239,15 +242,73 @@ export default function DashboardPage() {
       } catch {
         /* non-critical — dashboard still works with 0 counts */
       }
+
+      /* Fetch one random community thread for dashboard spotlight */
+      try {
+        const threadResult = await supabase
+          .from("forum_threads")
+          .select(
+            "id, user_id, title, body, created_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+          )
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        if (!threadResult.error && (threadResult.data || []).length > 0) {
+          const pool = threadResult.data;
+          const selected = pool[Math.floor(Math.random() * pool.length)];
+          let profile = null;
+
+          if (selected?.user_id) {
+            const profileResult = await supabase
+              .from(SUPABASE_PROFILES_TABLE)
+              .select("id, display_name, organization")
+              .eq("id", selected.user_id)
+              .maybeSingle();
+            profile = profileResult.data || null;
+          }
+
+          const metadata = data.session.user?.user_metadata || {};
+          const authorName =
+            profile?.display_name ||
+            (selected.user_id === data.session.user.id
+              ? metadata.display_name || metadata.full_name || metadata.name || data.session.user.email?.split("@")[0]
+              : null) ||
+            "Community member";
+
+          const categoryTags = (selected.forum_thread_categories || [])
+            .map((item) => item.forum_categories)
+            .filter(Boolean);
+
+          if (isMounted) {
+            setForumSpotlight({
+              id: selected.id,
+              title: selected.title,
+              body: selected.body,
+              created_at: selected.created_at,
+              authorName,
+              authorOrg: profile?.organization || "",
+              categories: categoryTags,
+            });
+          }
+        } else if (isMounted) {
+          setForumSpotlight(null);
+        }
+      } catch {
+        if (isMounted) {
+          setForumSpotlight(null);
+        }
+      }
     };
 
     bootstrap();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
-        setAuthReady(false);
-        setRedirecting(true);
-        router.replace("/");
+        if (event === "SIGNED_OUT") {
+          setAuthReady(false);
+          setRedirecting(true);
+          router.replace("/");
+        }
       } else {
         setAuthReady(true);
         setDisplayName(pickDisplayName(session.user));
@@ -433,13 +494,16 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+              className="group flex w-full max-w-xl items-center gap-3 rounded-full border border-slate-300 bg-white px-4 py-3 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
               onClick={openChatModal}
             >
-              <span className="h-6 w-6">
-                <Lottie animationData={aiAnim} loop autoplay className="h-6 w-6" />
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                <IconBot className="h-4 w-4" />
               </span>
-              Start a conversation
+              <span className="flex-1 truncate text-sm text-slate-500">Start a conversation with AquaScope Copilot...</span>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-white transition group-hover:bg-sky-700">
+                <IconSend className="h-4 w-4" />
+              </span>
             </button>
           </div>
         </div>
@@ -607,18 +671,82 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* ── System stat cards ───────────────────────────── */}
-      <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <article key={card.label} className="space-y-3 rounded-2xl border border-slate-300 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{card.icon}</span>
-              <p className="text-xs uppercase tracking-[0.35em] text-sky-600">{card.label}</p>
+      {/* ── Community spotlight ─────────────────────────── */}
+      <div className="mt-10">
+        <article className="overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-violet-50 p-6 shadow-sm">
+          <div className="pointer-events-none absolute" />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-sky-700">
+                <IconSpark className="h-3.5 w-3.5" />
+                Community spotlight
+              </p>
+              <p className="mt-1 text-sm text-slate-600">Discover one live discussion from the forum community</p>
             </div>
-            <p className="text-3xl font-semibold text-slate-800">{card.value}</p>
-            <p className="text-xs text-slate-500 leading-relaxed">{card.detail}</p>
-          </article>
-        ))}
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/community")}
+              className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700 transition hover:border-sky-400 hover:bg-sky-100"
+            >
+              <IconUsers className="h-3.5 w-3.5" />
+              View forum
+            </button>
+          </div>
+
+          {forumSpotlight ? (
+            <div className="mt-5 rounded-2xl border border-sky-200 bg-white/85 p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sm font-semibold text-sky-700">
+                    {buildInitials(forumSpotlight.authorName)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{forumSpotlight.authorName}</p>
+                    <p className="text-xs text-slate-500">{forumSpotlight.authorOrg || "Community"}</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                  <IconClock className="h-3.5 w-3.5" />
+                  {formatRelativeTime(forumSpotlight.created_at)}
+                </span>
+              </div>
+
+              <h3 className="mt-4 text-xl font-semibold text-slate-900">{forumSpotlight.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {forumSpotlight.body?.length > 260
+                  ? `${forumSpotlight.body.slice(0, 260)}...`
+                  : forumSpotlight.body}
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(forumSpotlight.categories || []).slice(0, 4).map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                  >
+                    #{tag.label}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <p className="text-xs text-slate-500">Join the conversation and explore similar field insights.</p>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard/community")}
+                  className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-sky-700"
+                >
+                  <IconSend className="h-3.5 w-3.5" />
+                  Join discussion
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-sky-200 bg-white/80 px-5 py-8 text-sm text-slate-600">
+              No community thread available yet.
+            </div>
+          )}
+        </article>
       </div>
 
       {/* ── Quick Actions + Water Parameters ────────────── */}
