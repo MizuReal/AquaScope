@@ -32,6 +32,28 @@ function useScrollReveal() {
   return ref;
 }
 
+/* Parallax hook for background scrolling effect */
+function useParallax(speed = 0.5) {
+  const ref = useRef(null);
+  
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    
+    const handleScroll = () => {
+      const rect = el.getBoundingClientRect();
+      const scrolled = window.pageYOffset;
+      const rate = scrolled * speed;
+      el.style.transform = `translateY(${rate}px)`;
+    };
+    
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [speed]);
+  
+  return ref;
+}
+
 /* wrapper component so we can reuse the hook per-section */
 function Reveal({ children, className = "", delay = 0, direction = "up" }) {
   const ref = useScrollReveal();
@@ -52,6 +74,27 @@ function Reveal({ children, className = "", delay = 0, direction = "up" }) {
   );
 }
 
+/* Parallax background component */
+function ParallaxBackground({ speed = -0.3 }) {
+  const parallaxRef = useParallax(speed);
+  
+  return (
+    <div 
+      ref={parallaxRef}
+      className="absolute bg-cover bg-center"
+      style={{
+        backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.25)), url('https://images.pexels.com/photos/918642/pexels-photo-918642.jpeg')`,
+        willChange: 'transform',
+        top: '-500px',
+        left: '0',
+        right: '0',
+        bottom: '-500px',
+        minHeight: '200vh',
+      }}
+    />
+  );
+}
+
 /* ── Supabase storage base URL (public bucket) ────────────── */
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const storageUrl = SUPABASE_URL ? `${SUPABASE_URL}/storage/v1/object/public` : "";
@@ -69,8 +112,8 @@ const carouselSlides = [
   },
   {
     type: "image",
-    src: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1400&q=80",
-    alt: "Scientist scanning a water quality form with a phone",
+    src: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1400&q=80",
+    alt: "Person scanning a paper form and digitizing it",
     title: "OCR Form Scanning",
     description:
       "Point your camera at a standardized data card. Fiducial markers auto-align the image and our OCR engine extracts all water quality parameters in under 6 seconds.",
@@ -104,12 +147,12 @@ const carouselSlides = [
     accent: "violet",
   },
   {
-    src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1400&q=80",
+    src: "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=1400&q=80",
     type: "image",
-    alt: "Dashboard analytics on a monitor",
-    title: "Prediction History & Analytics",
+    alt: "Water container inspection for moss presence detection",
+    title: "Moss Detection in Water Containers",
     description:
-      "Every sample is saved to your secure Supabase workspace. Browse past predictions, drill into confidence metrics, and track risk trends over time from web or mobile.",
+      "Scan a water container image and let the model detect whether moss is present. The system flags moss contamination risk quickly to support field screening and follow-up action.",
     accent: "rose",
   },
 ];
@@ -185,37 +228,77 @@ const features = [
     title: "OCR Form Scanning",
     description:
       "Fiducial-marker alignment auto-extracts handwritten lab data from paper forms into structured fields.",
-    icon: "📄",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75h6.879a2.25 2.25 0 0 1 1.591.659l3.621 3.621a2.25 2.25 0 0 1 .659 1.591V18a2.25 2.25 0 0 1-2.25 2.25h-10.5A2.25 2.25 0 0 1 5.25 18V6a2.25 2.25 0 0 1 2.25-2.25Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 3.75V8.25h4.5" />
+      </svg>
+    ),
+    iconColor: "border-sky-200 bg-sky-50 text-sky-600",
   },
   {
     title: "Potability Prediction",
     description:
       "Gradient-boosted model evaluates pH, hardness, chloramines, and 6 more parameters against WHO standards.",
-    icon: "🧪",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.75v4.5l-4.25 7.735A3 3 0 0 0 8.129 20.25h7.742a3 3 0 0 0 2.629-4.265L14.25 8.25v-4.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 12.75h7.5" />
+      </svg>
+    ),
+    iconColor: "border-emerald-200 bg-emerald-50 text-emerald-600",
   },
   {
     title: "Microbial Risk Grading",
     description:
       "Bacteria colony counts are mapped to WHO risk categories with color-coded safety indicators.",
-    icon: "🦠",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <circle cx="12" cy="12" r="6" />
+        <circle cx="12" cy="7" r="1" />
+        <circle cx="16.5" cy="12" r="1" />
+        <circle cx="12" cy="17" r="1" />
+        <circle cx="7.5" cy="12" r="1" />
+      </svg>
+    ),
+    iconColor: "border-amber-200 bg-amber-50 text-amber-600",
   },
   {
     title: "LLM Chat Assistant",
     description:
       "Ask questions about your results in plain language. Powered by Groq for fast, contextual responses.",
-    icon: "💬",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9M7.5 12h6" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h10.5a2.25 2.25 0 0 1 2.25 2.25v6a2.25 2.25 0 0 1-2.25 2.25H11.25L7.5 18.75V15H6.75A2.25 2.25 0 0 1 4.5 12.75v-6Z" />
+      </svg>
+    ),
+    iconColor: "border-violet-200 bg-violet-50 text-violet-600",
   },
   {
     title: "Supabase Integration",
     description:
       "All samples, predictions, and user data stored securely with row-level security and real-time sync.",
-    icon: "🔒",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <rect x="5.25" y="10.5" width="13.5" height="9" rx="2" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 10.5V8.25a3.75 3.75 0 1 1 7.5 0v2.25" />
+      </svg>
+    ),
+    iconColor: "border-slate-300 bg-slate-100 text-slate-700",
   },
   {
     title: "Cross-Platform Access",
     description:
       "Web dashboard and React Native mobile app share the same backend — analyze anywhere, anytime.",
-    icon: "📱",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <rect x="7.5" y="2.25" width="9" height="19.5" rx="2" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 5.25h3" />
+        <circle cx="12" cy="18" r="0.75" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+    iconColor: "border-rose-200 bg-rose-50 text-rose-600",
   },
 ];
 
@@ -253,7 +336,6 @@ function ImageCarousel() {
   }, [next]);
 
   const slide = carouselSlides[current];
-  const accentTextClass = carouselTextAccents[slide.accent] || "text-white";
 
   return (
     <div className="carousel-root relative overflow-hidden bg-white">
@@ -284,47 +366,47 @@ function ImageCarousel() {
           ),
         )}
         {/* gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
 
         {/* text overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10">
-          <h3 className={`text-2xl font-bold sm:text-3xl ${accentTextClass}`}>{slide.title}</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/80 sm:text-base">
+        <div className="absolute bottom-0 left-0 right-0 p-8 sm:p-12">
+          <h3 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-lg sm:text-5xl lg:text-6xl">{slide.title}</h3>
+          <p className="mt-3 max-w-3xl text-base leading-relaxed text-white/90 drop-shadow-md sm:text-lg">
             {slide.description}
           </p>
         </div>
       </div>
 
       {/* controls */}
-      <div className="mx-auto flex max-w-6xl items-center justify-between bg-white px-6 py-4">
-        <div className="flex gap-2">
+      <div className="mx-auto flex max-w-6xl items-center justify-between bg-white px-6 py-5">
+        <div className="flex gap-2.5">
           {carouselSlides.map((_, i) => (
             <button
               key={i}
               onClick={() => setCurrent(i)}
               aria-label={`Go to slide ${i + 1}`}
-              className={`h-2 rounded-full transition-all ${
-                i === current ? "w-8 bg-sky-600" : "w-2 bg-slate-300 hover:bg-slate-400"
+              className={`h-2.5 rounded-full transition-all duration-300 ${
+                i === current ? "w-10 bg-gradient-to-r from-sky-600 to-sky-500 shadow-md shadow-sky-600/30" : "w-2.5 bg-slate-300 hover:bg-sky-400"
               }`}
             />
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
             onClick={prev}
             aria-label="Previous slide"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-sky-300 hover:text-sky-600"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50 hover:text-sky-600 hover:shadow-md"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
             </svg>
           </button>
           <button
             onClick={next}
             aria-label="Next slide"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-sky-300 hover:text-sky-600"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50 hover:text-sky-600 hover:shadow-md"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
             </svg>
           </button>
@@ -348,46 +430,49 @@ export default function Home() {
         </section>
 
         {/* ── Hero ──────────────────────────────────────────── */}
-        <section className="hero-section px-6 pb-20 pt-16 lg:pb-28 lg:pt-24">
+        <section className="hero-section px-6 pb-24 pt-20 lg:pb-32 lg:pt-28">
           <div className="relative z-10 mx-auto max-w-6xl">
-            <div className="grid items-center gap-12 lg:grid-cols-2">
-              <Reveal direction="left"><div className="space-y-8">
-                <span className="stat-chip">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <div className="grid items-center gap-16 lg:grid-cols-2">
+              <Reveal direction="left"><div className="space-y-10">
+                <span className="inline-flex items-center gap-2.5 rounded-full border-2 border-sky-500 bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-white shadow-lg shadow-sky-600/30">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
                   AI-Powered Water Safety
                 </span>
-                <h1 className="text-4xl font-bold leading-tight text-slate-900 md:text-5xl lg:text-6xl">
+                <h1 className="text-5xl font-bold leading-[1.15] tracking-tight text-slate-900 md:text-6xl lg:text-7xl">
                   Predict water safety{" "}
-                  <span className="text-sky-600">before</span> the risk arrives.
+                  <span className="bg-gradient-to-r from-sky-600 via-sky-500 to-cyan-500 bg-clip-text text-transparent">before</span> the risk arrives.
                 </h1>
-                <p className="max-w-xl text-lg text-slate-600">
+                <p className="max-w-xl text-xl leading-relaxed text-slate-600">
                   AquaScope combines computer vision, machine learning, and AI chat to help labs,
                   field teams, and researchers analyze water quality faster and more accurately.
                 </p>
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-5">
                   <a
                     href="#about"
-                    className="rounded-full bg-sky-600 px-7 py-3.5 font-medium text-white shadow-lg shadow-sky-600/25 transition hover:-translate-y-0.5 hover:bg-sky-700"
+                    className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-sky-500 px-8 py-4 font-semibold text-white shadow-xl shadow-sky-600/30 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-sky-600/40"
                   >
-                    Learn how it works
+                    <span className="relative z-10">Learn how it works</span>
+                    <div className="absolute inset-0 -z-0 bg-gradient-to-r from-sky-700 to-sky-600 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                   <a
                     href="#features"
-                    className="rounded-full border border-slate-300 px-7 py-3.5 font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50"
+                    className="group rounded-full border-2 border-slate-300 bg-white px-8 py-4 font-semibold text-slate-700 shadow-md transition-all hover:-translate-y-1 hover:border-sky-400 hover:bg-slate-50 hover:shadow-lg"
                   >
                     View features
                   </a>
                 </div>
               </div></Reveal>
 
-              <Reveal direction="right" delay={200}><div className="grid grid-cols-2 gap-4">
-                {stats.map((stat) => (
+              <Reveal direction="right" delay={200}><div className="grid grid-cols-2 gap-5">
+                {stats.map((stat, idx) => (
                   <div
                     key={stat.label}
-                    className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+                    className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-7 shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl"
+                    style={{ animationDelay: `${idx * 100}ms` }}
                   >
-                    <p className="text-3xl font-bold text-sky-600">{stat.value}</p>
-                    <p className="mt-1 text-sm text-slate-500">{stat.label}</p>
+                    <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-gradient-to-br from-sky-100 to-cyan-50 opacity-50 blur-2xl transition-all group-hover:scale-150" />
+                    <p className="relative text-4xl font-extrabold bg-gradient-to-br from-sky-600 to-cyan-600 bg-clip-text text-transparent">{stat.value}</p>
+                    <p className="relative mt-2 text-sm font-medium text-slate-600">{stat.label}</p>
                   </div>
                 ))}
               </div></Reveal>
@@ -396,28 +481,33 @@ export default function Home() {
         </section>
 
         {/* ── Trusted-by marquee ─────────────────────────────── */}
-        <section className="border-y border-slate-200 bg-slate-50 py-5">
+        <section className="border-y border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 py-6">
           <div className="overflow-hidden">
-            <div className="ticker-track whitespace-nowrap text-sm font-medium uppercase tracking-[0.3em] text-slate-400">
+            <div className="ticker-track whitespace-nowrap text-sm font-bold uppercase tracking-[0.3em] text-slate-400">
               {[...tickerLabels, ...tickerLabels].map((item, i) => (
-                <span key={`${item.label}-${i}`} className={`inline-flex items-center gap-4 pr-4 ${item.color}`}>
+                <span key={`${item.label}-${i}`} className={`inline-flex items-center gap-4 pr-8 ${item.color} transition-colors hover:text-sky-600`}>
                   {item.label}
-                  <span className={`h-1 w-1 rounded-full ${item.dot}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${item.dot}`} />
                 </span>
               ))}
             </div>
           </div>
         </section>
 
-        {/* ── About ─────────────────────────────────────────── */}
-        <section id="about" className="bg-white px-6 py-20 lg:py-28">
-          <div className="mx-auto max-w-6xl">
+        {/* ── About with Large Parallax Water Background ─────────────────────────────────────────── */}
+        <section id="about" className="relative overflow-hidden bg-white px-6 py-24 lg:py-32">
+          {/* Large Parallax Water Background covering entire section */}
+          <ParallaxBackground speed={-0.15} />
+          
+          <div className="relative z-10 mx-auto max-w-6xl">
             <Reveal><div className="mx-auto max-w-3xl text-center">
-              <span className="stat-chip mx-auto">About AquaScope</span>
-              <h2 className="mt-6 text-3xl font-bold text-slate-900 md:text-4xl">
+              <span className="mx-auto inline-flex items-center rounded-full border-2 border-sky-500 bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-white shadow-lg shadow-sky-600/30">
+                About AquaScope
+              </span>
+              <h2 className="mt-8 text-4xl font-bold tracking-tight text-slate-900 md:text-5xl drop-shadow-[0_2px_10px_rgba(255,255,255,0.8)]">
                 What does this system do?
               </h2>
-              <p className="mt-4 text-lg text-slate-600">
+              <p className="mt-6 text-lg leading-relaxed text-slate-900 drop-shadow-[0_2px_8px_rgba(255,255,255,0.8)] font-semibold">
                 AquaScope is an end-to-end water quality intelligence platform. It takes raw water
                 sample data — whether from paper forms, mobile input, or sensors — and transforms it
                 into actionable safety predictions using machine learning. The system scans physical
@@ -427,33 +517,33 @@ export default function Home() {
               </p>
 
               {/* App Store / Play Store callout */}
-              <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-center sm:text-left">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center">
+                <div className="group rounded-3xl border border-slate-200 bg-white/80 backdrop-blur-md p-6 shadow-lg transition-all hover:-translate-y-1 hover:shadow-xl hover:bg-white/90">
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-lg">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
                       </svg>
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Available on Mobile</p>
-                      <p className="text-xs text-slate-500">
-                        Download on the App Store &amp; Google Play Store
+                    <div className="text-left">
+                      <p className="text-base font-bold text-slate-900">Available on Mobile</p>
+                      <p className="text-sm text-slate-500">
+                        App Store &amp; Play Store
                       </p>
                     </div>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 text-center sm:text-left">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <div className="group rounded-3xl border border-slate-200 bg-white/80 backdrop-blur-md p-6 shadow-lg transition-all hover:-translate-y-1 hover:shadow-xl hover:bg-white/90">
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z" />
                       </svg>
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Web Dashboard</p>
-                      <p className="text-xs text-slate-500">
-                        Access from any browser — no install needed
+                    <div className="text-left">
+                      <p className="text-base font-bold text-slate-900">Web Dashboard</p>
+                      <p className="text-sm text-slate-500">
+                        Any browser, no install
                       </p>
                     </div>
                   </div>
@@ -461,25 +551,26 @@ export default function Home() {
               </div>
             </div></Reveal>
 
-            <div className="mt-16 space-y-3">
-              <Reveal><p className="text-center text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+            {/* How It Works */}
+            <div className="mt-20 space-y-4">
+              <Reveal><p className="text-center text-sm font-bold uppercase tracking-[0.25em] text-slate-900 drop-shadow-[0_2px_10px_rgba(255,255,255,0.8)]">
                 How it works — step by step
               </p></Reveal>
-              <div className="mt-8 grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-10 grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4">
                 {steps.map((step, i) => (
-                  <Reveal key={step.number} delay={i * 120} className="h-full"><article className="step-card flex h-full flex-col p-8">
+                  <Reveal key={step.number} delay={i * 120} className="h-full"><article className="step-card flex h-full flex-col bg-white/85 p-8 backdrop-blur-md shadow-xl">
                     <div className="flex items-center justify-between">
                       <div
-                        className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${step.color}`}
+                        className={`flex h-16 w-16 items-center justify-center rounded-2xl border-2 ${step.color} shadow-md`}
                       >
                         {step.icon}
                       </div>
-                      <span className={`text-3xl font-bold ${step.accent} opacity-30`}>
+                      <span className={`text-4xl font-black ${step.accent} opacity-20`}>
                         {step.number}
                       </span>
                     </div>
-                    <h3 className="mt-6 text-xl font-semibold text-slate-900">{step.title}</h3>
-                    <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-500">
+                    <h3 className="mt-6 text-xl font-bold text-slate-900">{step.title}</h3>
+                    <p className="mt-3 flex-1 text-sm leading-relaxed text-slate-600">
                       {step.description}
                     </p>
                   </article></Reveal>
@@ -490,26 +581,30 @@ export default function Home() {
         </section>
 
         {/* ── Features ──────────────────────────────────────── */}
-        <section id="features" className="bg-slate-50 px-6 py-20 lg:py-28">
+        <section id="features" className="bg-gradient-to-b from-slate-50 to-white px-6 py-24 lg:py-32">
           <div className="mx-auto max-w-6xl">
-            <Reveal><div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="space-y-3">
-                <span className="stat-chip">Platform capabilities</span>
-                <h2 className="text-3xl font-bold text-slate-900 md:text-4xl">
+            <Reveal><div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+              <div className="space-y-4">
+                <span className="inline-flex items-center rounded-full border-2 border-sky-500 bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-white shadow-lg shadow-sky-600/30">
+                  Platform capabilities
+                </span>
+                <h2 className="text-4xl font-bold tracking-tight text-slate-900 md:text-5xl">
                   Everything you need for water analysis
                 </h2>
               </div>
-              <p className="max-w-md text-base text-slate-500">
+              <p className="max-w-md text-lg text-slate-600">
                 From rapid OCR to AI chat, every tool is designed to make water quality analysis
                 faster and more reliable.
               </p>
             </div></Reveal>
-            <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-16 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
               {features.map((card, i) => (
-                <Reveal key={card.title} delay={i * 100}><article className="feature-card p-8">
-                  <span className="text-3xl">{card.icon}</span>
-                  <h3 className="mt-4 text-lg font-semibold text-slate-900">{card.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-500">{card.description}</p>
+                <Reveal key={card.title} delay={i * 100}><article className="feature-card group relative p-8">
+                  <span className={`inline-flex h-14 w-14 items-center justify-center rounded-2xl border-2 ${card.iconColor} shadow-md transition-all group-hover:scale-110 group-hover:shadow-lg`}>
+                    {card.icon}
+                  </span>
+                  <h3 className="relative z-10 mt-5 text-xl font-bold text-slate-900">{card.title}</h3>
+                  <p className="relative z-10 mt-3 text-sm leading-relaxed text-slate-600">{card.description}</p>
                 </article></Reveal>
               ))}
             </div>
@@ -517,28 +612,29 @@ export default function Home() {
         </section>
 
         {/* ── CTA — Light mode ──────────────────────────────── */}
-        <Reveal><section className="px-6 py-20">
-          <div className="cta-section-light mx-auto max-w-6xl rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-sky-50 p-12 md:p-16">
-            <div className="flex flex-col items-center gap-8 text-center md:flex-row md:justify-between md:text-left">
-              <div className="space-y-4">
-                <h3 className="text-3xl font-bold text-slate-900 md:text-4xl">
+        <Reveal><section className="px-6 py-24">
+          <div className="cta-section-light mx-auto max-w-6xl rounded-[2rem] border-2 border-sky-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-12 shadow-2xl md:p-20">
+            <div className="flex flex-col items-center gap-10 text-center md:flex-row md:justify-between md:text-left">
+              <div className="space-y-5">
+                <h3 className="text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">
                   Ready to analyze your water samples?
                 </h3>
-                <p className="max-w-lg text-base text-slate-500">
+                <p className="max-w-xl text-lg leading-relaxed text-slate-600">
                   Sign up to start scanning forms, running predictions, and chatting with our AI — all
                   from your browser or mobile device.
                 </p>
               </div>
-              <div className="flex flex-shrink-0 flex-wrap gap-4">
+              <div className="flex flex-shrink-0 flex-col gap-4 sm:flex-row">
                 <a
                   href="#"
-                  className="rounded-full bg-sky-600 px-7 py-3.5 font-medium text-white shadow-lg shadow-sky-600/25 transition hover:-translate-y-0.5 hover:bg-sky-700"
+                  className="group relative overflow-hidden rounded-full bg-gradient-to-r from-sky-600 to-sky-500 px-8 py-4 font-semibold text-white shadow-xl shadow-sky-600/30 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-sky-600/40"
                 >
-                  Get started free
+                  <span className="relative z-10">Get started free</span>
+                  <div className="absolute inset-0 -z-0 bg-gradient-to-r from-sky-700 to-sky-600 opacity-0 transition-opacity group-hover:opacity-100" />
                 </a>
                 <a
                   href="#about"
-                  className="rounded-full border border-slate-300 px-7 py-3.5 font-medium text-slate-700 transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50"
+                  className="rounded-full border-2 border-slate-300 bg-white px-8 py-4 font-semibold text-slate-700 shadow-md transition-all hover:-translate-y-1 hover:border-sky-400 hover:bg-slate-50 hover:shadow-lg"
                 >
                   Learn more
                 </a>
@@ -548,9 +644,16 @@ export default function Home() {
         </section></Reveal>
 
         {/* ── Footer ────────────────────────────────────────── */}
-        <footer className="border-t border-slate-200 bg-white px-6 py-10">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 text-sm text-slate-400 md:flex-row">
-            <span className="font-semibold tracking-[0.3em] text-slate-900">AQUASCOPE</span>
+        <footer className="border-t border-slate-200 bg-gradient-to-b from-white to-slate-50 px-6 py-12">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 text-sm text-slate-500 md:flex-row">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                </svg>
+              </div>
+              <span className="text-lg font-bold tracking-[0.2em] text-slate-900">AQUASCOPE</span>
+            </div>
             <p>&copy; {new Date().getFullYear()} AquaScope Intelligence. All rights reserved.</p>
           </div>
         </footer>

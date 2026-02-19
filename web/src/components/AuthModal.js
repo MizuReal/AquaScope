@@ -246,10 +246,6 @@ export default function AuthModal({ open, mode = "login", onClose, onModeChange 
             {loading ? "Processing..." : mode === "login" ? "Access dashboard" : "Create workspace"}
           </button>
         </form>
-
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-          We federate with Supabase Auth, Azure AD, and custom SAML. Contact support for enterprise SSO.
-        </div>
       </div>
     </div>
   );

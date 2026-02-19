@@ -7,9 +7,9 @@ import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { chatWithCopilot } from "@/lib/api";
-import UserSamples from "./user_samples";
 import cuteRobotAnim from "../../../public/CuteRobot.json";
 import aiAnim from "../../../public/AI.json";
+import forumAnim from "../../../public/forumanim.json";
 
 /* ── Water parameters analyzed by the ML model ────────────── */
 const waterParameters = [
@@ -177,6 +177,49 @@ const IconClock = ({ className = "h-4 w-4" }) => (
   </svg>
 );
 
+const IconPhone = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <rect x="7" y="2.5" width="10" height="19" rx="2.2" />
+    <path d="M10.5 5.5h3" />
+    <circle cx="12" cy="18.3" r="0.7" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const IconDownload = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path d="M12 4v10" />
+    <path d="m8.5 10.5 3.5 3.5 3.5-3.5" />
+    <path d="M5 19h14" />
+  </svg>
+);
+
+const IconCamera = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h2l1.1-1.6a1.8 1.8 0 0 1 1.5-.8h1.8a1.8 1.8 0 0 1 1.5.8L15.5 6h2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-8Z" />
+    <circle cx="12" cy="12.5" r="3.5" />
+  </svg>
+);
+
+const IconSun = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.8v2.3" />
+    <path d="M12 18.9v2.3" />
+    <path d="M2.8 12h2.3" />
+    <path d="M18.9 12h2.3" />
+    <path d="m5.5 5.5 1.6 1.6" />
+    <path d="m16.9 16.9 1.6 1.6" />
+    <path d="m18.5 5.5-1.6 1.6" />
+    <path d="m7.1 16.9-1.6 1.6" />
+  </svg>
+);
+
+const IconChevron = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
 export default function DashboardPage() {
   const router = useRouter();
   const [authReady, setAuthReady] = useState(false);
@@ -194,7 +237,13 @@ export default function DashboardPage() {
   const [chatHistory, setChatHistory] = useState([]);
   const [chatTab, setChatTab] = useState(CHAT_TABS.WATER);
   const [chatModalActive, setChatModalActive] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialModalActive, setTutorialModalActive] = useState(false);
   const [forumSpotlight, setForumSpotlight] = useState(null);
+  const [openSections, setOpenSections] = useState({
+    quickActions: false,
+    waterParameters: false,
+  });
 
   useEffect(() => {
     if (configMissing) return;
@@ -419,6 +468,16 @@ export default function DashboardPage() {
     setTimeout(() => setChatOpen(false), 220);
   };
 
+  const openTutorialModal = () => {
+    setTutorialOpen(true);
+    setTimeout(() => setTutorialModalActive(true), 10);
+  };
+
+  const closeTutorialModal = () => {
+    setTutorialModalActive(false);
+    setTimeout(() => setTutorialOpen(false), 220);
+  };
+
   const handleChatTabChange = (nextTab) => {
     if (nextTab === chatTab) return;
     setChatTab(nextTab);
@@ -441,68 +500,91 @@ export default function DashboardPage() {
         ];
 
   return (
-    <section className="flex-1 bg-slate-100 px-6 py-10 lg:px-12">
+    <section className="flex-1 bg-gradient-to-br from-slate-50 via-white to-slate-100 px-6 py-6 lg:px-8">
       {/* ── Header ──────────────────────────────────────── */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-600">Welcome back, {displayName}!</p>
-          <p className="text-xs uppercase tracking-[0.4em] text-sky-600">Dashboard</p>
-          <h1 className="text-3xl font-semibold text-slate-800">Water Quality Control Room</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 rounded-full border border-slate-300 bg-white px-3 py-2">
-            {avatarUrl && !avatarFailed ? (
-              <img
-                src={avatarUrl}
-                alt={`${displayName} profile picture`}
-                className="h-9 w-9 rounded-full border border-slate-200 object-cover"
-                referrerPolicy="no-referrer"
-                onError={() => setAvatarFailed(true)}
-              />
-            ) : (
-              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-700">
-                {buildInitials(displayName)}
+      <header>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-600">Welcome back, {displayName}!</p>
+            <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">
+              Water Quality Control Room
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={openTutorialModal}
+              className="inline-flex items-center gap-2 rounded-lg border border-sky-500 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700"
+            >
+              <IconSpark className="h-3.5 w-3.5" />
+              Tutorial
+            </button>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+              {avatarUrl && !avatarFailed ? (
+                <img
+                  src={avatarUrl}
+                  alt={`${displayName} profile picture`}
+                  className="h-7 w-7 rounded-full border border-sky-200 object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : (
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-[10px] font-semibold text-sky-700">
+                  {buildInitials(displayName)}
+                </span>
+              )}
+              <div className="leading-tight">
+                <p className="text-[9px] uppercase tracking-wider text-slate-400">Signed in</p>
+                <p className="text-xs font-semibold text-slate-700">{displayName}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 shadow-sm">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-emerald-600 text-white">
+                <IconData className="h-3.5 w-3.5" />
               </span>
-            )}
-            <div className="leading-tight">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Signed in</p>
-              <p className="text-sm font-medium text-slate-700">{displayName}</p>
+              <div className="leading-tight">
+                <p className="text-[9px] uppercase tracking-wider text-emerald-700">Scans</p>
+                <p className="text-sm font-bold text-emerald-700">{userStats.scans}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 shadow-sm">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-600 text-white">
+                <IconWater className="h-3.5 w-3.5" />
+              </span>
+              <div className="leading-tight">
+                <p className="text-[9px] uppercase tracking-wider text-sky-700">Predictions</p>
+                <p className="text-sm font-bold text-sky-700">{userStats.predictions}</p>
+              </div>
             </div>
           </div>
-          <span className="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm text-slate-600">
-            Your scans: <strong className="text-sky-600">{userStats.scans}</strong>
-          </span>
-          <span className="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm text-slate-600">
-            Predictions: <strong className="text-sky-600">{userStats.predictions}</strong>
-          </span>
         </div>
       </header>
 
       {/* ── AI Chatbot Launcher ─────────────────────────── */}
-      <div className="mt-8 grid gap-5 rounded-2xl border border-slate-300 bg-white p-5 shadow-sm lg:grid-cols-[220px_1fr]">
-        <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3">
-          <Lottie animationData={cuteRobotAnim} loop autoplay className="h-44 w-full" />
+      <div className="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[180px_1fr]">
+        <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-2">
+          <Lottie animationData={cuteRobotAnim} loop autoplay className="h-32 w-full" />
         </div>
-        <div className="flex flex-col justify-center gap-4">
+        <div className="flex flex-col justify-center gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-sky-600">AI Assistant</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-800">Chat with AquaScope Copilot</h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            <p className="text-[10px] uppercase tracking-wider text-sky-600">AI Assistant</p>
+            <h2 className="mt-0.5 text-base font-semibold text-slate-800">Chat with AquaScope Copilot</h2>
+            <p className="mt-1 text-xs text-slate-500">
               Personalized support for your water analysis workflow — ask questions, interpret results, and get next-step guidance.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div>
             <button
               type="button"
-              className="group flex w-full max-w-xl items-center gap-3 rounded-full border border-slate-300 bg-white px-4 py-3 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+              className="group flex w-full max-w-xl items-center gap-2.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
               onClick={openChatModal}
             >
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-700">
-                <IconBot className="h-4 w-4" />
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-100 text-sky-700">
+                <IconBot className="h-3.5 w-3.5" />
               </span>
-              <span className="flex-1 truncate text-sm text-slate-500">Start a conversation with AquaScope Copilot...</span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-white transition group-hover:bg-sky-700">
-                <IconSend className="h-4 w-4" />
+              <span className="flex-1 truncate text-xs text-slate-500">Start a conversation with AquaScope Copilot...</span>
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-600 text-white transition group-hover:bg-sky-700">
+                <IconSend className="h-3.5 w-3.5" />
               </span>
             </button>
           </div>
@@ -671,22 +753,154 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
+      {tutorialOpen ? (
+        <div
+          className={`fixed inset-0 z-50 flex h-[100dvh] items-end justify-center overflow-y-auto bg-slate-900/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-200 sm:items-center ${
+            tutorialModalActive ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={closeTutorialModal}
+        >
+          <div
+            className={`my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-3xl bg-gradient-to-br from-sky-500 via-cyan-500 to-sky-600 p-[3px] shadow-2xl shadow-sky-500/40 transition-all duration-200 ${
+              tutorialModalActive ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="h-full max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[calc(1.5rem-3px)] bg-white p-8">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-600 to-cyan-600 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white shadow-sm">
+                    <IconSpark className="h-3.5 w-3.5" />
+                    Quick tutorial
+                  </p>
+                  <h2 className="mt-3 text-2xl font-bold text-slate-900">How to scan correctly</h2>
+                  <p className="mt-2 text-base leading-relaxed text-slate-600">Follow these steps to get accurate results every time.</p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+                  onClick={closeTutorialModal}
+                >
+                  <IconClose className="h-3.5 w-3.5" />
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-8 space-y-5">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5">
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-sky-600 to-cyan-600 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white">
+                    <IconPhone className="h-3.5 w-3.5" />
+                    Before you start
+                  </div>
+                  <p className="text-[15px] leading-relaxed text-slate-700">
+                    Download the mobile app first to start field scanning and capture workflows.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-500 text-base font-bold text-white shadow-sm">1</span>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-slate-900">Prepare OCR input</h3>
+                      <p className="mt-1.5 text-[15px] leading-relaxed text-slate-600">
+                        Download the template first, complete it clearly, then scan the form. This gives cleaner field detection and fewer extraction errors.
+                      </p>
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700">
+                        <IconDownload className="h-3.5 w-3.5" />
+                        Download template before OCR
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-500 text-base font-bold text-white shadow-sm">2</span>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-slate-900">Run moss detection</h3>
+                      <p className="mt-1.5 text-[15px] leading-relaxed text-slate-600">
+                        Use <em>Capture Container</em> and take a full, clear shot of the water container so the model can detect moss presence reliably.
+                      </p>
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700">
+                        <IconCamera className="h-3.5 w-3.5" />
+                        Use Capture Container mode
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-500 text-base font-bold text-white shadow-sm">3</span>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-slate-900">Capture quality check</h3>
+                      <p className="mt-1.5 text-[15px] leading-relaxed text-slate-600">
+                        Scan in good lighting <IconSun className="inline h-4 w-4 text-amber-500" />, keep the camera steady, avoid shadows/blur, and keep the full form or container inside frame.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <div className="flex items-start gap-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-cyan-500 text-base font-bold text-white shadow-sm">4</span>
+                    <div className="flex-1">
+                      <h3 className="text-base font-semibold text-slate-900">Review and track</h3>
+                      <p className="mt-1.5 text-[15px] leading-relaxed text-slate-600">
+                        Open scan results immediately after capture, then use <strong>Prediction History</strong> and <strong>Analytics</strong> to monitor trends and revisit past records.
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeTutorialModal();
+                      router.push("/dashboard/scans");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    <IconData className="h-3.5 w-3.5" />
+                    Open scan results
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeTutorialModal();
+                      router.push("/dashboard/analytics");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-xs font-medium text-sky-700 transition hover:bg-gradient-to-r hover:from-sky-600 hover:to-cyan-600 hover:text-white hover:shadow-sm"
+                  >
+                    <IconClock className="h-3.5 w-3.5" />
+                    Prediction history / analytics
+                  </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* ── Community spotlight ─────────────────────────── */}
-      <div className="mt-10">
-        <article className="overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-violet-50 p-6 shadow-sm">
-          <div className="pointer-events-none absolute" />
+      <div className="mt-6">
+        <article className="overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.35em] text-sky-700">
-                <IconSpark className="h-3.5 w-3.5" />
-                Community spotlight
-              </p>
-              <p className="mt-1 text-sm text-slate-600">Discover one live discussion from the forum community</p>
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12">
+                <Lottie animationData={forumAnim} loop autoplay className="h-full w-full" />
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-600">
+                  Community spotlight
+                </p>
+                <p className="text-xs text-slate-600">Discover discussions from the forum</p>
+              </div>
             </div>
             <button
               type="button"
               onClick={() => router.push("/dashboard/community")}
-              className="inline-flex items-center gap-2 rounded-full border border-sky-300 bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-sky-700 transition hover:border-sky-400 hover:bg-sky-100"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition hover:bg-violet-50"
             >
               <IconUsers className="h-3.5 w-3.5" />
               View forum
@@ -694,10 +908,10 @@ export default function DashboardPage() {
           </div>
 
           {forumSpotlight ? (
-            <div className="mt-5 rounded-2xl border border-sky-200 bg-white/85 p-5 shadow-sm">
+            <div className="mt-4 rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sm font-semibold text-sky-700">
+                <div className="flex items-center gap-2.5">
+                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-violet-200 bg-violet-100 text-xs font-semibold text-violet-700">
                     {buildInitials(forumSpotlight.authorName)}
                   </div>
                   <div>
@@ -705,44 +919,44 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-500">{forumSpotlight.authorOrg || "Community"}</p>
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
-                  <IconClock className="h-3.5 w-3.5" />
+                <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                  <IconClock className="h-3 w-3" />
                   {formatRelativeTime(forumSpotlight.created_at)}
                 </span>
               </div>
 
-              <h3 className="mt-4 text-xl font-semibold text-slate-900">{forumSpotlight.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {forumSpotlight.body?.length > 260
-                  ? `${forumSpotlight.body.slice(0, 260)}...`
+              <h3 className="mt-3 text-base font-bold text-slate-900">{forumSpotlight.title}</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                {forumSpotlight.body?.length > 200
+                  ? `${forumSpotlight.body.slice(0, 200)}...`
                   : forumSpotlight.body}
               </p>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(forumSpotlight.categories || []).slice(0, 4).map((tag) => (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(forumSpotlight.categories || []).slice(0, 3).map((tag) => (
                   <span
                     key={tag.id}
-                    className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                    className="rounded-md border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-700"
                   >
                     #{tag.label}
                   </span>
                 ))}
               </div>
 
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                <p className="text-xs text-slate-500">Join the conversation and explore similar field insights.</p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                <p className="text-xs text-slate-500">Join the conversation</p>
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/community")}
-                  className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-sky-700"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-700"
                 >
-                  <IconSend className="h-3.5 w-3.5" />
-                  Join discussion
+                  <IconSend className="h-3 w-3" />
+                  Join
                 </button>
               </div>
             </div>
           ) : (
-            <div className="mt-5 rounded-2xl border border-sky-200 bg-white/80 px-5 py-8 text-sm text-slate-600">
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 px-4 py-6 text-center text-xs text-slate-600">
               No community thread available yet.
             </div>
           )}
@@ -750,97 +964,136 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Quick Actions + Water Parameters ────────────── */}
-      <div className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
         {/* Quick Actions */}
-        <article className="flex flex-col gap-6 rounded-2xl border border-slate-300 bg-white p-6 shadow-sm">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-sky-600">Quick actions</p>
-            <p className="text-sm text-slate-500">Core system capabilities you can run right now</p>
-          </div>
-          <div className="space-y-3">
-            {quickActions.map((action, index) => (
-              <div
-                key={action.title}
-                className={`rounded-2xl border px-5 py-4 transition hover:-translate-y-0.5 hover:shadow-sm ${
-                  index === 1
-                    ? "border-emerald-200 bg-emerald-50"
-                    : index === 2
-                      ? "border-amber-200 bg-amber-50"
-                      : "border-slate-200 bg-slate-50"
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <span className="mt-0.5 rounded-xl border border-slate-200 bg-white px-2 py-1 text-2xl">
-                    {action.icon}
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-900">{action.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">{action.description}</p>
-                    <p className="mt-2 font-mono text-xs text-slate-500">{action.endpoint}</p>
+        <article className="flex h-fit w-full flex-col gap-4 self-start rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() =>
+              setOpenSections((prev) => ({
+                ...prev,
+                quickActions: !prev.quickActions,
+              }))
+            }
+            aria-expanded={openSections.quickActions}
+            className="flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700">
+                <IconData className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">Quick actions</p>
+                <p className="text-xs text-slate-500">Core system capabilities</p>
+              </div>
+            </div>
+            <IconChevron
+              className={`h-5 w-5 text-slate-500 transition-transform ${openSections.quickActions ? "rotate-180" : ""}`}
+            />
+          </button>
+          {openSections.quickActions ? (
+            <div className="space-y-2.5">
+              {quickActions.map((action, index) => (
+                <div
+                  key={action.title}
+                  className={`rounded-lg border px-4 py-3 shadow-sm transition hover:-translate-y-0.5 ${
+                    index === 1
+                      ? "border-emerald-200 bg-emerald-50"
+                      : index === 2
+                        ? "border-amber-200 bg-amber-50"
+                        : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 text-xl">
+                      {action.icon}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-slate-900">{action.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{action.description}</p>
+                      <p className="mt-1.5 rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] text-slate-500">{action.endpoint}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : null}
         </article>
 
         {/* Water parameters */}
-        <article className="flex flex-col gap-6 rounded-2xl border border-sky-300 bg-sky-50 p-6 shadow-sm">
-          <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-sky-600">Water quality parameters</p>
-            <p className="text-sm text-slate-500">9 features analyzed by the potability model</p>
-          </div>
-          <div className="space-y-2">
-            {waterParameters.map((param) => (
-              <div
-                key={param.name}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"
-              >
-                <div>
-                  <p className="font-medium text-slate-900">{param.name}</p>
-                  <p className="text-xs text-slate-400">{param.desc}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-xs text-slate-600">{param.range}</p>
-                  {param.unit && (
-                    <p className="text-xs text-slate-400">{param.unit}</p>
-                  )}
-                </div>
+        <article className="flex h-fit w-full flex-col gap-4 self-start rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() =>
+              setOpenSections((prev) => ({
+                ...prev,
+                waterParameters: !prev.waterParameters,
+              }))
+            }
+            aria-expanded={openSections.waterParameters}
+            className="flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700">
+                <IconWater className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">Water parameters</p>
+                <p className="text-xs text-slate-500">9 features analyzed</p>
               </div>
-            ))}
-          </div>
+            </div>
+            <IconChevron
+              className={`h-5 w-5 text-slate-500 transition-transform ${openSections.waterParameters ? "rotate-180" : ""}`}
+            />
+          </button>
+          {openSections.waterParameters ? (
+            <div className="space-y-2">
+              {waterParameters.map((param) => (
+                <div
+                  key={param.name}
+                  className="flex items-center justify-between rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs shadow-sm"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">{param.name}</p>
+                    <p className="text-[10px] text-slate-500">{param.desc}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-[10px] font-semibold text-slate-700">{param.range}</p>
+                    {param.unit && (
+                      <p className="text-[9px] text-slate-500">{param.unit}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </article>
       </div>
 
       {/* ── ML Pipeline ─────────────────────────────────── */}
-      <div className="mt-10">
-        <article className="space-y-6 rounded-2xl border border-slate-300 bg-white p-6 shadow-sm">
+      <div className="mt-6">
+        <article className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-sky-600">ML pipeline</p>
-            <p className="text-sm text-slate-500">End-to-end processing stages in AquaScope</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">ML pipeline</p>
+            <p className="text-xs text-slate-500">End-to-end processing stages</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {pipelineSteps.map((step, i) => (
               <div
                 key={step.stage}
-                className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4"
+                className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-xs font-bold text-sky-600">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-600 text-xs font-bold text-white">
                   {i + 1}
                 </span>
                 <div>
-                  <p className="font-medium text-slate-900">{step.stage}</p>
+                  <p className="text-sm font-semibold text-slate-900">{step.stage}</p>
                   <p className="mt-0.5 text-xs text-slate-500">{step.detail}</p>
                 </div>
               </div>
             ))}
           </div>
         </article>
-      </div>
-
-      {/* ── User Samples ────────────────────────────────── */}
-      <div className="mt-10">
-        <UserSamples />
       </div>
     </section>
   );
