@@ -1,8 +1,8 @@
 
-Moss - v1 2026-02-14 11:12am
+Moss - v3 2026-02-15 6:46pm
 ==============================
 
-This dataset was exported via roboflow.com on February 14, 2026 at 3:13 AM GMT
+This dataset was exported via roboflow.com on February 15, 2026 at 10:48 AM GMT
 
 Roboflow is an end-to-end computer vision platform that helps you
 * collaborate with your team on computer vision projects
@@ -17,7 +17,7 @@ visit https://github.com/roboflow/notebooks
 
 To find over 100k other datasets and pre-trained models, visit https://universe.roboflow.com
 
-The dataset includes 2949 images.
+The dataset includes 4266 images.
 Moss are annotated in folder format.
 
 The following pre-processing was applied to each image:

@@ -12,6 +12,7 @@ from app.routes.fiducial import router as fiducial_router
 from app.routes.predict import router as predict_router
 from app.routes.microbial_risk import router as microbial_router
 from app.routes.chat import router as chat_router
+from app.routes.container import router as container_router
 
 # Enable debug logging for fiducial detection
 logging.basicConfig(level=logging.DEBUG)
@@ -74,6 +75,7 @@ app.include_router(fiducial_router, prefix="/fiducial", tags=["fiducial"])
 app.include_router(predict_router, prefix="/predict", tags=["predict"])
 app.include_router(microbial_router, prefix="/predict", tags=["microbial-risk"])
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
+app.include_router(container_router, prefix="/container", tags=["container"])
 
 # ── Startup diagnostics ──────────────────────────────────────────────
 logger = logging.getLogger(__name__)
@@ -81,9 +83,17 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def _log_routes() -> None:
     routes = [r.path for r in app.routes if hasattr(r, "methods")]
-    logger.info("Registered API routes (%d):", len(routes))
+    logger.info("=" * 60)
+    logger.info("STARTUP: Registered API routes (%d):", len(routes))
     for path in sorted(routes):
         logger.info("  -> %s", path)
+    # Explicitly check for the container route
+    container_paths = [p for p in routes if "container" in p]
+    if container_paths:
+        logger.info("✓ Container route(s) found: %s", container_paths)
+    else:
+        logger.warning("✕ /container/analyze NOT registered — check import or include_router")
+    logger.info("=" * 60)
 
 
 @app.middleware("http")

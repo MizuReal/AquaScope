@@ -160,4 +160,42 @@ export async function chatWithGemini(analysis, history, message) {
   return response.json();
 }
 
+/**
+ * Analyze a container image for moss classification.
+ * Returns predicted_class, confidence, and per-class probabilities.
+ */
+export async function analyzeContainer(asset) {
+  if (!asset?.uri) {
+    throw new Error('No image asset supplied for container analysis');
+  }
+
+  const formData = new FormData();
+  formData.append('file', {
+    uri: asset.uri,
+    name: asset.fileName || `container-${Date.now()}.jpg`,
+    type: asset.mimeType || 'image/jpeg',
+  });
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/container/analyze`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body: formData,
+    });
+  } catch (networkError) {
+    throw new Error(
+      `Network error contacting ${API_BASE_URL}. ` +
+        `Details: ${networkError?.message || 'unknown'}`,
+    );
+  }
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Container analysis failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
 export { API_BASE_URL };
