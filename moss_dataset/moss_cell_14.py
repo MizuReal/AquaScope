@@ -5,12 +5,50 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import Image
 from ultralytics import YOLO
+import ipywidgets as widgets
+from IPython.display import display, HTML
 
 # ── 1. Create the upload folder ──
 test_image_dir = '/kaggle/working/test_uploads'
 os.makedirs(test_image_dir, exist_ok=True)
 print(f"Upload folder ready: {test_image_dir}")
-print("Upload your image(s) there via the Kaggle file browser (left panel).\n")
+print("Use the upload button below, then click 'Save uploaded images'.\n")
+
+display(HTML(f"<b>Upload images for testing</b><br>Target folder: {test_image_dir}"))
+
+uploader = widgets.FileUpload(
+    accept='.jpg,.jpeg,.png,.bmp,.webp',
+    multiple=True,
+    description='Choose image(s)'
+)
+save_btn = widgets.Button(description='Save uploaded images', button_style='success')
+out = widgets.Output()
+
+def iter_uploaded_files(value):
+    if isinstance(value, dict):
+        for filename, meta in value.items():
+            yield filename, meta['content']
+    elif isinstance(value, (list, tuple)):
+        for meta in value:
+            yield meta['name'], meta['content']
+
+def on_save_clicked(_):
+    with out:
+        out.clear_output()
+        if not uploader.value:
+            print('No files selected yet.')
+            return
+
+        saved = 0
+        for filename, content in iter_uploaded_files(uploader.value):
+            Path(test_image_dir, filename).write_bytes(content)
+            saved += 1
+
+        print(f"Saved {saved} file(s) to {test_image_dir}")
+        print('Now re-run this cell to run predictions on uploaded images.')
+
+save_btn.on_click(on_save_clicked)
+display(uploader, save_btn, out)
 
 # ── 2. Load trained model (no retraining) ──
 for pattern in ['moss_phase2*/weights/best.pt', 'moss_phase1*/weights/best.pt']:
@@ -33,9 +71,9 @@ test_files = [f for f in os.listdir(test_image_dir)
 
 if not test_files:
     print("⚠ No images found yet.")
-    print("  → In Kaggle, click the folder icon (left panel)")
-    print("  → Navigate to /kaggle/working/test_uploads/")
-    print("  → Upload your image(s), then re-run this cell")
+    print("  → Click 'Choose image(s)' and pick your files")
+    print("  → Click 'Save uploaded images'")
+    print("  → Re-run this cell")
 else:
     for filename in test_files:
         filepath = os.path.join(test_image_dir, filename)

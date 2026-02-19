@@ -20,9 +20,11 @@ logger = logging.getLogger(__name__)
 # Class labels in the order the model was trained on
 CLASS_NAMES: List[str] = ["Clean", "HeavyMoss", "LightMoss", "MediumMoss"]
 
-# Out-of-domain rejection thresholds (matches training notebook cell 13)
+# Out-of-domain rejection thresholds
 CONFIDENCE_THRESHOLD = 0.85   # minimum top-class softmax probability
-ENTROPY_THRESHOLD = 0.6       # max allowed Shannon entropy (uniform 4-class ≈ 1.39)
+ENTROPY_THRESHOLD    = 0.6    # max allowed Shannon entropy (uniform 4-class ≈ 1.39)
+MARGIN_THRESHOLD     = 0.25   # minimum gap between top-1 and top-2 probability
+                              # catches random images where the model hedges between classes
 
 # Resolve model path relative to project root
 _MODEL_PATH = Path(__file__).resolve().parents[3] / "moss_model" / "best.torchscript"
@@ -49,7 +51,12 @@ def _load_model() -> torch.jit.ScriptModule:
 
 
 def _preprocess(image_bytes: bytes) -> torch.Tensor:
-    """Convert raw image bytes to a normalised 224x224 tensor [1, 3, 224, 224]."""
+    """Convert raw image bytes to a normalised 224x224 tensor [1, 3, 224, 224].
+
+    Matches YOLOv8-cls preprocessing exactly:
+      1. Resize to 224x224 (LANCZOS)
+      2. Scale pixels to [0, 1]  ← only step; YOLOv8 does NOT use ImageNet mean/std
+    """
     img = Image.open(BytesIO(image_bytes)).convert("RGB")
     img = img.resize((224, 224), Image.LANCZOS)
 
@@ -88,29 +95,57 @@ def classify(image_bytes: bytes) -> Dict:
     with torch.no_grad():
         output = model(tensor)
 
-    # YOLOv8-cls TorchScript output is a tensor of shape [1, num_classes]
-    probs = torch.softmax(output, dim=1).squeeze(0).cpu().numpy()
+    # YOLOv8-cls TorchScript models include softmax in the exported graph —
+    # the output is already a probability distribution summing to 1.
+    # Applying softmax again would corrupt the scores (double-softmax shrinks
+    # a 99 % confident prediction down to ~47 %, failing the rejection gate).
+    raw = output.squeeze(0).cpu()
+    if raw.sum().item() > 1.01:
+        # Fallback: output appears to be raw logits — apply softmax once.
+        raw = torch.softmax(raw, dim=0)
+    probs = raw.numpy()
 
-    top_idx = int(np.argmax(probs))
-    top_conf = float(probs[top_idx])
-    entropy = _shannon_entropy(probs)
+    sorted_idx = np.argsort(probs)[::-1]   # indices sorted high→low
+    top_idx    = int(sorted_idx[0])
+    top_conf   = float(probs[top_idx])
+    second_conf = float(probs[sorted_idx[1]])
+    margin     = top_conf - second_conf
+    entropy    = _shannon_entropy(probs)
 
-    # Rejection gate: low confidence OR high entropy → not a valid container image
-    is_valid = top_conf >= CONFIDENCE_THRESHOLD and entropy <= ENTROPY_THRESHOLD
+    # ── Rejection gates ───────────────────────────────────────────────────
+    # All three conditions must pass for the prediction to be accepted.
+    # A completely unrelated image (random noise, a face, a landscape, etc.)
+    # will typically fail at least one gate:
+    #   • low confidence  – model is not certain of any class
+    #   • high entropy    – probability mass spread across all classes
+    #   • low margin      – model hedges almost equally between two classes
+    rejection_reason: str | None = None
+    if top_conf < CONFIDENCE_THRESHOLD:
+        rejection_reason = f"Confidence too low ({top_conf*100:.0f}% < {CONFIDENCE_THRESHOLD*100:.0f}%)"
+    elif entropy > ENTROPY_THRESHOLD:
+        rejection_reason = f"Prediction too uncertain (entropy {entropy:.2f} > {ENTROPY_THRESHOLD})"
+    elif margin < MARGIN_THRESHOLD:
+        rejection_reason = f"Ambiguous result — scores too close ({top_conf*100:.0f}% vs {second_conf*100:.0f}%)"
 
+    is_valid = rejection_reason is None
     probabilities = {name: round(float(probs[i]), 4) for i, name in enumerate(CLASS_NAMES)}
-
     predicted_class = CLASS_NAMES[top_idx] if is_valid else "Unknown"
 
+    # Zero-out confidence when rejected so the frontend never displays a
+    # misleading percentage for an unrecognised image.
+    reported_confidence = round(top_conf, 4) if is_valid else 0.0
+
     logger.info(
-        "Moss classification: class=%s conf=%.2f%% entropy=%.3f valid=%s",
-        CLASS_NAMES[top_idx], top_conf * 100, entropy, is_valid,
+        "Moss classification: class=%s conf=%.2f%% margin=%.2f entropy=%.3f valid=%s reason=%s",
+        CLASS_NAMES[top_idx], top_conf * 100, margin, entropy, is_valid, rejection_reason,
     )
 
     return {
         "predicted_class": predicted_class,
-        "confidence": round(top_conf, 4),
+        "confidence": reported_confidence,
         "probabilities": probabilities,
         "entropy": round(entropy, 4),
+        "margin": round(margin, 4),
         "is_valid": is_valid,
+        "rejection_reason": rejection_reason,  # None when valid, human-readable string when rejected
     }

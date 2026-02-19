@@ -164,7 +164,7 @@ export async function chatWithGemini(analysis, history, message) {
  * Analyze a container image for moss classification.
  * Returns predicted_class, confidence, and per-class probabilities.
  */
-export async function analyzeContainer(asset) {
+export async function analyzeContainer(asset, signal) {
   if (!asset?.uri) {
     throw new Error('No image asset supplied for container analysis');
   }
@@ -182,8 +182,13 @@ export async function analyzeContainer(asset) {
       method: 'POST',
       headers: { Accept: 'application/json' },
       body: formData,
+      signal,
     });
   } catch (networkError) {
+    // AbortError is intentional (a newer request superseded this one) — swallow it
+    if (networkError?.name === 'AbortError') {
+      throw networkError;
+    }
     throw new Error(
       `Network error contacting ${API_BASE_URL}. ` +
         `Details: ${networkError?.message || 'unknown'}`,

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import PredictButton from '../components/PredictButton';
 import { useAppTheme } from '../utils/theme';
 import { analyzeContainer } from '../utils/api';
@@ -18,11 +19,19 @@ import { analyzeContainer } from '../utils/api';
 /* ── Helpers ────────────────────────────────────────────────── */
 
 const CLASS_META = {
-  Clean:      { color: '#22c55e', label: 'Clean',       icon: '✓' },
-  LightMoss:  { color: '#facc15', label: 'Light Moss',  icon: '●' },
-  MediumMoss: { color: '#f97316', label: 'Medium Moss', icon: '▲' },
-  HeavyMoss:  { color: '#ef4444', label: 'Heavy Moss',  icon: '✕' },
-  Unknown:    { color: '#64748b', label: 'Not Recognized', icon: '?' },
+  Clean:      { color: '#22c55e', bgDark: '#14532d', bgLight: '#f0fdf4', label: 'Clean',          mcIcon: 'check-circle',       severity: 'safe' },
+  LightMoss:  { color: '#facc15', bgDark: '#713f12', bgLight: '#fefce8', label: 'Light Moss',     mcIcon: 'alert-circle-outline', severity: 'low' },
+  MediumMoss: { color: '#f97316', bgDark: '#7c2d12', bgLight: '#fff7ed', label: 'Medium Moss',    mcIcon: 'alert',              severity: 'moderate' },
+  HeavyMoss:  { color: '#ef4444', bgDark: '#7f1d1d', bgLight: '#fff1f2', label: 'Heavy Moss',     mcIcon: 'close-circle',       severity: 'high' },
+  Unknown:    { color: '#64748b', bgDark: '#1e293b', bgLight: '#f8fafc', label: 'Not Recognized', mcIcon: 'help-circle-outline', severity: 'unknown' },
+};
+
+const SEVERITY_BADGE = {
+  safe:     { label: 'Safe',     textDark: 'text-emerald-300', textLight: 'text-emerald-700', borderDark: 'border-emerald-500/40', borderLight: 'border-emerald-300', bgDark: 'bg-emerald-900/30', bgLight: 'bg-emerald-50' },
+  low:      { label: 'Low Risk', textDark: 'text-yellow-300',  textLight: 'text-yellow-700',  borderDark: 'border-yellow-500/40',  borderLight: 'border-yellow-300',  bgDark: 'bg-yellow-900/30',  bgLight: 'bg-yellow-50' },
+  moderate: { label: 'Moderate', textDark: 'text-orange-300',  textLight: 'text-orange-700',  borderDark: 'border-orange-500/40',  borderLight: 'border-orange-300',  bgDark: 'bg-orange-900/30',  bgLight: 'bg-orange-50' },
+  high:     { label: 'High Risk',textDark: 'text-red-300',     textLight: 'text-red-700',     borderDark: 'border-red-500/40',     borderLight: 'border-red-300',     bgDark: 'bg-red-900/30',     bgLight: 'bg-red-50' },
+  unknown:  { label: 'Unknown',  textDark: 'text-slate-400',   textLight: 'text-slate-600',   borderDark: 'border-slate-700/40',   borderLight: 'border-slate-300',   bgDark: 'bg-slate-900/30',   bgLight: 'bg-slate-100' },
 };
 
 const severityNote = (cls, isValid) => {
@@ -60,16 +69,19 @@ const ConfidenceBar = ({ label, value, color, isDark }) => {
   const pct = Math.round(value * 100);
 
   return (
-    <View className="mb-2">
-      <View className="flex-row items-center justify-between mb-0.5">
-        <Text className={`text-[11px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+    <View className="mb-3">
+      <View className="flex-row items-center justify-between mb-1">
+        <Text className={`text-[12px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
           {label}
         </Text>
-        <Text className={`text-[11px] font-semibold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+        <Text
+          style={{ color }}
+          className="text-[12px] font-bold"
+        >
           {pct}%
         </Text>
       </View>
-      <View className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
+      <View className={`h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
         <Animated.View
           style={{
             height: '100%',
@@ -95,6 +107,10 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const screenAnim = useRef(new Animated.Value(0)).current;
+  // Holds the AbortController for the current in-flight classify request.
+  // Calling .abort() cancels it cleanly when a new image is submitted before
+  // the previous request finishes.
+  const abortRef = useRef(null);
 
   useEffect(() => {
     Animated.timing(screenAnim, {
@@ -125,12 +141,61 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
     setImage(asset);
     setResult(null);
     setLoading(true);
+    setError('');
+
+    // Cancel any previous in-flight request before starting a new one
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const analysis = await analyzeContainer(asset);
+      const analysis = await analyzeContainer(asset, controller.signal);
       setResult(analysis);
     } catch (err) {
-      setError(err.message || 'Analysis failed.');
+      if (err?.name !== 'AbortError') {
+        setError(err.message || 'Analysis failed.');
+      }
+      // AbortError means this request was intentionally cancelled by a newer one — ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* Gallery pick → classify */
+  const handleUpload = async () => {
+    setError('');
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Photo library access is required to upload images.');
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      base64: false,
+    });
+
+    if (pickerResult.canceled || !pickerResult.assets?.length) return;
+
+    const asset = pickerResult.assets[0];
+    setImage(asset);
+    setResult(null);
+    setLoading(true);
+    setError('');
+
+    // Cancel any previous in-flight request before starting a new one
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const analysis = await analyzeContainer(asset, controller.signal);
+      setResult(analysis);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        setError(err.message || 'Analysis failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -139,8 +204,10 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
   /* Derive display data from result */
   const topClass = result?.predicted_class;
   const isValid = result?.is_valid ?? false;
+  const rejectionReason = result?.rejection_reason ?? null;
   const meta = topClass ? (CLASS_META[topClass] || CLASS_META.Unknown) : null;
   const probabilities = result?.probabilities ?? {};
+  const badge = meta ? SEVERITY_BADGE[meta.severity] : null;
 
   return (
     <KeyboardAvoidingView
@@ -161,135 +228,510 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
           ],
         }}
       >
-      <View className="px-5 pt-10 pb-3">
-        <View className="mb-2 flex-row items-center justify-between">
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className={`rounded-full border px-3 py-1.5 ${isDark ? 'border-sky-900/70 bg-aquadark/80' : 'border-slate-300 bg-slate-100'}`}
-            onPress={() => onNavigate && onNavigate('home')}
-          >
-            <Text className={`text-[12px] font-medium ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>⟵ Dashboard</Text>
-          </TouchableOpacity>
-          <View className={`rounded-full border px-3 py-1 ${isDark ? 'border-slate-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'}`}>
-            <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              Ops Live
-            </Text>
-          </View>
-        </View>
-        <Text className={`text-[22px] font-bold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>Container analysis</Text>
-        <Text className={`mt-1 text-[13px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-          Capture a container image to detect moss/algae growth and assess cleanliness.
-        </Text>
-      </View>
+        {/* ── Header ── */}
+        <View className="px-5 pt-10 pb-4">
+          <View className="mb-4 flex-row items-center justify-between">
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className={`h-9 w-9 items-center justify-center rounded-full border ${
+                isDark ? 'border-sky-900/70 bg-slate-950/70' : 'border-slate-300 bg-white'
+              }`}
+              onPress={() => onNavigate && onNavigate('home')}
+            >
+              <Feather name="arrow-left" size={16} color={isDark ? '#e0f2fe' : '#1f2937'} />
+            </TouchableOpacity>
 
-      <ScrollView
-        className="px-5"
-        contentContainerClassName="pb-10 gap-4"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Capture card ── */}
-        <View className={`mt-1 rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-sky-950/40' : 'border-slate-300 bg-sky-50'}`}>
-          <Text className={`text-[11px] font-medium uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-            Capture
-          </Text>
-          <Text className={`mt-1 text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Use the camera to capture the current container or sampling bottle.
-          </Text>
-
-          <View className="mt-4">
-            <PredictButton
-              title={image ? 'Retake container photo' : 'Capture container photo'}
-              onPress={handleCapture}
-              disabled={loading}
-            />
-            {error ? (
-              <Text className="mt-2 text-[11px] text-red-400">{error}</Text>
-            ) : null}
-          </View>
-        </View>
-
-        {/* ── Analysis snapshot card ── */}
-        <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/80 bg-aquadark/80' : 'border-slate-300 bg-white'}`}>
-          <Text className={`text-[11px] font-medium uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-            Analysis snapshot
-          </Text>
-
-          {loading ? (
-            <View className="mt-6 mb-4 items-center">
-              <ActivityIndicator size="large" color={isDark ? '#38bdf8' : '#0284c7'} />
-              <Text className={`mt-3 text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Running moss classification…
+            <View className="flex-row items-center gap-1.5">
+              <View
+                className={`h-2 w-2 rounded-full ${isDark ? 'bg-emerald-400' : 'bg-emerald-500'}`}
+              />
+              <Text
+                className={`text-[11px] font-semibold uppercase tracking-widest ${
+                  isDark ? 'text-slate-300' : 'text-slate-600'
+                }`}
+              >
+                Ops Live
               </Text>
             </View>
-          ) : image && result ? (
-            <View className="mt-3">
-              {/* Image + verdict row */}
-              <View className="flex-row gap-3">
-                <View className={`h-28 w-24 overflow-hidden rounded-xl border ${isDark ? 'border-sky-900/80 bg-slate-900' : 'border-slate-300 bg-slate-100'}`}>
-                  <Image
-                    source={{ uri: image.uri }}
-                    className="h-full w-full"
-                    resizeMode="cover"
-                  />
-                </View>
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2">
-                    <View style={{ backgroundColor: meta?.color || '#64748b' }} className="h-5 w-5 rounded-full items-center justify-center">
-                      <Text className="text-[10px] text-white font-bold">{meta?.icon}</Text>
+          </View>
+
+          <View className="flex-row items-center gap-3">
+            <View
+              className={`h-10 w-10 items-center justify-center rounded-2xl border ${
+                isDark ? 'border-sky-800/70 bg-slate-950/60' : 'border-sky-200 bg-sky-50'
+              }`}
+            >
+              <MaterialCommunityIcons
+                name="beaker-check-outline"
+                size={20}
+                color={isDark ? '#38bdf8' : '#0284c7'}
+              />
+            </View>
+            <View>
+              <Text
+                className={`text-[20px] font-bold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}
+              >
+                Container Analysis
+              </Text>
+              <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Moss &amp; algae growth detection
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <ScrollView
+          className="px-5"
+          contentContainerClassName="pb-12 gap-4"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Info strip ── */}
+          <View
+            className={`flex-row items-center gap-3 rounded-2xl border px-4 py-3 ${
+              isDark
+                ? 'border-sky-900/60 bg-sky-950/30'
+                : 'border-sky-200 bg-sky-50'
+            }`}
+          >
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={16}
+              color={isDark ? '#7dd3fc' : '#0284c7'}
+            />
+            <Text
+              className={`flex-1 text-[12px] leading-[18px] ${
+                isDark ? 'text-sky-200' : 'text-sky-800'
+              }`}
+            >
+              Photograph the container surface in good lighting for the most accurate classification.
+            </Text>
+          </View>
+
+          {/* ── Capture card ── */}
+          <View
+            className={`rounded-[24px] border ${
+              isDark
+                ? 'border-sky-900/70 bg-slate-950/70'
+                : 'border-slate-300 bg-white'
+            }`}
+          >
+            {/* card header */}
+            <View
+              className={`flex-row items-center gap-2 border-b px-5 py-4 ${
+                isDark ? 'border-sky-900/50' : 'border-slate-100'
+              }`}
+            >
+              <Feather name="camera" size={14} color={isDark ? '#38bdf8' : '#0284c7'} />
+              <Text
+                className={`text-[11px] font-semibold uppercase tracking-widest ${
+                  isDark ? 'text-sky-300' : 'text-sky-600'
+                }`}
+              >
+                Capture
+              </Text>
+            </View>
+
+            <View className="gap-3 px-5 py-4">
+              {/* Preview thumbnail (shown once an image is selected) */}
+              {image && (
+                <View
+                  className={`overflow-hidden rounded-2xl border ${
+                    isDark ? 'border-sky-900/70' : 'border-slate-200'
+                  }`}
+                  style={{ height: 180 }}
+                >
+                  <Image source={{ uri: image.uri }} className="h-full w-full" resizeMode="cover" />
+                  {/* overlay label */}
+                  <View className="absolute bottom-0 left-0 right-0 px-3 py-2"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+                  >
+                    <View className="flex-row items-center gap-1.5">
+                      <Feather name="image" size={11} color="#e0f2fe" />
+                      <Text className="text-[11px] text-sky-100">Selected image</Text>
                     </View>
-                    <Text className={`text-[14px] font-bold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
-                      {meta?.label || topClass}
-                    </Text>
-                    <Text className={`text-[12px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      {Math.round(result.confidence * 100)}%
-                    </Text>
                   </View>
+                </View>
+              )}
+
+              <PredictButton
+                title={image ? 'Retake container photo' : 'Capture container photo'}
+                onPress={handleCapture}
+                disabled={loading}
+              />
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={loading}
+                onPress={handleUpload}
+                className={`flex-row items-center justify-center gap-2 rounded-2xl border px-4 py-3 ${
+                  isDark
+                    ? 'border-sky-800/60 bg-sky-900/20'
+                    : 'border-sky-200 bg-sky-50'
+                } ${loading ? 'opacity-40' : ''}`}
+              >
+                <Feather name="upload" size={14} color={isDark ? '#7dd3fc' : '#0369a1'} />
+                <Text
+                  className={`text-[13px] font-semibold ${
+                    isDark ? 'text-sky-300' : 'text-sky-700'
+                  }`}
+                >
+                  Upload from library
+                </Text>
+              </TouchableOpacity>
+
+              {error ? (
+                <View
+                  className={`flex-row items-center gap-2 rounded-xl border px-3 py-2 ${
+                    isDark ? 'border-red-800/50 bg-red-900/20' : 'border-red-200 bg-red-50'
+                  }`}
+                >
+                  <Feather name="alert-circle" size={13} color={isDark ? '#fca5a5' : '#b91c1c'} />
+                  <Text
+                    className={`flex-1 text-[12px] ${isDark ? 'text-red-300' : 'text-red-700'}`}
+                  >
+                    {error}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+          {/* ── Analysis result card ── */}
+          <View
+            className={`rounded-[24px] border ${
+              isDark
+                ? 'border-sky-900/70 bg-slate-950/70'
+                : 'border-slate-300 bg-white'
+            }`}
+          >
+            {/* card header */}
+            <View
+              className={`flex-row items-center gap-2 border-b px-5 py-4 ${
+                isDark ? 'border-sky-900/50' : 'border-slate-100'
+              }`}
+            >
+              <MaterialCommunityIcons
+                name="chart-donut"
+                size={14}
+                color={isDark ? '#38bdf8' : '#0284c7'}
+              />
+              <Text
+                className={`text-[11px] font-semibold uppercase tracking-widest ${
+                  isDark ? 'text-sky-300' : 'text-sky-600'
+                }`}
+              >
+                Analysis snapshot
+              </Text>
+            </View>
+
+            <View className="px-5 py-4">
+              {/* ── Loading state ── */}
+              {loading ? (
+                <View className="items-center gap-3 py-8">
+                  <View
+                    className={`h-14 w-14 items-center justify-center rounded-full border ${
+                      isDark
+                        ? 'border-sky-800/60 bg-sky-900/30'
+                        : 'border-sky-200 bg-sky-50'
+                    }`}
+                  >
+                    <ActivityIndicator size="small" color={isDark ? '#38bdf8' : '#0284c7'} />
+                  </View>
+                  <Text
+                    className={`text-[13px] font-medium ${
+                      isDark ? 'text-sky-200' : 'text-sky-700'
+                    }`}
+                  >
+                    Running moss classification…
+                  </Text>
+                  <Text
+                    className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}
+                  >
+                    This may take a few seconds
+                  </Text>
+                </View>
+
+              ) : image && result ? (
+                <View className="gap-4">
+                  {/* ── Verdict row ── */}
+                  <View className="flex-row gap-3">
+                    {/* Thumbnail */}
+                    <View
+                      className={`overflow-hidden rounded-2xl border ${
+                        isDark ? 'border-sky-900/60' : 'border-slate-200'
+                      }`}
+                      style={{ width: 88, height: 88 }}
+                    >
+                      <Image source={{ uri: image.uri }} className="h-full w-full" resizeMode="cover" />
+                    </View>
+
+                    {/* Verdict info */}
+                    <View className="flex-1 gap-1.5">
+                      {/* Class label + severity badge */}
+                      <View className="flex-row items-center gap-2 flex-wrap">
+                        <View
+                          style={{ backgroundColor: `${meta?.color}22` }}
+                          className="h-6 w-6 items-center justify-center rounded-full"
+                        >
+                          <MaterialCommunityIcons
+                            name={meta?.mcIcon || 'help-circle-outline'}
+                            size={16}
+                            color={meta?.color || '#64748b'}
+                          />
+                        </View>
+                        <Text
+                          className={`text-[15px] font-bold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}
+                        >
+                          {meta?.label || topClass}
+                        </Text>
+                        {isValid && badge && (
+                          <View
+                            className={`rounded-full border px-2 py-0.5 ${
+                              isDark
+                                ? `${badge.borderDark} ${badge.bgDark}`
+                                : `${badge.borderLight} ${badge.bgLight}`
+                            }`}
+                          >
+                            <Text
+                              className={`text-[10px] font-semibold ${
+                                isDark ? badge.textDark : badge.textLight
+                              }`}
+                            >
+                              {badge.label}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Confidence pill */}
+                      {isValid && (
+                        <View className="flex-row items-center gap-1.5">
+                          <Feather
+                            name="bar-chart-2"
+                            size={12}
+                            color={isDark ? '#94a3b8' : '#64748b'}
+                          />
+                          <Text
+                            className={`text-[12px] font-semibold ${
+                              isDark ? 'text-slate-300' : 'text-slate-600'
+                            }`}
+                          >
+                            {Math.round(result.confidence * 100)}% confidence
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Entropy / margin */}
+                      {isValid && (
+                        <View className="flex-row items-center gap-1.5">
+                          <MaterialCommunityIcons
+                            name="sigma"
+                            size={12}
+                            color={isDark ? '#94a3b8' : '#64748b'}
+                          />
+                          <Text
+                            className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}
+                          >
+                            Entropy {result.entropy ?? '--'} · Margin {result.margin != null ? Math.round(result.margin * 100) : '--'}%
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Rejection banner */}
                   {!isValid && (
-                    <View className={`mt-2 rounded-lg px-2.5 py-1.5 ${isDark ? 'bg-amber-900/40' : 'bg-amber-50'}`}>
-                      <Text className={`text-[11px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                        ⚠ Below confidence threshold ({Math.round(result.confidence * 100)}% &lt; 85%)
+                    <View
+                      className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${
+                        isDark
+                          ? 'border-amber-700/40 bg-amber-900/20'
+                          : 'border-amber-200 bg-amber-50'
+                      }`}
+                    >
+                      <MaterialCommunityIcons
+                        name="alert-circle-outline"
+                        size={16}
+                        color={isDark ? '#fcd34d' : '#b45309'}
+                      />
+                      <Text
+                        className={`flex-1 text-[12px] leading-[18px] ${
+                          isDark ? 'text-amber-200' : 'text-amber-800'
+                        }`}
+                      >
+                        {rejectionReason || 'Image not recognized as a container'}
                       </Text>
                     </View>
                   )}
-                  <Text className={`mt-1.5 text-[12px] leading-[17px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    {severityNote(topClass, isValid)}
-                  </Text>
+
+                  {/* Severity note */}
+                  {severityNote(topClass, isValid) ? (
+                    <View
+                      className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${
+                        isDark
+                          ? 'border-sky-900/50 bg-sky-950/30'
+                          : 'border-sky-100 bg-sky-50'
+                      }`}
+                    >
+                      <Feather
+                        name="info"
+                        size={13}
+                        color={isDark ? '#7dd3fc' : '#0369a1'}
+                      />
+                      <Text
+                        className={`flex-1 text-[12px] leading-[18px] ${
+                          isDark ? 'text-sky-200' : 'text-sky-800'
+                        }`}
+                      >
+                        {severityNote(topClass, isValid)}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {/* Combine-data note */}
                   {isValid && (
-                    <Text className={`mt-1.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
-                      Combine with pH, turbidity and nutrient data for final assessment.
-                    </Text>
+                    <View className="flex-row items-center gap-2">
+                      <MaterialCommunityIcons
+                        name="link-variant"
+                        size={12}
+                        color={isDark ? '#64748b' : '#94a3b8'}
+                      />
+                      <Text
+                        className={`flex-1 text-[11px] ${
+                          isDark ? 'text-slate-500' : 'text-slate-400'
+                        }`}
+                      >
+                        Combine with pH, turbidity and nutrient data for a full assessment.
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Confidence breakdown bars */}
+                  {isValid && (
+                    <View
+                      className={`rounded-2xl border p-4 ${
+                        isDark
+                          ? 'border-sky-900/50 bg-slate-900/50'
+                          : 'border-slate-200 bg-slate-50'
+                      }`}
+                    >
+                      <View className="mb-3 flex-row items-center gap-2">
+                        <MaterialCommunityIcons
+                          name="chart-bar"
+                          size={13}
+                          color={isDark ? '#38bdf8' : '#0284c7'}
+                        />
+                        <Text
+                          className={`text-[11px] font-semibold uppercase tracking-widest ${
+                            isDark ? 'text-sky-300' : 'text-sky-600'
+                          }`}
+                        >
+                          Confidence breakdown
+                        </Text>
+                      </View>
+                      {Object.entries(CLASS_META)
+                        .filter(([cls]) => cls !== 'Unknown')
+                        .map(([cls, { color, label }]) => (
+                          <ConfidenceBar
+                            key={cls}
+                            label={label}
+                            value={probabilities[cls] ?? 0}
+                            color={color}
+                            isDark={isDark}
+                          />
+                        ))}
+                    </View>
                   )}
                 </View>
-              </View>
 
-              {/* Confidence breakdown */}
-              <View className={`mt-4 rounded-xl border p-3 ${isDark ? 'border-sky-900/60 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
-                <Text className={`text-[11px] font-medium uppercase tracking-wide mb-2 ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                  Confidence breakdown
-                </Text>
-                {Object.entries(CLASS_META).map(([cls, { color, label }]) => (
-                  <ConfidenceBar
-                    key={cls}
-                    label={label}
-                    value={probabilities[cls] ?? 0}
-                    color={color}
-                    isDark={isDark}
+              ) : image && !result ? (
+                /* ── Pending state (image picked, no result yet) ── */
+                <View className="flex-row items-center gap-3 py-6">
+                  <MaterialCommunityIcons
+                    name="image-search-outline"
+                    size={22}
+                    color={isDark ? '#475569' : '#94a3b8'}
                   />
-                ))}
-              </View>
+                  <Text className={`text-[13px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                    Image captured. Waiting for analysis results…
+                  </Text>
+                </View>
+
+              ) : (
+                /* ── Empty state ── */
+                <View className="items-center gap-3 py-8">
+                  <View
+                    className={`h-14 w-14 items-center justify-center rounded-full border ${
+                      isDark
+                        ? 'border-slate-800/70 bg-slate-900/50'
+                        : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <MaterialCommunityIcons
+                      name="beaker-outline"
+                      size={24}
+                      color={isDark ? '#475569' : '#94a3b8'}
+                    />
+                  </View>
+                  <Text
+                    className={`text-[13px] font-medium ${
+                      isDark ? 'text-slate-400' : 'text-slate-500'
+                    }`}
+                  >
+                    No image analyzed yet
+                  </Text>
+                  <Text
+                    className={`max-w-[260px] text-center text-[12px] leading-[18px] ${
+                      isDark ? 'text-slate-600' : 'text-slate-400'
+                    }`}
+                  >
+                    Capture or upload a photo to see moss/algae classification results and confidence scores.
+                  </Text>
+                </View>
+              )}
             </View>
-          ) : image && !result ? (
-            <Text className={`mt-3 text-[12px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-              Image captured. Waiting for analysis results…
-            </Text>
-          ) : (
-            <Text className={`mt-3 text-[12px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-              Once a photo is captured, a classification card will appear here with
-              moss/algae detection results and confidence scores.
-            </Text>
-          )}
-        </View>
-      </ScrollView>
+          </View>
+
+          {/* ── Tips card ── */}
+          <View
+            className={`rounded-[24px] border p-5 ${
+              isDark ? 'border-sky-900/60 bg-slate-950/50' : 'border-slate-200 bg-white'
+            }`}
+          >
+            <View className="mb-3 flex-row items-center gap-2">
+              <Feather name="zap" size={13} color={isDark ? '#facc15' : '#b45309'} />
+              <Text
+                className={`text-[11px] font-semibold uppercase tracking-widest ${
+                  isDark ? 'text-yellow-300' : 'text-amber-700'
+                }`}
+              >
+                Capture tips
+              </Text>
+            </View>
+            {[
+              { icon: 'sun',        text: 'Shoot in natural light or brightly lit area' },
+              { icon: 'maximize-2', text: 'Fill the frame with the container surface' },
+              { icon: 'droplet',    text: 'Dry the surface before photographing when possible' },
+              { icon: 'refresh-cw', text: 'Retake if the image is blurry or poorly lit' },
+            ].map((tip) => (
+              <View key={tip.text} className="mb-2.5 flex-row items-start gap-2.5">
+                <View
+                  className={`mt-0.5 h-5 w-5 items-center justify-center rounded-md ${
+                    isDark ? 'bg-slate-800' : 'bg-slate-100'
+                  }`}
+                >
+                  <Feather name={tip.icon} size={11} color={isDark ? '#94a3b8' : '#64748b'} />
+                </View>
+                <Text
+                  className={`flex-1 text-[12px] leading-[18px] ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}
+                >
+                  {tip.text}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </Animated.View>
     </KeyboardAvoidingView>
   );

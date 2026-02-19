@@ -12,7 +12,15 @@ import {
   Modal,
   Dimensions,
   ActivityIndicator,
+  LayoutAnimation,
+  UIManager,
+  StyleSheet,
 } from 'react-native';
+
+// Enable LayoutAnimation on Android
+if (UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { Camera, CameraView } from 'expo-camera';
 import { Accelerometer } from 'expo-sensors';
@@ -223,6 +231,111 @@ const preprocessImage = async (asset) => {
     height: currentHeight,
     _preprocessSteps: steps,
   };
+};
+
+// ---------------------------------------------------------------------------
+// CollapsibleSection — animated accordion card for parameter groups
+// ---------------------------------------------------------------------------
+const CollapsibleSection = ({ title, icon, fieldCount, filledCount, isDark, children, defaultExpanded = false }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const chevronAnim = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
+
+  const toggle = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 260,
+      create: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+      update: { type: LayoutAnimation.Types.easeInEaseOut },
+      delete: { type: LayoutAnimation.Types.easeInEaseOut, property: LayoutAnimation.Properties.opacity },
+    });
+    const next = !expanded;
+    setExpanded(next);
+    Animated.timing(chevronAnim, {
+      toValue: next ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [expanded, chevronAnim]);
+
+  const spin = chevronAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const allFilled = fieldCount > 0 && filledCount === fieldCount;
+  const someFilled = filledCount > 0 && !allFilled;
+  const iconColor = allFilled ? '#10b981' : someFilled ? '#f59e0b' : isDark ? '#475569' : '#94a3b8';
+  const iconBg = allFilled
+    ? isDark ? 'rgba(16,185,129,0.15)' : '#d1fae5'
+    : someFilled
+    ? isDark ? 'rgba(245,158,11,0.15)' : '#fef3c7'
+    : isDark ? 'rgba(30,41,59,0.8)' : '#f8fafc';
+
+  return (
+    <View
+      style={{ borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(14,165,233,0.18)' : '#e2e8f0' }}
+      className={isDark ? 'bg-slate-950/80' : 'bg-white'}
+    >
+      {/* Header row — always visible */}
+      <TouchableOpacity activeOpacity={0.78} onPress={toggle} className="px-5 py-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row flex-1 items-center gap-3">
+            <View style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center' }}>
+              <MaterialCommunityIcons name={icon} size={15} color={iconColor} />
+            </View>
+            <View className="flex-1">
+              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                {title}
+              </Text>
+              {!expanded && (
+                <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {filledCount === 0
+                    ? 'Tap to enter values manually'
+                    : `${filledCount} of ${fieldCount} field${fieldCount !== 1 ? 's' : ''} filled`}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View className="flex-row items-center gap-2">
+            {filledCount > 0 && (
+              <View
+                style={{
+                  borderRadius: 99,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  backgroundColor: allFilled
+                    ? isDark ? 'rgba(16,185,129,0.18)' : '#d1fae5'
+                    : isDark ? 'rgba(245,158,11,0.18)' : '#fef3c7',
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: '700',
+                    color: allFilled
+                      ? isDark ? '#6ee7b7' : '#065f46'
+                      : isDark ? '#fcd34d' : '#92400e',
+                  }}
+                >
+                  {filledCount}/{fieldCount}
+                </Text>
+              </View>
+            )}
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <Feather name="chevron-down" size={16} color={isDark ? '#38bdf8' : '#0284c7'} />
+            </Animated.View>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Collapsible content */}
+      {expanded && (
+        <View
+          style={{ borderTopWidth: 1, borderTopColor: isDark ? 'rgba(14,165,233,0.1)' : '#f1f5f9' }}
+          className="px-5 pb-5 pt-2"
+        >
+          {children}
+        </View>
+      )}
+    </View>
+  );
 };
 
 const DataInputScreen = ({ onNavigate }) => {
@@ -878,6 +991,22 @@ const DataInputScreen = ({ onNavigate }) => {
     setResultModalVisible(false);
   }, []);
 
+  const EMPTY_FORM = {
+    pH: '', hardness: '', solids: '', chloramines: '', sulfate: '',
+    conductivity: '', organicCarbon: '', trihalomethanes: '', turbidity: '',
+    freeChlorineResidual: '', color: 'Clear', source: 'Surface water',
+  };
+
+  const handleClearAll = useCallback(() => {
+    setForm(EMPTY_FORM);
+    setCapturePreview(null);
+    setOcrApplied(false);
+    setOcrError('');
+    setCameraError('');
+    setPreprocessNotes('');
+    setSubmitError('');
+  }, []);
+
   const buildSamplePayload = useCallback(() => {
     return {
       ph: parseNumericInput(form.pH),
@@ -986,6 +1115,12 @@ const DataInputScreen = ({ onNavigate }) => {
       : `Manual capture · alignment ${alignmentPercent}%`
     : 'Initializing camera…';
 
+  // Per-section field fill counts for CollapsibleSection badges
+  const isFilled = (k) => String(form[k] ?? '').trim().length > 0;
+  const coreFilledCount  = ['pH', 'hardness', 'solids', 'conductivity'].filter(isFilled).length;
+  const chemFilledCount  = ['chloramines', 'sulfate', 'organicCarbon', 'trihalomethanes'].filter(isFilled).length;
+  const physFilledCount  = ['turbidity', 'freeChlorineResidual'].filter(isFilled).length;
+  const totalFilledCount = coreFilledCount + chemFilledCount + physFilledCount;
   return (
     <>
       {cameraModal}
@@ -1139,51 +1274,171 @@ const DataInputScreen = ({ onNavigate }) => {
             <View className="mt-5">
               <PredictButton
                 title={capturePreview ? 'Retake capture' : 'Capture data card'}
+                icon={capturePreview ? 'camera-retake-outline' : 'camera-outline'}
+                iconSize={18}
                 onPress={handleOpenCamera}
               />
               {cameraError ? (
                 <Text className="mt-2 text-[11px] text-rose-400">{cameraError}</Text>
               ) : null}
-              {preprocessing ? (
-                <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Optimizing capture for OCR...</Text>
-              ) : null}
-              {preprocessNotes && !preprocessing ? (
-                <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{preprocessNotes}</Text>
-              ) : null}
-              {ocrLoading ? (
-                <View className="mt-3 flex-row items-center">
-                  <Animated.View
-                    className="h-3.5 w-3.5 rounded-full border-2 border-sky-300 border-t-transparent"
-                    style={{ transform: [{ rotate: spinnerRotation }] }}
-                  />
-                  <Text className={`ml-2 text-[11px] ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                    Extracting values with EasyOCR...
-                  </Text>
-                </View>
-              ) : null}
-              {ocrApplied && !ocrLoading ? (
-                <Text className={`mt-2 text-[11px] ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                  Fields updated automatically. Review before saving.
-                </Text>
-              ) : null}
-              {ocrError ? (
-                <Text className="mt-2 text-[11px] text-rose-400">{ocrError}</Text>
-              ) : null}
             </View>
-            {capturePreview ? (
-              <View className="mt-5 flex-row gap-3">
-                <View className={`h-24 w-20 overflow-hidden rounded-2xl border ${isDark ? 'border-sky-900/80 bg-slate-900' : 'border-slate-300 bg-slate-100'}`}>
-                  <Image
-                    source={{ uri: capturePreview.uri }}
-                    className="h-full w-full"
-                    resizeMode="cover"
-                  />
+
+            {/* OCR result card — shown while processing or after capture */}
+            {(capturePreview || preprocessing) ? (
+              <View
+                className={`mt-4 overflow-hidden rounded-[24px] border ${
+                  isDark ? 'border-sky-900/60 bg-slate-900/80' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                {/* Image strip */}
+                <View style={{ height: 140 }} className="w-full overflow-hidden">
+                  {capturePreview ? (
+                    <Image
+                      source={{ uri: capturePreview.uri }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View
+                      className={`h-full w-full items-center justify-center ${
+                        isDark ? 'bg-slate-800' : 'bg-slate-200'
+                      }`}
+                    >
+                      <MaterialCommunityIcons
+                        name="image-outline"
+                        size={28}
+                        color={isDark ? '#334155' : '#cbd5e1'}
+                      />
+                    </View>
+                  )}
+
+                  {/* Status chip — top right of image */}
+                  {capturePreview && !ocrLoading && !preprocessing && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        borderRadius: 99,
+                        paddingHorizontal: 10,
+                        paddingVertical: 4,
+                        backgroundColor: ocrApplied
+                          ? 'rgba(16,185,129,0.85)'
+                          : ocrError
+                          ? 'rgba(244,63,94,0.85)'
+                          : 'rgba(15,23,42,0.65)',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 5,
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name={
+                          ocrApplied
+                            ? 'check-circle-outline'
+                            : ocrError
+                            ? 'alert-circle-outline'
+                            : 'image-check-outline'
+                        }
+                        size={11}
+                        color="#fff"
+                      />
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                        {ocrApplied
+                          ? `${totalFilledCount} field${totalFilledCount !== 1 ? 's' : ''} extracted`
+                          : ocrError
+                          ? 'OCR failed'
+                          : 'Captured'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* OCR loading overlay */}
+                  {(ocrLoading || preprocessing) && (
+                    <View
+                      style={{
+                        ...StyleSheet.absoluteFillObject,
+                        backgroundColor: 'rgba(2,8,23,0.55)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 10,
+                      }}
+                    >
+                      <Animated.View
+                        style={{
+                          width: 26,
+                          height: 26,
+                          borderRadius: 13,
+                          borderWidth: 2.5,
+                          borderColor: '#38bdf8',
+                          borderTopColor: 'transparent',
+                          transform: [{ rotate: spinnerRotation }],
+                        }}
+                      />
+                      <Text style={{ color: '#e0f2fe', fontSize: 12, fontWeight: '600' }}>
+                        {preprocessing ? 'Optimizing…' : 'Extracting values…'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <View className="flex-1">
-                  <Text className={`text-[13px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>OCR preview</Text>
-                  <Text className={`mt-1 text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                    Preview for alignment only. Backend OCR uses the raw capture for numeric extraction.
-                  </Text>
+
+                {/* Caption row below image */}
+                <View className="px-4 py-3">
+                  {ocrApplied && !ocrLoading ? (
+                    <>
+                      <View className="flex-row items-center gap-2">
+                        <MaterialCommunityIcons
+                          name="text-recognition"
+                          size={14}
+                          color={isDark ? '#34d399' : '#059669'}
+                        />
+                        <Text className={`text-[13px] font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                          Fields filled automatically
+                        </Text>
+                      </View>
+                      {/* Field chips */}
+                      <View className="mt-2 flex-row flex-wrap gap-1.5">
+                        {numericFormFields
+                          .filter((k) => String(form[k] ?? '').trim().length > 0)
+                          .map((k) => (
+                            <View
+                              key={k}
+                              style={{
+                                borderRadius: 99,
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                backgroundColor: isDark ? 'rgba(16,185,129,0.15)' : '#d1fae5',
+                                borderWidth: 1,
+                                borderColor: isDark ? 'rgba(52,211,153,0.3)' : '#6ee7b7',
+                              }}
+                            >
+                              <Text style={{ fontSize: 10, fontWeight: '600', color: isDark ? '#6ee7b7' : '#065f46' }}>
+                                {k}
+                              </Text>
+                            </View>
+                          ))}
+                      </View>
+                      <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Review values below — expand any section to verify.
+                      </Text>
+                    </>
+                  ) : ocrError ? (
+                    <View className="flex-row items-center gap-2">
+                      <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#f43f5e" />
+                      <Text className="text-[12px] text-rose-400 flex-1">{ocrError}</Text>
+                    </View>
+                  ) : !ocrLoading && !preprocessing && capturePreview ? (
+                    <View className="flex-row items-center gap-2">
+                      <MaterialCommunityIcons
+                        name="image-check-outline"
+                        size={14}
+                        color={isDark ? '#94a3b8' : '#64748b'}
+                      />
+                      <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {preprocessNotes || 'Awaiting OCR result…'}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             ) : null}
@@ -1201,13 +1456,43 @@ const DataInputScreen = ({ onNavigate }) => {
                 },
               ],
             }}
-            className="gap-5"
+            className="gap-3"
           >
-            <View className={`rounded-[32px] p-5 ${isDark ? 'border border-sky-900/70 bg-slate-950/80' : 'border border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Core parameters
-              </Text>
-              <View className="mt-4 flex-row gap-3">
+            {/* Manual entry section header */}
+            <View className="flex-row items-center justify-between px-1 pt-1">
+              <View className="flex-row items-center gap-2">
+                <Feather name="edit-3" size={13} color={isDark ? '#38bdf8' : '#0284c7'} />
+                <Text className={`text-[12px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                  Manual entry
+                </Text>
+                <Text className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  · optional if using OCR
+                </Text>
+              </View>
+              {totalFilledCount > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View
+                    style={{
+                      width: 6, height: 6, borderRadius: 3,
+                      backgroundColor: totalFilledCount === 10 ? '#10b981' : '#f59e0b',
+                    }}
+                  />
+                  <Text className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {totalFilledCount}/10
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Core parameters — collapsed by default */}
+            <CollapsibleSection
+              title="Core parameters"
+              icon="water-outline"
+              fieldCount={4}
+              filledCount={coreFilledCount}
+              isDark={isDark}
+            >
+              <View className="mt-3 flex-row gap-3">
                 <View className="flex-1">
                   <InputField
                     label="pH (dimensionless)"
@@ -1247,13 +1532,17 @@ const DataInputScreen = ({ onNavigate }) => {
                   />
                 </View>
               </View>
-            </View>
+            </CollapsibleSection>
 
-            <View className={`rounded-[32px] p-5 ${isDark ? 'border border-sky-900/70 bg-slate-950/80' : 'border border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Chemical compounds
-              </Text>
-              <View className="mt-4 flex-row gap-3">
+            {/* Chemical compounds — collapsed by default */}
+            <CollapsibleSection
+              title="Chemical compounds"
+              icon="flask-outline"
+              fieldCount={4}
+              filledCount={chemFilledCount}
+              isDark={isDark}
+            >
+              <View className="mt-3 flex-row gap-3">
                 <View className="flex-1">
                   <InputField
                     label="Chloramines (mg/L)"
@@ -1293,13 +1582,17 @@ const DataInputScreen = ({ onNavigate }) => {
                   />
                 </View>
               </View>
-            </View>
+            </CollapsibleSection>
 
-            <View className={`rounded-[32px] p-5 ${isDark ? 'border border-sky-900/70 bg-slate-950/80' : 'border border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Physical & disinfectant
-              </Text>
-              <View className="mt-4 flex-row gap-3">
+            {/* Physical & disinfectant — collapsed by default */}
+            <CollapsibleSection
+              title="Physical & disinfectant"
+              icon="thermometer"
+              fieldCount={2}
+              filledCount={physFilledCount}
+              isDark={isDark}
+            >
+              <View className="mt-3 flex-row gap-3">
                 <View className="flex-1">
                   <InputField
                     label="Turbidity (NTU)"
@@ -1319,13 +1612,20 @@ const DataInputScreen = ({ onNavigate }) => {
                   />
                 </View>
               </View>
-            </View>
+            </CollapsibleSection>
 
-            <View className={`rounded-[32px] p-5 ${isDark ? 'border border-sky-900/80 bg-slate-950/80' : 'border border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Visual & context
-              </Text>
-              <View className="mt-4">
+            {/* Visual & context — collapsed by default */}
+            <CollapsibleSection
+              title="Visual & context"
+              icon="eye-outline"
+              fieldCount={2}
+              filledCount={
+                (form.color && form.color !== colorOptions[0] ? 1 : 0) +
+                (form.source && form.source !== sourceOptions[0] ? 1 : 0)
+              }
+              isDark={isDark}
+            >
+              <View className="mt-3">
                 <Text className={`mb-2 text-[13px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>Color</Text>
                 <View className="flex-row flex-wrap gap-2">
                   {colorOptions.map((option) => {
@@ -1387,7 +1687,7 @@ const DataInputScreen = ({ onNavigate }) => {
                   })}
                 </View>
               </View>
-            </View>
+            </CollapsibleSection>
           </Animated.View>
 
           <View className={`rounded-[32px] p-5 ${isDark ? 'border border-sky-900/70 bg-slate-950/80' : 'border border-slate-300 bg-white'}`}>
@@ -1396,6 +1696,8 @@ const DataInputScreen = ({ onNavigate }) => {
             </Text>
             <PredictButton
               title={submitLoading ? 'Saving sample…' : 'Save sample & run checks'}
+              icon={submitLoading ? undefined : 'cloud-upload-outline'}
+              iconSize={18}
               onPress={handleSubmit}
               className="mt-4"
               disabled={submitLoading}
@@ -1413,6 +1715,26 @@ const DataInputScreen = ({ onNavigate }) => {
                 {submitError}
               </Text>
             ) : null}
+
+            {/* Clear all — shown only when there is something to clear */}
+            {totalFilledCount > 0 || capturePreview ? (
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleClearAll}
+                disabled={submitLoading}
+                className={`mt-3 w-full flex-row items-center justify-center gap-2 rounded-full border py-2.5 ${
+                  isDark ? 'border-slate-700 bg-slate-900/60' : 'border-slate-300 bg-slate-50'
+                } ${submitLoading ? 'opacity-40' : ''}`}
+              >
+                <Feather name="trash-2" size={14} color={isDark ? '#f87171' : '#ef4444'} />
+                <Text
+                  className={`text-[13px] font-semibold ${isDark ? 'text-rose-400' : 'text-rose-500'}`}
+                >
+                  Clear all entries
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
             <Text className="mt-2 text-center text-[11px] text-slate-500">
               Values feed into image-assisted models for early disease detection.
             </Text>

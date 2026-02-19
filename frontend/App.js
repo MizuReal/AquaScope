@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import './global.css';
 import LoginScreen from './screens/LoginScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -22,14 +23,14 @@ function AppContent() {
   const menuAnim = useRef(new Animated.Value(0)).current;
 
   const menuItems = [
-    { label: '📥 Data input', route: 'dataInput' },
-    { label: '🧪 Container Analysis', route: 'containerAnalysis' },
-    { label: '📊 Predictions History', route: 'predictionHistory' },
-    { label: '💬 Community Forum', route: 'community' },
-    { label: '📈 Analytics', route: 'analysis' },
-    { label: isDark ? '☀️ Light mode' : '🌙 Dark mode', route: 'toggleTheme' },
-    { label: '👤 Profile', route: 'profile' },
-    { label: '🚪 Logout', route: 'logout' },
+    { label: 'Data input',          route: 'dataInput',          iconLib: 'Feather',   iconName: 'inbox' },
+    { label: 'Container Analysis',  route: 'containerAnalysis',  iconLib: 'Feather',   iconName: 'box' },
+    { label: 'Predictions History', route: 'predictionHistory',  iconLib: 'Feather',   iconName: 'clock' },
+    { label: 'Community Forum',     route: 'community',          iconLib: 'Feather',   iconName: 'message-circle' },
+    { label: 'Analytics',           route: 'analysis',           iconLib: 'Feather',   iconName: 'trending-up' },
+    { label: isDark ? 'Light mode' : 'Dark mode', route: 'toggleTheme', iconLib: 'Feather', iconName: isDark ? 'sun' : 'moon' },
+    { label: 'Profile',             route: 'profile',            iconLib: 'Feather',   iconName: 'user' },
+    { label: 'Logout',              route: 'logout',             iconLib: 'Feather',   iconName: 'log-out' },
   ];
 
   useEffect(() => {
@@ -173,9 +174,16 @@ function AppContent() {
                     }
                   }}
                 >
-                  <Text className={`text-[13px] ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
-                    {item.label}
-                  </Text>
+                  <View className="flex-row items-center gap-2.5">
+                    <Feather
+                      name={item.iconName}
+                      size={14}
+                      color={isDark ? '#e0f2fe' : '#1f2937'}
+                    />
+                    <Text className={`text-[13px] ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
+                      {item.label}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
