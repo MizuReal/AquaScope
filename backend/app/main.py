@@ -54,6 +54,11 @@ def health_check() -> dict:
 	return {"status": "ok"}
 
 
+@app.get("/", tags=["health"])
+def root() -> dict:
+	return {"status": "ok", "service": "ml-aaw-backend"}
+
+
 @app.get("/auth/confirmed", response_class=HTMLResponse, tags=["auth"])
 async def email_confirmed(request: Request) -> HTMLResponse:
 	"""Simple confirmation page Supabase can redirect to after email verification.
