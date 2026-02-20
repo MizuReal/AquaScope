@@ -8,7 +8,7 @@ scipy
 pandas
 scikit-learn
 easyocr
-python-bidi==0.4.2
+python-bidi==0.6.7
 torch
 torchvision
 torchaudio
