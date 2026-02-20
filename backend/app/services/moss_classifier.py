@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
-import torch
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -30,14 +29,16 @@ MARGIN_THRESHOLD     = 0.25   # minimum gap between top-1 and top-2 probability
 _MODEL_PATH = Path(__file__).resolve().parents[3] / "moss_model" / "best.torchscript"
 
 # Singleton model handle
-_model: torch.jit.ScriptModule | None = None
+_model = None
 
 
-def _load_model() -> torch.jit.ScriptModule:
+def _load_model():
     """Load TorchScript model once and cache it."""
     global _model
     if _model is not None:
         return _model
+
+    import torch
 
     if not _MODEL_PATH.exists():
         raise FileNotFoundError(f"Moss TorchScript model not found at {_MODEL_PATH}")
@@ -50,13 +51,15 @@ def _load_model() -> torch.jit.ScriptModule:
     return _model
 
 
-def _preprocess(image_bytes: bytes) -> torch.Tensor:
+def _preprocess(image_bytes: bytes):
     """Convert raw image bytes to a normalised 224x224 tensor [1, 3, 224, 224].
 
     Matches YOLOv8-cls preprocessing exactly:
       1. Resize to 224x224 (LANCZOS)
       2. Scale pixels to [0, 1]  ← only step; YOLOv8 does NOT use ImageNet mean/std
     """
+    import torch
+
     img = Image.open(BytesIO(image_bytes)).convert("RGB")
     img = img.resize((224, 224), Image.LANCZOS)
 
@@ -88,6 +91,8 @@ def classify(image_bytes: bytes) -> Dict:
         entropy         : float – Shannon entropy of the distribution
         is_valid        : bool  – whether the prediction passed rejection gates
     """
+    import torch
+
     model = _load_model()
     device = next(model.parameters()).device
     tensor = _preprocess(image_bytes).to(device)

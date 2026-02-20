@@ -5,33 +5,59 @@ from functools import lru_cache
 from io import BytesIO
 from typing import Dict, Iterable, List, Optional, Sequence
 
-import cv2
-
-# ── python-bidi compatibility shim ──────────────────────────────
-# EasyOCR internally does `from bidi.algorithm import get_display`.
-# python-bidi >=0.6 moved get_display to `bidi` and removed
-# `bidi.algorithm`, so we patch it here before EasyOCR is imported.
-try:
-    from bidi.algorithm import get_display  # python-bidi <0.6
-except (ImportError, ModuleNotFoundError):
-    try:
-        from bidi import get_display  # python-bidi >=0.6
-        # Create a fake bidi.algorithm module so EasyOCR's import succeeds
-        _fake_mod = types.ModuleType("bidi.algorithm")
-        _fake_mod.get_display = get_display  # type: ignore[attr-defined]
-        sys.modules["bidi.algorithm"] = _fake_mod
-    except (ImportError, ModuleNotFoundError):
-        # bidi not installed at all – provide a no-op so OCR still works
-        _fake_mod = types.ModuleType("bidi.algorithm")
-        _fake_mod.get_display = lambda text, *a, **kw: text  # type: ignore[attr-defined]
-        sys.modules["bidi.algorithm"] = _fake_mod
-# ────────────────────────────────────────────────────────────────
-
-import easyocr
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from app.ml.inference import EXTRACTOR
+# Lazy-loaded at first use to avoid blocking app startup
+_easyocr = None
+_cv2 = None
+_EXTRACTOR = None
+
+
+def _get_cv2():
+    """Lazy-import cv2."""
+    global _cv2
+    if _cv2 is None:
+        import cv2
+        _cv2 = cv2
+    return _cv2
+
+
+def _ensure_bidi_shim():
+    """Install python-bidi compatibility shim before EasyOCR is imported."""
+    if "bidi.algorithm" in sys.modules:
+        return
+    try:
+        from bidi.algorithm import get_display  # python-bidi <0.6
+    except (ImportError, ModuleNotFoundError):
+        try:
+            from bidi import get_display  # python-bidi >=0.6
+            _fake_mod = types.ModuleType("bidi.algorithm")
+            _fake_mod.get_display = get_display  # type: ignore[attr-defined]
+            sys.modules["bidi.algorithm"] = _fake_mod
+        except (ImportError, ModuleNotFoundError):
+            _fake_mod = types.ModuleType("bidi.algorithm")
+            _fake_mod.get_display = lambda text, *a, **kw: text  # type: ignore[attr-defined]
+            sys.modules["bidi.algorithm"] = _fake_mod
+
+
+def _get_easyocr():
+    """Lazy-import easyocr (pulls in torch internally – very slow)."""
+    global _easyocr
+    if _easyocr is None:
+        _ensure_bidi_shim()
+        import easyocr
+        _easyocr = easyocr
+    return _easyocr
+
+
+def _get_extractor():
+    """Lazy-import the fixed-form extractor."""
+    global _EXTRACTOR
+    if _EXTRACTOR is None:
+        from app.ml.inference import EXTRACTOR
+        _EXTRACTOR = EXTRACTOR
+    return _EXTRACTOR
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +72,7 @@ class EasyOCRService:
     """Thin wrapper around EasyOCR so it can be dependency-injected."""
 
     def __init__(self, languages: Optional[Sequence[str]] = None, gpu: bool = False) -> None:
+        easyocr = _get_easyocr()
         self._reader = easyocr.Reader(list(languages or ("en",)), gpu=gpu)
 
     def read_text(self, image_bytes: bytes) -> List[Detection]:
@@ -64,7 +91,7 @@ class EasyOCRService:
 
     def read_fixed_form_values(self, image_bytes: bytes) -> Dict[str, Optional[str]]:
         logger.info("Fixed-form OCR extractor invoked")
-        return EXTRACTOR.extract(image_bytes, self._reader)
+        return _get_extractor().extract(image_bytes, self._reader)
 
 
 def _bytes_to_image(image_bytes: bytes) -> np.ndarray:
@@ -77,6 +104,7 @@ def _bytes_to_image(image_bytes: bytes) -> np.ndarray:
             max_edge = 2200
             if max(pil_img.size) > max_edge:
                 pil_img.thumbnail((max_edge, max_edge), _RESAMPLING_FILTER)
+            cv2 = _get_cv2()
             image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
     except Exception as exc:  # pragma: no cover - defensive guard
         raise ValueError("Unable to decode image for OCR processing") from exc
@@ -84,6 +112,7 @@ def _bytes_to_image(image_bytes: bytes) -> np.ndarray:
 
 
 def _deskew_image(image: np.ndarray) -> np.ndarray:
+    cv2 = _get_cv2()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.bitwise_not(gray)
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
@@ -106,6 +135,7 @@ def _deskew_image(image: np.ndarray) -> np.ndarray:
 
 
 def _preprocess_image(image: np.ndarray) -> np.ndarray:
+    cv2 = _get_cv2()
     aligned = _deskew_image(image)
     gray = cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))

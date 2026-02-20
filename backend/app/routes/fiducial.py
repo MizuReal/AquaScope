@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional, Tuple
 
-import cv2
 import numpy as np
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from PIL import Image, ImageOps
@@ -18,12 +17,22 @@ from io import BytesIO
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Lazy-load cv2 to speed up app startup
+_cv2 = None
+def _get_cv2():
+    global _cv2
+    if _cv2 is None:
+        import cv2
+        _cv2 = cv2
+    return _cv2
+
 
 def _detect_black_squares(image: np.ndarray) -> List[Tuple[float, float, float, float]]:
     """
     Detect solid black square markers using multiple strategies.
     Returns list of (center_x, center_y, width, height) for each detected square.
     """
+    cv2 = _get_cv2()
     height, width = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
@@ -206,6 +215,7 @@ async def validate_fiducials(file: UploadFile = File(...)) -> dict:
     payload = await file.read()
     
     try:
+        cv2 = _get_cv2()
         with Image.open(BytesIO(payload)) as pil_img:
             pil_img = ImageOps.exif_transpose(pil_img)
             pil_img = pil_img.convert("RGB")

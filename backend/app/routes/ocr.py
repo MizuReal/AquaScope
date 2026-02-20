@@ -6,7 +6,6 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
-import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -17,11 +16,6 @@ from app.services.ocr import EasyOCRService, get_ocr_service
 # Directory to save incoming captures for debugging
 CAPTURE_SAVE_DIR = Path(__file__).parent.parent.parent / "debug_output" / "captures"
 CAPTURE_SAVE_DIR.mkdir(parents=True, exist_ok=True)
-from app.ml.inference import (
-    WRITE_AREAS, 
-    _load_and_normalize,
-    _ROW_Y_POSITIONS, _LEFT_COL_X, _RIGHT_COL_X, _WRITE_WIDTH, _WRITE_HEIGHT,
-)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -81,6 +75,13 @@ async def debug_regions(file: UploadFile = File(...)) -> Response:
     payload = await file.read()
     
     try:
+        # Lazy import heavy modules only when this debug endpoint is called
+        import cv2
+        from app.ml.inference import (
+            WRITE_AREAS, _load_and_normalize,
+            _ROW_Y_POSITIONS, _LEFT_COL_X, _RIGHT_COL_X, _WRITE_WIDTH, _WRITE_HEIGHT,
+        )
+
         # Load and warp the image
         image, is_canonical = _load_and_normalize(payload)
         
@@ -112,7 +113,7 @@ async def debug_regions(file: UploadFile = File(...)) -> Response:
         cv2.putText(image, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
         
         # Add coordinate info
-        info = f"Grid starts at y={_GRID_TOP}, boxes={_BOX_HEIGHT}px, write areas inside"
+        info = f"Write areas: {len(WRITE_AREAS)} regions defined"
         cv2.putText(image, info, (20, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Convert to PNG

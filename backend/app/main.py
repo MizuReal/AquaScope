@@ -1,6 +1,10 @@
 from pathlib import Path
 import logging
 import os
+import sys
+
+# Print immediately so the deploy platform knows the process is alive
+print("Starting ML-AAW backend...", flush=True)
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
