@@ -1,9 +1,32 @@
 import logging
+import sys
+import types
 from functools import lru_cache
 from io import BytesIO
 from typing import Dict, Iterable, List, Optional, Sequence
 
 import cv2
+
+# ── python-bidi compatibility shim ──────────────────────────────
+# EasyOCR internally does `from bidi.algorithm import get_display`.
+# python-bidi >=0.6 moved get_display to `bidi` and removed
+# `bidi.algorithm`, so we patch it here before EasyOCR is imported.
+try:
+    from bidi.algorithm import get_display  # python-bidi <0.6
+except (ImportError, ModuleNotFoundError):
+    try:
+        from bidi import get_display  # python-bidi >=0.6
+        # Create a fake bidi.algorithm module so EasyOCR's import succeeds
+        _fake_mod = types.ModuleType("bidi.algorithm")
+        _fake_mod.get_display = get_display  # type: ignore[attr-defined]
+        sys.modules["bidi.algorithm"] = _fake_mod
+    except (ImportError, ModuleNotFoundError):
+        # bidi not installed at all – provide a no-op so OCR still works
+        _fake_mod = types.ModuleType("bidi.algorithm")
+        _fake_mod.get_display = lambda text, *a, **kw: text  # type: ignore[attr-defined]
+        sys.modules["bidi.algorithm"] = _fake_mod
+# ────────────────────────────────────────────────────────────────
+
 import easyocr
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps

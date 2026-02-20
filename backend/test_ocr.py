@@ -1,3 +1,20 @@
+import sys
+import types
+
+# python-bidi compatibility shim for EasyOCR
+try:
+    from bidi.algorithm import get_display
+except (ImportError, ModuleNotFoundError):
+    try:
+        from bidi import get_display
+        _fake = types.ModuleType("bidi.algorithm")
+        _fake.get_display = get_display
+        sys.modules["bidi.algorithm"] = _fake
+    except (ImportError, ModuleNotFoundError):
+        _fake = types.ModuleType("bidi.algorithm")
+        _fake.get_display = lambda text, *a, **kw: text
+        sys.modules["bidi.algorithm"] = _fake
+
 import cv2
 import numpy as np
 import easyocr
