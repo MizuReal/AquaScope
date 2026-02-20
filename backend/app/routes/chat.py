@@ -8,7 +8,12 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.groq_llm import chat_message, get_filtration_suggestion
+from app.services.groq_llm import (
+    chat_container_message,
+    chat_message,
+    get_container_cleaning_suggestion,
+    get_filtration_suggestion,
+)
 
 try:
     from groq import RateLimitError as GroqRateLimitError
@@ -77,6 +82,45 @@ def chat(body: ChatRequest) -> ChatResponse:
         logger.info("  reply length: %d chars", len(reply))
     except Exception as exc:
         logger.exception("Groq chat failed")
+        code = 502
+        detail = str(exc)
+        if GroqRateLimitError and isinstance(exc, GroqRateLimitError):
+            code = 429
+            detail = "AI rate limit reached. Please wait a moment and try again."
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return ChatResponse(reply=reply)
+
+
+@router.post("/container-suggestion", response_model=FiltrationResponse)
+def container_suggestion(body: FiltrationRequest) -> FiltrationResponse:
+    """One-shot cleaning recommendation grounded in container scan analysis."""
+    logger.info("=== /container-suggestion hit ===")
+    logger.info("  analysis keys: %s", list(body.analysis.keys()))
+    try:
+        text = get_container_cleaning_suggestion(body.analysis)
+        logger.info("  suggestion length: %d chars", len(text))
+    except Exception as exc:
+        logger.exception("Groq container suggestion failed")
+        code = 502
+        detail = str(exc)
+        if GroqRateLimitError and isinstance(exc, GroqRateLimitError):
+            code = 429
+            detail = "AI rate limit reached. Please wait a moment and try again."
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return FiltrationResponse(suggestion=text)
+
+
+@router.post("/container-message", response_model=ChatResponse)
+def chat_container(body: ChatRequest) -> ChatResponse:
+    """Multi-turn chat grounded in container scan analysis context."""
+    logger.info("=== /container-message hit ===")
+    logger.info("  message: %.80s  history_len: %d", body.message, len(body.history))
+    try:
+        history = [{"role": m.role, "text": m.text} for m in body.history]
+        reply = chat_container_message(body.analysis, history, body.message)
+        logger.info("  reply length: %d chars", len(reply))
+    except Exception as exc:
+        logger.exception("Groq container chat failed")
         code = 502
         detail = str(exc)
         if GroqRateLimitError and isinstance(exc, GroqRateLimitError):

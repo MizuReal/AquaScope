@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,18 @@ import {
   Image,
   Animated,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import PredictButton from '../components/PredictButton';
 import { useAppTheme } from '../utils/theme';
-import { analyzeContainer } from '../utils/api';
+import {
+  analyzeContainer,
+  chatContainerWithGemini,
+  getContainerCleaningSuggestion,
+} from '../utils/api';
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
@@ -94,6 +100,292 @@ const ConfidenceBar = ({ label, value, color, isDark }) => {
           }}
         />
       </View>
+    </View>
+  );
+};
+
+const formatAdvisorText = (text = '') => {
+  if (!text) return '';
+
+  return String(text)
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '• ')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+/* ── Container chatbot card ───────────────────────────────── */
+
+const ContainerChatCard = ({ result, isDark }) => {
+  const [suggestion, setSuggestion] = useState(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (!result) return;
+    let cancelled = false;
+    setSuggestion(null);
+    setSuggestionError('');
+    setSuggestionLoading(true);
+    setChatHistory([]);
+
+    getContainerCleaningSuggestion(result)
+      .then((response) => {
+        if (!cancelled) {
+          setSuggestion(response?.suggestion || 'No suggestion available.');
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSuggestionError(err?.message || 'Failed to get cleaning advice.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSuggestionLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [result]);
+
+  const handleSendChat = useCallback(async () => {
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatLoading || !result) return;
+
+    const nextHistory = [...chatHistory, { role: 'user', text: trimmed }];
+    setChatHistory(nextHistory);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const response = await chatContainerWithGemini(result, nextHistory, trimmed);
+      setChatHistory((prev) => [...prev, { role: 'assistant', text: response?.reply || 'No reply.' }]);
+    } catch (err) {
+      setChatHistory((prev) => [
+        ...prev,
+        { role: 'assistant', text: `Error: ${err?.message || 'Request failed'}` },
+      ]);
+    } finally {
+      setChatLoading(false);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd?.({ animated: true }), 100);
+    }
+  }, [chatHistory, chatInput, chatLoading, result]);
+
+  const sendEnabled = !chatLoading && chatInput.trim().length > 0;
+  const classLabel = CLASS_META[result?.predicted_class || 'Unknown']?.label || result?.predicted_class || 'Unknown';
+
+  return (
+    <View
+      className={`rounded-[24px] border p-5 ${
+        isDark ? 'border-sky-900/60 bg-slate-950/50' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <View className="mb-2 flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <MaterialCommunityIcons
+            name="robot-outline"
+            size={16}
+            color={isDark ? '#7dd3fc' : '#0284c7'}
+          />
+          <Text
+            className={`text-[11px] font-semibold uppercase tracking-widest ${
+              isDark ? 'text-sky-300' : 'text-sky-700'
+            }`}
+          >
+            Container advisor
+          </Text>
+        </View>
+        <View className={`rounded-full border px-2 py-0.5 ${isDark ? 'border-sky-800/60' : 'border-sky-200'}`}>
+          <Text className={`text-[9px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
+            AI
+          </Text>
+        </View>
+      </View>
+
+      <Text className={`mb-3 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+        Based on class: {classLabel}
+      </Text>
+
+      {suggestionLoading ? (
+        <View className="items-center py-3">
+          <ActivityIndicator size="small" color={isDark ? '#38bdf8' : '#0284c7'} />
+          <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            Generating cleaning guidance...
+          </Text>
+        </View>
+      ) : suggestionError ? (
+        <View>
+          <Text className={`text-[11px] ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+            {suggestionError}
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => {
+              setSuggestionError('');
+              setSuggestionLoading(true);
+              getContainerCleaningSuggestion(result)
+                .then((response) => setSuggestion(response?.suggestion || 'No suggestion available.'))
+                .catch((err) => setSuggestionError(err?.message || 'Failed to get cleaning advice.'))
+                .finally(() => setSuggestionLoading(false));
+            }}
+            className={`mt-2 self-start rounded-full border px-3 py-1.5 ${
+              isDark ? 'border-sky-700/50 bg-sky-900/30' : 'border-sky-300 bg-sky-50'
+            }`}
+          >
+            <Text className={`text-[11px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text className={`text-[12px] leading-[18px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          {formatAdvisorText(suggestion)}
+        </Text>
+      )}
+
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setChatOpen(true)}
+        className={`mt-4 rounded-2xl border px-4 py-3 ${
+          isDark ? 'border-slate-800/70 bg-slate-900/70' : 'border-slate-300 bg-slate-50'
+        }`}
+      >
+        <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+          Ask how to clean, disinfect, or when to discard this container...
+        </Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={chatOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setChatOpen(false)}
+      >
+        <View className={`flex-1 px-5 py-10 ${isDark ? 'bg-black/70' : 'bg-slate-900/45'}`}>
+          <View className="flex-1 justify-center">
+            <View
+              className={`max-h-[85%] rounded-[32px] border p-5 ${
+                isDark ? 'border-sky-900/80 bg-slate-950/95' : 'border-sky-200 bg-white'
+              }`}
+            >
+              <View className="flex-row items-center justify-between">
+                <View>
+                  <Text className={`text-[16px] font-semibold ${isDark ? 'text-sky-50' : 'text-sky-900'}`}>
+                    Container Copilot
+                  </Text>
+                  <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Cleaning & disposal assistant
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Close chat"
+                  activeOpacity={0.8}
+                  onPress={() => setChatOpen(false)}
+                  className={`h-10 w-10 items-center justify-center rounded-full border ${
+                    isDark ? 'border-slate-800/70' : 'border-slate-300'
+                  }`}
+                >
+                  <Text className={`text-[16px] font-semibold ${isDark ? 'text-sky-100' : 'text-sky-900'}`}>
+                    ✕
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                ref={chatScrollRef}
+                className="mt-4"
+                contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+                showsVerticalScrollIndicator={false}
+                style={{ maxHeight: 360 }}
+              >
+                {chatHistory.length === 0 && (
+                  <Text className={`py-3 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                    Ask for step-by-step cleaning and whether this container should be kept or replaced.
+                  </Text>
+                )}
+                {chatHistory.map((msg, index) => (
+                  <View
+                    key={index}
+                    className={
+                      msg.role === 'user'
+                        ? `self-end max-w-[85%] rounded-2xl border px-4 py-3 ${
+                            isDark ? 'border-sky-500/30 bg-sky-500/15' : 'border-sky-300 bg-sky-100'
+                          }`
+                        : `self-start max-w-[85%] rounded-2xl border px-4 py-3 ${
+                            isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-100'
+                          }`
+                    }
+                  >
+                    <Text className={`text-[13px] leading-[18px] ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
+                      {msg.role === 'assistant' ? formatAdvisorText(msg.text) : msg.text}
+                    </Text>
+                  </View>
+                ))}
+                {chatLoading && (
+                  <View className="self-start flex-row items-center gap-2 px-3 py-2">
+                    <ActivityIndicator size="small" color="#38bdf8" />
+                    <Text className="text-[10px] text-sky-400">Thinking...</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <View className="mt-4 flex-row items-center gap-3">
+                <TextInput
+                  className={`flex-1 rounded-2xl border px-4 py-3 ${
+                    isDark
+                      ? 'border-slate-800/70 bg-slate-900/80 text-sky-100'
+                      : 'border-slate-300 bg-white text-slate-900'
+                  }`}
+                  placeholder="Ask about cleaning steps..."
+                  placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
+                  value={chatInput}
+                  onChangeText={setChatInput}
+                  onSubmitEditing={handleSendChat}
+                  returnKeyType="send"
+                  editable={!chatLoading}
+                  multiline
+                  style={{ maxHeight: 80 }}
+                />
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={handleSendChat}
+                  className={
+                    sendEnabled
+                      ? `rounded-2xl border border-sky-400/60 px-4 py-3 ${
+                          isDark ? 'bg-sky-500/80' : 'bg-sky-500/90'
+                        }`
+                      : `rounded-2xl px-4 py-3 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`
+                  }
+                  disabled={!sendEnabled}
+                >
+                  <Text
+                    className={
+                      sendEnabled
+                        ? 'text-[13px] font-semibold text-slate-950'
+                        : `text-[13px] font-semibold ${isDark ? 'text-slate-600' : 'text-slate-500'}`
+                    }
+                  >
+                    Send
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -641,6 +933,8 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
                         ))}
                     </View>
                   )}
+
+                  <ContainerChatCard result={result} isDark={isDark} />
                 </View>
 
               ) : image && !result ? (

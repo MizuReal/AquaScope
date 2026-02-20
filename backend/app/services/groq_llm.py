@@ -38,6 +38,18 @@ FILTRATION_SYSTEM_PROMPT = (
     "Cite WHO guideline names where relevant."
 )
 
+CONTAINER_CLEANING_SYSTEM_PROMPT = (
+    "You are a senior water-sanitation operations advisor for container hygiene. "
+    "The user provides a container scan result with one of these classes: "
+    "Clean, LightMoss, MediumMoss, HeavyMoss, or an invalid/unrecognized result. "
+    "Your job:\n"
+    "1. Explain what the class implies in practical risk terms.\n"
+    "2. Give clear step-by-step cleaning guidance tailored to that class.\n"
+    "3. State when to keep using, deep-clean, or discard/replace the container.\n"
+    "4. Include low-cost household options and a brief safety reminder.\n"
+    "Keep responses concise (<=180 words), practical, and in bullet points."
+)
+
 
 _client_instance: Optional[Groq] = None
 
@@ -117,6 +129,40 @@ def _build_water_context(analysis: Dict) -> str:
     return "\n".join(lines)
 
 
+def _build_container_context(analysis: Dict) -> str:
+    """Turn container-classification output into compact grounding context."""
+    lines: list[str] = []
+
+    predicted_class = analysis.get("predicted_class") or analysis.get("predictedClass") or "Unknown"
+    is_valid = analysis.get("is_valid")
+    confidence = analysis.get("confidence")
+    entropy = analysis.get("entropy")
+    margin = analysis.get("margin")
+    rejection_reason = analysis.get("rejection_reason") or analysis.get("rejectionReason")
+
+    lines.append(f"Predicted class: {predicted_class}")
+    if isinstance(is_valid, bool):
+        lines.append(f"Valid classification: {is_valid}")
+    if isinstance(confidence, (int, float)):
+        lines.append(f"Top-class confidence: {confidence:.3f}")
+    if isinstance(entropy, (int, float)):
+        lines.append(f"Entropy: {entropy:.3f}")
+    if isinstance(margin, (int, float)):
+        lines.append(f"Class margin: {margin:.3f}")
+    if rejection_reason:
+        lines.append(f"Rejection reason: {rejection_reason}")
+
+    probabilities = analysis.get("probabilities") or {}
+    if isinstance(probabilities, dict) and probabilities:
+        lines.append("Class probabilities:")
+        for label in ("Clean", "LightMoss", "MediumMoss", "HeavyMoss"):
+            value = probabilities.get(label)
+            if isinstance(value, (int, float)):
+                lines.append(f"  • {label}: {value:.3f}")
+
+    return "\n".join(lines)
+
+
 def get_filtration_suggestion(analysis: Dict) -> str:
     """One-shot: build context from the analysis and ask Groq for a filtration recommendation."""
     client = _get_client()
@@ -165,5 +211,64 @@ def chat_message(
         messages=messages,
         temperature=0.5,
         max_tokens=512,
+    )
+    return response.choices[0].message.content or ""
+
+
+def get_container_cleaning_suggestion(analysis: Dict) -> str:
+    """One-shot: recommend container cleaning/discard action from scan result."""
+    client = _get_client()
+    context = _build_container_context(analysis)
+
+    response = _call_with_retry(
+        client.chat.completions.create,
+        model=_MODEL,
+        messages=[
+            {"role": "system", "content": CONTAINER_CLEANING_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Here is the container scan analysis:\n\n"
+                    f"{context}\n\n"
+                    "Provide cleaning and keep/discard guidance."
+                ),
+            },
+        ],
+        temperature=0.4,
+        max_tokens=420,
+    )
+    return response.choices[0].message.content or ""
+
+
+def chat_container_message(
+    analysis: Dict,
+    history: List[Dict[str, str]],
+    user_message: str,
+) -> str:
+    """Continue multi-turn chat grounded in container classification context."""
+    client = _get_client()
+    context = _build_container_context(analysis)
+
+    messages: list[dict] = [
+        {"role": "system", "content": CONTAINER_CLEANING_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Container analysis context:\n\n{context}"},
+        {
+            "role": "assistant",
+            "content": "Understood. I have the container classification context. How can I help?",
+        },
+    ]
+
+    for msg in history:
+        role = "user" if msg.get("role") == "user" else "assistant"
+        messages.append({"role": role, "content": msg.get("text", "")})
+
+    messages.append({"role": "user", "content": user_message})
+
+    response = _call_with_retry(
+        client.chat.completions.create,
+        model=_MODEL,
+        messages=messages,
+        temperature=0.5,
+        max_tokens=420,
     )
     return response.choices[0].message.content or ""

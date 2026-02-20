@@ -1,5 +1,78 @@
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
+const CONTAINER_CLASS_RISK_MAP = {
+  Clean: { level: 'low', score: 1, status: 'ok' },
+  LightMoss: { level: 'medium', score: 5, status: 'warning' },
+  MediumMoss: { level: 'high', score: 9, status: 'critical' },
+  HeavyMoss: { level: 'high', score: 12, status: 'critical' },
+};
+
+const CONTAINER_CLASS_DISPLAY = {
+  Clean: 'Clean',
+  LightMoss: 'Light moss',
+  MediumMoss: 'Medium moss',
+  HeavyMoss: 'Heavy moss',
+};
+
+function resolveTopContainerClass(analysis = {}) {
+  const probs = analysis?.probabilities;
+  if (probs && typeof probs === 'object') {
+    const candidates = ['Clean', 'LightMoss', 'MediumMoss', 'HeavyMoss'];
+    let bestClass = null;
+    let bestScore = -1;
+
+    for (const cls of candidates) {
+      const raw = Number(probs[cls]);
+      if (Number.isFinite(raw) && raw > bestScore) {
+        bestClass = cls;
+        bestScore = raw;
+      }
+    }
+
+    if (bestClass) {
+      return bestClass;
+    }
+  }
+
+  const reported = analysis?.predicted_class || analysis?.predictedClass;
+  if (reported && reported !== 'Unknown') {
+    return reported;
+  }
+
+  return 'Unknown';
+}
+
+function buildContainerContextPrompt(topClass) {
+  const label = CONTAINER_CLASS_DISPLAY[topClass] || topClass || 'Unknown';
+  return `How to clean a container with classification \"${label}\".`;
+}
+
+function buildLegacyWaterCompatibleContainerAnalysis(analysis = {}) {
+  const cls = resolveTopContainerClass(analysis);
+  const mapped = CONTAINER_CLASS_RISK_MAP[cls] || { level: 'medium', score: 7, status: 'warning' };
+  const classificationPrompt = buildContainerContextPrompt(cls);
+
+  return {
+    ...analysis,
+    predicted_class: cls,
+    predictedClass: cls,
+    classificationPrompt,
+    microbialRiskLevel: mapped.level,
+    microbialScore: mapped.score,
+    microbialMaxScore: 14,
+    checks: [
+      {
+        field: 'container_classification',
+        label: 'Container classification',
+        status: mapped.status,
+        value: null,
+        detail: `Detected class: ${cls}. ${classificationPrompt}`,
+      },
+    ],
+    isPotable: false,
+  };
+}
+
 export async function uploadDataCardForOCR(asset) {
   if (!asset) {
     throw new Error('No image asset supplied for OCR');
@@ -156,6 +229,83 @@ export async function chatWithGemini(analysis, history, message) {
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload?.detail || 'Chat request failed.');
+  }
+  return response.json();
+}
+
+/**
+ * One-shot: get container cleaning/discard guidance from container analysis.
+ */
+export async function getContainerCleaningSuggestion(analysis) {
+  const legacyAnalysis = buildLegacyWaterCompatibleContainerAnalysis(analysis);
+  const topClass = resolveTopContainerClass(analysis);
+  const topClassPrompt = buildContainerContextPrompt(topClass);
+  const containerAnalysis = {
+    ...analysis,
+    predicted_class: topClass,
+    predictedClass: topClass,
+    classificationPrompt: topClassPrompt,
+  };
+
+  let response = await fetch(`${API_BASE_URL}/chat/container-suggestion`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ analysis: containerAnalysis }),
+  });
+
+  // Backward compatibility: older backends may not expose container-specific routes yet.
+  // Fallback to the existing water suggestion endpoint used by WaterResultScreen.
+  if (response.status === 404) {
+    response = await fetch(`${API_BASE_URL}/chat/filtration-suggestion`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysis: legacyAnalysis }),
+    });
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      throw new Error('AI rate limit reached — please wait a moment and retry.');
+    }
+    throw new Error(payload?.detail || 'Container cleaning suggestion failed.');
+  }
+  return response.json();
+}
+
+/**
+ * Multi-turn container hygiene chat grounded in classification context.
+ */
+export async function chatContainerWithGemini(analysis, history, message) {
+  const legacyAnalysis = buildLegacyWaterCompatibleContainerAnalysis(analysis);
+  const topClass = resolveTopContainerClass(analysis);
+  const topClassPrompt = buildContainerContextPrompt(topClass);
+  const containerAnalysis = {
+    ...analysis,
+    predicted_class: topClass,
+    predictedClass: topClass,
+    classificationPrompt: topClassPrompt,
+  };
+  const contextualMessage = `${topClassPrompt} User question: ${message}`;
+
+  let response = await fetch(`${API_BASE_URL}/chat/container-message`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ analysis: containerAnalysis, history, message: contextualMessage }),
+  });
+
+  // Backward compatibility with existing backend chat route.
+  if (response.status === 404) {
+    response = await fetch(`${API_BASE_URL}/chat/message`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysis: legacyAnalysis, history, message: contextualMessage }),
+    });
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.detail || 'Container chat request failed.');
   }
   return response.json();
 }
