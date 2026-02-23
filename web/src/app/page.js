@@ -111,6 +111,15 @@ const carouselSlides = [
     accent: "sky",
   },
   {
+    type: "video",
+    src: "https://joznhyhghdcchussmzyt.supabase.co/storage/v1/object/public/Video/Water%20Check.mp4",
+    alt: "Mobile phone performing real-time water analysis",
+    title: "Use Mobile for Real-Time Analysis",
+    description:
+      "Capture water sample data directly from your phone and get instant AI-powered analysis in the field, including OCR extraction, potability prediction, and microbial risk insights.",
+    accent: "sky",
+  },
+  {
     type: "image",
     src: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1400&q=80",
     alt: "Person scanning a paper form and digitizing it",
