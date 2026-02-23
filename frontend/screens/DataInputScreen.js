@@ -1135,7 +1135,7 @@ const DataInputScreen = ({ onNavigate }) => {
       >
         <ScrollView
           className="px-5 pt-10"
-          contentContainerClassName="pb-20 gap-6"
+          contentContainerClassName="pb-28 gap-6"
           showsVerticalScrollIndicator={false}
         >
           <Animated.View

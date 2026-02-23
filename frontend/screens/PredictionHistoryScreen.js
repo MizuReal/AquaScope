@@ -918,7 +918,7 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
 
       <ScrollView
         className="px-5"
-        contentContainerClassName="pb-10 pt-1"
+        contentContainerClassName="pb-28 pt-1"
         showsVerticalScrollIndicator={false}
         onMomentumScrollEnd={handleScrollNearEnd}
         scrollEventThrottle={16}

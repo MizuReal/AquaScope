@@ -327,7 +327,7 @@ const ProfileScreen = ({ onNavigate }) => {
 
       <ScrollView
         className="px-5"
-        contentContainerClassName="pb-10 gap-4"
+        contentContainerClassName="pb-28 gap-4"
         showsVerticalScrollIndicator={false}
       >
         {/* Update account */}

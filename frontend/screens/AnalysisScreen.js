@@ -271,6 +271,7 @@ const AnalysisScreen = ({ onNavigate }) => {
         },
       ],
     };
+    const volumeChartWidth = Math.max(CHART_WIDTH, dayBuckets.length * 68);
 
     const statusCounts = { Cleared: 0, Review: 0, Alert: 0 };
     samples.forEach((row) => {
@@ -377,6 +378,7 @@ const AnalysisScreen = ({ onNavigate }) => {
       trendChartWidth,
       recentCount: recent.length,
       volumeByDay,
+      volumeChartWidth,
       statusDistribution,
       parameterCards,
       microbialCounts,
@@ -429,7 +431,7 @@ const AnalysisScreen = ({ onNavigate }) => {
 
       <ScrollView
         className="px-5"
-        contentContainerClassName="pb-10 gap-4"
+        contentContainerClassName="pb-28 gap-4"
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
@@ -446,61 +448,85 @@ const AnalysisScreen = ({ onNavigate }) => {
               </View>
             )}
 
-            <View className={`mt-1 rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-slate-950/75' : 'border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-medium uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Overview KPIs
-              </Text>
-              <View className="mt-3 flex-row gap-3">
-                <View className={`flex-1 rounded-2xl border p-3 ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
-                  <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Saved samples</Text>
-                  <Text className={`mt-1 text-[20px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-800'}`}>{analytics.total}</Text>
-                </View>
-                <View className={`flex-1 rounded-2xl border p-3 ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
-                  <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Potable rate</Text>
-                  <Text className={`mt-1 text-[20px] font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-                    {formatPercent(analytics.total ? analytics.potableCount / analytics.total : 0)}
-                  </Text>
-                </View>
+            <View className={`mt-1 rounded-2xl border overflow-hidden ${isDark ? 'border-sky-900/70 bg-slate-950/75' : 'border-slate-200 bg-white'}`}>
+              <View className={`px-4 py-3 border-b ${isDark ? 'border-sky-900/50 bg-slate-900/60' : 'border-slate-100 bg-slate-50'}`}>
+                <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                  Overview
+                </Text>
+                <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Summary of your saved water samples</Text>
               </View>
-              <View className="mt-3 flex-row gap-3">
-                <View className={`flex-1 rounded-2xl border p-3 ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
-                  <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Watch + unsafe</Text>
-                  <Text className={`mt-1 text-[20px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{analytics.watchOrUnsafe}</Text>
+              <View className="p-4 gap-3">
+                <View className="flex-row gap-3">
+                  <View className={`flex-1 rounded-2xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
+                    <View className="h-1 bg-sky-400" />
+                    <View className="p-3">
+                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Saved samples</Text>
+                      <Text className={`mt-1 text-[24px] font-bold ${isDark ? 'text-sky-50' : 'text-slate-800'}`}>{analytics.total}</Text>
+                    </View>
+                  </View>
+                  <View className={`flex-1 rounded-2xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
+                    <View className="h-1 bg-emerald-400" />
+                    <View className="p-3">
+                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Potable rate</Text>
+                      <Text className={`mt-1 text-[24px] font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
+                        {formatPercent(analytics.total ? analytics.potableCount / analytics.total : 0)}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <View className={`flex-1 rounded-2xl border p-3 ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
-                  <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg confidence</Text>
-                  <Text className={`mt-1 text-[20px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                    {formatPercent(analytics.avgProbability || 0)}
-                  </Text>
+                <View className="flex-row gap-3">
+                  <View className={`flex-1 rounded-2xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
+                    <View className="h-1 bg-amber-400" />
+                    <View className="p-3">
+                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Watch + unsafe</Text>
+                      <Text className={`mt-1 text-[24px] font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{analytics.watchOrUnsafe}</Text>
+                    </View>
+                  </View>
+                  <View className={`flex-1 rounded-2xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
+                    <View className="h-1 bg-sky-300" />
+                    <View className="p-3">
+                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg confidence</Text>
+                      <Text className={`mt-1 text-[24px] font-bold ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                        {formatPercent(analytics.avgProbability || 0)}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-sky-950/40' : 'border-sky-100 bg-sky-50'}`}>
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                  Confidence trend
-                </Text>
-                <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-sky-900/60' : 'bg-sky-100'}`}>
-                  <Text className={`text-[10px] font-medium ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-sky-900/70 bg-sky-950/40' : 'border-sky-100 bg-sky-50'}`}>
+              <View className={`px-4 py-3 border-b flex-row items-center justify-between ${isDark ? 'border-sky-900/50 bg-sky-950/60' : 'border-sky-100 bg-sky-100/60'}`}>
+                <View>
+                  <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                    Confidence trend
+                  </Text>
+                  <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-sky-700/60'}`}>
+                    Higher = more certain prediction
+                  </Text>
+                </View>
+                <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-sky-900/60' : 'bg-sky-200/80'}`}>
+                  <Text className={`text-[10px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
                     {analytics.recentCount} sample{analytics.recentCount !== 1 ? 's' : ''}
                   </Text>
                 </View>
               </View>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                How confident the model is in each prediction. Higher is better — values above 0.7 indicate strong certainty.
-              </Text>
-              {analytics.recentCount > 1 && (
-                <Text className={`mt-0.5 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  ← Swipe chart to see full history
+              <View className="px-4 pt-3 pb-1">
+                <Text className={`text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  How confident the model is in each prediction. Values above 0.7 indicate strong certainty.
                 </Text>
-              )}
+                {analytics.recentCount > 1 && (
+                  <Text className={`mt-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    ← Swipe to see full history
+                  </Text>
+                )}
+              </View>
               {hasChartData ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 8 }}
-                  style={{ marginTop: 12 }}
+                  contentContainerStyle={{ paddingRight: 8, paddingLeft: 4 }}
+                  style={{ marginTop: 8, marginBottom: 12 }}
                 >
                   <LineChart
                     data={analytics.confidenceTrend}
@@ -513,113 +539,147 @@ const AnalysisScreen = ({ onNavigate }) => {
                   />
                 </ScrollView>
               ) : (
-                <View className={`mt-3 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white'}`}>
+                <View className={`mx-4 mb-4 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-sky-200 bg-white'}`}>
                   <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Submit samples to see your confidence trend.</Text>
                 </View>
               )}
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-slate-950/70' : 'border-slate-300 bg-white'}`}>
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                  Daily sample volume
-                </Text>
-                <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-emerald-900/50' : 'bg-emerald-100'}`}>
-                  <Text className={`text-[10px] font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>7 days</Text>
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-emerald-900/50 bg-slate-950/70' : 'border-emerald-100 bg-white'}`}>
+              <View className={`px-4 py-3 border-b flex-row items-center justify-between ${isDark ? 'border-emerald-900/40 bg-emerald-950/30' : 'border-emerald-100 bg-emerald-50'}`}>
+                <View>
+                  <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                    Daily sample volume
+                  </Text>
+                  <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-emerald-700/50'}`}>
+                    How many samples per day
+                  </Text>
+                </View>
+                <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-emerald-900/60' : 'bg-emerald-200/70'}`}>
+                  <Text className={`text-[10px] font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>7 days</Text>
                 </View>
               </View>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Number of water samples you submitted each day. Consistent sampling leads to more reliable insights.
-              </Text>
+              <View className="px-4 pt-3 pb-1">
+                <Text className={`text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Consistent daily sampling leads to more reliable insights over time.
+                </Text>
+                <Text className={`mt-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  ← Swipe to scroll
+                </Text>
+              </View>
               {hasChartData ? (
-                <BarChart
-                  data={analytics.volumeByDay}
-                  width={CHART_WIDTH}
-                  height={CHART_HEIGHT}
-                  fromZero
-                  yAxisLabel=""
-                  yAxisSuffix=""
-                  showValuesOnTopOfBars
-                  chartConfig={{
-                    ...chartConfig,
-                    color: (opacity = 1) => `rgba(52, 211, 153, ${opacity})`,
-                  }}
-                  style={{ marginTop: 12, borderRadius: 16 }}
-                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingRight: 8, paddingLeft: 4 }}
+                  style={{ marginTop: 8, marginBottom: 12 }}
+                >
+                  <BarChart
+                    data={analytics.volumeByDay}
+                    width={analytics.volumeChartWidth}
+                    height={CHART_HEIGHT}
+                    fromZero
+                    yAxisLabel=""
+                    yAxisSuffix=""
+                    showValuesOnTopOfBars
+                    chartConfig={{
+                      ...chartConfig,
+                      color: (opacity = 1) => `rgba(52, 211, 153, ${opacity})`,
+                    }}
+                    style={{ borderRadius: 16 }}
+                  />
+                </ScrollView>
               ) : (
-                <View className={`mt-3 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+                <View className={`mx-4 mb-4 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-emerald-100 bg-emerald-50'}`}>
                   <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No samples this week yet.</Text>
                 </View>
               )}
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-aquadark/80' : 'border-slate-300 bg-white'}`}>
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                  Outcome mix
-                </Text>
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-sky-900/70 bg-aquadark/80' : 'border-slate-200 bg-white'}`}>
+              <View className={`px-4 py-3 border-b flex-row items-center justify-between ${isDark ? 'border-sky-900/50 bg-slate-900/60' : 'border-slate-100 bg-slate-50'}`}>
+                <View>
+                  <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                    Outcome mix
+                  </Text>
+                  <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Safety status of all samples
+                  </Text>
+                </View>
                 {riskDistTotal > 0 && (
-                  <Text className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{riskDistTotal} total</Text>
+                  <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
+                    <Text className={`text-[10px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{riskDistTotal} total</Text>
+                  </View>
                 )}
               </View>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Breakdown of your samples by safety status — green is cleared, yellow needs review, red is an alert.
-              </Text>
-              {riskDistTotal > 0 ? (
-                <>
-                  <PieChart
-                    data={analytics.statusDistribution}
-                    width={CHART_WIDTH}
-                    height={210}
-                    chartConfig={chartConfig}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    paddingLeft="10"
-                    absolute
-                  />
-                  <View className="mt-1 flex-row gap-2 flex-wrap">
-                    {analytics.statusDistribution.map((item) => (
-                      <View key={item.name} className="flex-row items-center gap-1">
-                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: item.color }} />
-                        <Text className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {item.name}: {Math.round((item.population / riskDistTotal) * 100)}%
-                        </Text>
-                      </View>
-                    ))}
+              <View className="p-4">
+                <Text className={`text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Green = cleared, yellow = needs review, red = alert.
+                </Text>
+                {riskDistTotal > 0 ? (
+                  <>
+                    <PieChart
+                      data={analytics.statusDistribution}
+                      width={CHART_WIDTH}
+                      height={210}
+                      chartConfig={chartConfig}
+                      accessor="population"
+                      backgroundColor="transparent"
+                      paddingLeft="10"
+                      absolute
+                    />
+                    <View className={`mt-2 rounded-xl border p-3 flex-row justify-around ${isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-100 bg-slate-50'}`}>
+                      {analytics.statusDistribution.map((item) => (
+                        <View key={item.name} className="items-center gap-1">
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color }} />
+                          <Text className={`text-[12px] font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                            {Math.round((item.population / riskDistTotal) * 100)}%
+                          </Text>
+                          <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{item.name}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <View className={`mt-3 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+                    <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No outcome data yet.</Text>
                   </View>
-                </>
-              ) : (
-                <View className={`mt-3 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
-                  <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No outcome data yet.</Text>
-                </View>
-              )}
+                )}
+              </View>
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-rose-900/50 bg-slate-950/70' : 'border-rose-200 bg-rose-50/40'}`}>
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>
-                  Risk trajectory
-                </Text>
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-rose-900/50 bg-slate-950/70' : 'border-rose-100 bg-rose-50/40'}`}>
+              <View className={`px-4 py-3 border-b flex-row items-center justify-between ${isDark ? 'border-rose-900/40 bg-rose-950/30' : 'border-rose-100 bg-rose-50'}`}>
+                <View>
+                  <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>
+                    Risk trajectory
+                  </Text>
+                  <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-rose-700/50'}`}>
+                    Lower score = safer water
+                  </Text>
+                </View>
                 <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-rose-900/50' : 'bg-rose-100'}`}>
-                  <Text className={`text-[10px] font-medium ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
+                  <Text className={`text-[10px] font-semibold ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>
                     {analytics.recentCount} sample{analytics.recentCount !== 1 ? 's' : ''}
                   </Text>
                 </View>
               </View>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Risk score over your samples. Lower is safer — aim to keep this trend flat or declining.
-              </Text>
-              {analytics.recentCount > 1 && (
-                <Text className={`mt-0.5 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  ← Swipe chart to see full history
+              <View className="px-4 pt-3 pb-1">
+                <Text className={`text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  Risk score mapped from safe (0.15) to unsafe (0.88). Aim to keep this trend flat or declining.
                 </Text>
-              )}
+                {analytics.recentCount > 1 && (
+                  <Text className={`mt-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                    ← Swipe to see full history
+                  </Text>
+                )}
+              </View>
               {hasChartData ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingRight: 8 }}
-                  style={{ marginTop: 12 }}
+                  contentContainerStyle={{ paddingRight: 8, paddingLeft: 4 }}
+                  style={{ marginTop: 8, marginBottom: 12 }}
                 >
                   <LineChart
                     data={analytics.riskTrend}
@@ -636,20 +696,22 @@ const AnalysisScreen = ({ onNavigate }) => {
                   />
                 </ScrollView>
               ) : (
-                <View className={`mt-3 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-slate-200 bg-white'}`}>
+                <View className={`mx-4 mb-4 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-rose-100 bg-white'}`}>
                   <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No risk trend data yet.</Text>
                 </View>
               )}
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/80 bg-sky-950/40' : 'border-sky-100 bg-sky-50'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Water quality parameters
-              </Text>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Average values across all your samples, with a plain-language quality reading.
-              </Text>
-              <View className="mt-3 gap-3">
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-sky-900/80 bg-sky-950/40' : 'border-sky-100 bg-sky-50'}`}>
+              <View className={`px-4 py-3 border-b ${isDark ? 'border-sky-900/50 bg-sky-950/60' : 'border-sky-100 bg-sky-100/60'}`}>
+                <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                  Water quality parameters
+                </Text>
+                <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-sky-700/60'}`}>
+                  Averages across all your samples
+                </Text>
+              </View>
+              <View className="p-4 gap-3">
                 {analytics.parameterCards.map((param) => {
                   const statusColor = {
                     ph: param.descriptor === 'Balanced' ? 'emerald' : 'amber',
@@ -657,39 +719,48 @@ const AnalysisScreen = ({ onNavigate }) => {
                     conductivity: param.descriptor === 'Low mineral load' ? 'emerald' : param.descriptor === 'Moderate mineral load' ? 'amber' : 'rose',
                     hardness: param.descriptor === 'Soft' || param.descriptor === 'Moderate' ? 'emerald' : param.descriptor === 'Hard' ? 'amber' : 'rose',
                   }[param.key] || 'slate';
+                  const accentBar = statusColor === 'emerald' ? 'bg-emerald-400' : statusColor === 'amber' ? 'bg-amber-400' : statusColor === 'rose' ? 'bg-rose-400' : 'bg-slate-400';
                   return (
-                    <View key={param.key} className={`rounded-xl border p-3 ${isDark ? 'border-slate-800/70 bg-slate-900/75' : 'border-slate-200 bg-white'}`}>
-                      <View className="flex-row items-center justify-between">
-                        <Text className={`text-[13px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>{param.label}</Text>
-                        <View className={`rounded-full px-2 py-0.5 ${
-                          statusColor === 'emerald'
-                            ? isDark ? 'bg-emerald-900/50' : 'bg-emerald-100'
-                            : statusColor === 'amber'
-                            ? isDark ? 'bg-amber-900/50' : 'bg-amber-100'
-                            : statusColor === 'rose'
-                            ? isDark ? 'bg-rose-900/50' : 'bg-rose-100'
-                            : isDark ? 'bg-slate-800' : 'bg-slate-100'
-                        }`}>
-                          <Text className={`text-[10px] font-medium ${
+                    <View key={param.key} className={`rounded-xl border overflow-hidden ${isDark ? 'border-slate-800/70 bg-slate-900/75' : 'border-slate-200 bg-white'}`}>
+                      <View className={`h-1 ${accentBar}`} />
+                      <View className="p-3">
+                        <View className="flex-row items-center justify-between">
+                          <Text className={`text-[13px] font-bold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>{param.label}</Text>
+                          <View className={`rounded-full px-2 py-0.5 ${
                             statusColor === 'emerald'
-                              ? isDark ? 'text-emerald-300' : 'text-emerald-700'
+                              ? isDark ? 'bg-emerald-900/50' : 'bg-emerald-100'
                               : statusColor === 'amber'
-                              ? isDark ? 'text-amber-300' : 'text-amber-700'
+                              ? isDark ? 'bg-amber-900/50' : 'bg-amber-100'
                               : statusColor === 'rose'
-                              ? isDark ? 'text-rose-300' : 'text-rose-700'
-                              : isDark ? 'text-slate-300' : 'text-slate-600'
-                          }`}>{param.descriptor}</Text>
+                              ? isDark ? 'bg-rose-900/50' : 'bg-rose-100'
+                              : isDark ? 'bg-slate-800' : 'bg-slate-100'
+                          }`}>
+                            <Text className={`text-[10px] font-semibold ${
+                              statusColor === 'emerald'
+                                ? isDark ? 'text-emerald-300' : 'text-emerald-700'
+                                : statusColor === 'amber'
+                                ? isDark ? 'text-amber-300' : 'text-amber-700'
+                                : statusColor === 'rose'
+                                ? isDark ? 'text-rose-300' : 'text-rose-700'
+                                : isDark ? 'text-slate-300' : 'text-slate-600'
+                            }`}>{param.descriptor}</Text>
+                          </View>
                         </View>
-                      </View>
-                      <View className="mt-2 flex-row justify-between">
-                        <Text className={`text-[12px] font-medium ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                          Avg: <Text className={`font-semibold ${isDark ? 'text-sky-200' : 'text-sky-700'}`}>
-                            {Number.isFinite(param.avg) ? param.avg.toFixed(2) : '--'}
-                          </Text>
-                        </Text>
-                        <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Median: {Number.isFinite(param.median) ? param.median.toFixed(2) : '--'}
-                        </Text>
+                        <View className={`mt-2 flex-row justify-between pt-2 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
+                          <View className="items-center">
+                            <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Average</Text>
+                            <Text className={`mt-0.5 text-[15px] font-bold ${isDark ? 'text-sky-200' : 'text-sky-700'}`}>
+                              {Number.isFinite(param.avg) ? param.avg.toFixed(2) : '--'}
+                            </Text>
+                          </View>
+                          <View className={`w-px ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+                          <View className="items-center">
+                            <Text className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Median</Text>
+                            <Text className={`mt-0.5 text-[15px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                              {Number.isFinite(param.median) ? param.median.toFixed(2) : '--'}
+                            </Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
                   );
@@ -697,28 +768,39 @@ const AnalysisScreen = ({ onNavigate }) => {
               </View>
             </View>
 
-            <View className={`rounded-2xl border p-4 ${isDark ? 'border-sky-900/70 bg-slate-950/75' : 'border-slate-300 bg-white'}`}>
-              <Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                Microbial risk
-              </Text>
-              <Text className={`mt-1 text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Bacterial contamination risk across your samples. High count warrants immediate attention.
-              </Text>
-              <View className="mt-3 flex-row gap-3">
-                <View className={`flex-1 rounded-xl border p-3 ${isDark ? 'border-emerald-900/50 bg-emerald-950/30' : 'border-emerald-200 bg-emerald-50'}`}>
-                  <Text className={`text-[10px] uppercase font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Low risk</Text>
-                  <Text className={`mt-1 text-[22px] font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{analytics.microbialCounts.low}</Text>
-                  <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+            <View className={`rounded-2xl border overflow-hidden ${isDark ? 'border-sky-900/70 bg-slate-950/75' : 'border-slate-200 bg-white'}`}>
+              <View className={`px-4 py-3 border-b ${isDark ? 'border-sky-900/50 bg-slate-900/60' : 'border-slate-100 bg-slate-50'}`}>
+                <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                  Microbial risk
+                </Text>
+                <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Bacterial contamination level — high counts need immediate attention
+                </Text>
+              </View>
+              <View className="p-4 flex-row gap-3">
+                <View className={`flex-1 rounded-xl border overflow-hidden ${isDark ? 'border-emerald-900/50 bg-emerald-950/30' : 'border-emerald-200 bg-emerald-50'}`}>
+                  <View className="h-1 bg-emerald-400" />
+                  <View className="p-3 items-center">
+                    <Text className={`text-[10px] uppercase font-bold tracking-wide ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>Low</Text>
+                    <Text className={`mt-1 text-[26px] font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{analytics.microbialCounts.low}</Text>
+                    <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+                  </View>
                 </View>
-                <View className={`flex-1 rounded-xl border p-3 ${isDark ? 'border-amber-900/50 bg-amber-950/30' : 'border-amber-200 bg-amber-50'}`}>
-                  <Text className={`text-[10px] uppercase font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Med risk</Text>
-                  <Text className={`mt-1 text-[22px] font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{analytics.microbialCounts.medium}</Text>
-                  <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+                <View className={`flex-1 rounded-xl border overflow-hidden ${isDark ? 'border-amber-900/50 bg-amber-950/30' : 'border-amber-200 bg-amber-50'}`}>
+                  <View className="h-1 bg-amber-400" />
+                  <View className="p-3 items-center">
+                    <Text className={`text-[10px] uppercase font-bold tracking-wide ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>Medium</Text>
+                    <Text className={`mt-1 text-[26px] font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>{analytics.microbialCounts.medium}</Text>
+                    <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+                  </View>
                 </View>
-                <View className={`flex-1 rounded-xl border p-3 ${isDark ? 'border-rose-900/50 bg-rose-950/30' : 'border-rose-200 bg-rose-50'}`}>
-                  <Text className={`text-[10px] uppercase font-medium ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>High risk</Text>
-                  <Text className={`mt-1 text-[22px] font-bold ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>{analytics.microbialCounts.high}</Text>
-                  <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+                <View className={`flex-1 rounded-xl border overflow-hidden ${isDark ? 'border-rose-900/50 bg-rose-950/30' : 'border-rose-200 bg-rose-50'}`}>
+                  <View className="h-1 bg-rose-500" />
+                  <View className="p-3 items-center">
+                    <Text className={`text-[10px] uppercase font-bold tracking-wide ${isDark ? 'text-rose-400' : 'text-rose-700'}`}>High</Text>
+                    <Text className={`mt-1 text-[26px] font-bold ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>{analytics.microbialCounts.high}</Text>
+                    <Text className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>samples</Text>
+                  </View>
                 </View>
               </View>
             </View>

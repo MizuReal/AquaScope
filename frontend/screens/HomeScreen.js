@@ -540,7 +540,7 @@ const HomeScreen = ({ onNavigate }) => {
 		<View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}>
 			<ScrollView
 				className="px-5 pt-10"
-				contentContainerClassName="pb-36 gap-6"
+				contentContainerClassName="pb-28 gap-6"
 				showsVerticalScrollIndicator={false}
 			>
 				<Animated.View
@@ -638,6 +638,17 @@ const HomeScreen = ({ onNavigate }) => {
 						</TouchableOpacity>
 					</View>
 
+					<TouchableOpacity
+						activeOpacity={0.88}
+						className="mt-3 items-center rounded-2xl border border-cyan-400/60 bg-cyan-400/20 px-4 py-3"
+						onPress={() => setChatOpen(true)}
+					>
+						<View className="flex-row items-center gap-2">
+							<MaterialCommunityIcons name="robot-happy-outline" size={16} color={isDark ? '#22d3ee' : '#0891b2'} />
+							<Text className={`text-[13px] font-semibold ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>Ask Copilot</Text>
+						</View>
+					</TouchableOpacity>
+
 					<View className="mt-5 flex-row items-center gap-3">
 						<View className={`flex-1 rounded-2xl border border-emerald-500/40 px-4 py-3 ${isDark ? 'bg-slate-950/60' : 'bg-emerald-50'}`}>
 							<View className="flex-row items-center gap-1.5">
@@ -729,106 +740,6 @@ const HomeScreen = ({ onNavigate }) => {
 				</Animated.View>
 
 			</ScrollView>
-
-			{/* Fixed bottom action bar */}
-			<View
-				style={{
-					position: 'absolute',
-					bottom: 20,
-					left: 28,
-					right: 28,
-					borderRadius: 28,
-					paddingHorizontal: 8,
-					paddingVertical: 8,
-					flexDirection: 'row',
-					alignItems: 'center',
-					justifyContent: 'space-between',
-					gap: 5,
-					backgroundColor: isDark ? 'rgba(2,8,23,0.93)' : 'rgba(255,255,255,0.97)',
-					borderWidth: 1,
-					borderColor: isDark ? 'rgba(14,165,233,0.22)' : '#e2e8f0',
-					shadowColor: '#000',
-					shadowOffset: { width: 0, height: 3 },
-					shadowOpacity: 0.14,
-					shadowRadius: 12,
-					elevation: 8,
-				}}
-			>
-				{/* OCR capture */}
-				<TouchableOpacity
-					activeOpacity={0.82}
-					style={{
-						flex: 1,
-						flexDirection: 'row',
-						alignItems: 'center',
-						justifyContent: 'center',
-						borderRadius: 20,
-						paddingVertical: 10,
-						paddingHorizontal: 10,
-						backgroundColor: isDark ? 'rgba(14,165,233,0.12)' : '#e0f2fe',
-						borderWidth: 1,
-						borderColor: isDark ? 'rgba(14,165,233,0.32)' : '#bae6fd',
-						gap: 6,
-					}}
-					onPress={() => onNavigate?.('dataInput')}
-				>
-					<MaterialCommunityIcons name="text-recognition" size={17} color={isDark ? '#38bdf8' : '#0284c7'} />
-					<Text style={{ fontSize: 14, fontWeight: '700', color: isDark ? '#7dd3fc' : '#0369a1' }}>
-						OCR
-					</Text>
-				</TouchableOpacity>
-
-				{/* Ask Copilot — centre primary button */}
-				<TouchableOpacity
-					activeOpacity={0.88}
-					style={{
-						flex: 1.25,
-						flexDirection: 'row',
-						alignItems: 'center',
-						justifyContent: 'center',
-						borderRadius: 22,
-						paddingVertical: 11,
-						paddingHorizontal: 10,
-						backgroundColor: '#22d3ee',
-						gap: 6,
-						shadowColor: '#22d3ee',
-						shadowOffset: { width: 0, height: 2 },
-						shadowOpacity: 0.4,
-						shadowRadius: 8,
-						elevation: 5,
-					}}
-					onPress={() => setChatOpen(true)}
-				>
-					<MaterialCommunityIcons name="robot-happy-outline" size={17} color="#0c4a6e" />
-					<Text style={{ fontSize: 14, fontWeight: '800', color: '#0c4a6e' }}>
-						Ask Copilot
-					</Text>
-				</TouchableOpacity>
-
-				{/* Container scan */}
-				<TouchableOpacity
-					activeOpacity={0.82}
-					style={{
-						flex: 1,
-						flexDirection: 'row',
-						alignItems: 'center',
-						justifyContent: 'center',
-						borderRadius: 20,
-						paddingVertical: 10,
-						paddingHorizontal: 10,
-						backgroundColor: isDark ? 'rgba(139,92,246,0.12)' : '#ede9fe',
-						borderWidth: 1,
-						borderColor: isDark ? 'rgba(139,92,246,0.32)' : '#ddd6fe',
-						gap: 6,
-					}}
-					onPress={() => onNavigate?.('containerAnalysis')}
-				>
-					<MaterialCommunityIcons name="package-variant-closed" size={17} color={isDark ? '#a78bfa' : '#7c3aed'} />
-					<Text style={{ fontSize: 14, fontWeight: '700', color: isDark ? '#a78bfa' : '#6d28d9' }}>
-						Container
-					</Text>
-				</TouchableOpacity>
-			</View>
 
 			<Modal
 				visible={chatOpen}
