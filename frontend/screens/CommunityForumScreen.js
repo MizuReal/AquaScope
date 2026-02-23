@@ -1,22 +1,23 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  FlatList,
-  Animated,
-  Modal,
-  TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  Animated,
+  FlatList,
   Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Filter from 'bad-words';
-import { supabase } from '../utils/supabaseClient';
 import LottieView from 'lottie-react-native';
 import forumAnim from '../assets/public/forumanim.json';
+import { supabase } from '../utils/supabaseClient';
 import { useAppTheme } from '../utils/theme';
 
 const HIGHLIGHTS = [
@@ -26,7 +27,6 @@ const HIGHLIGHTS = [
 ];
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
-
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const MAX_CATEGORIES = 5;
 
@@ -53,11 +53,124 @@ const formatRelativeTime = (value) => {
   return `${days}d`;
 };
 
+const Avatar = memo(function Avatar({ avatarUrl, name, isDark, size = 44 }) {
+  const containerStyle = {
+    width: size,
+    height: size,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(30,64,175,0.65)' : '#cbd5e1',
+    backgroundColor: isDark ? 'rgba(2,6,23,0.75)' : '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  };
+
+  return (
+    <View style={containerStyle}>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={{ width: size, height: size }} />
+      ) : (
+        <Text style={[styles.avatarText, { color: isDark ? '#dbeafe' : '#1e293b' }]}>{buildInitials(name)}</Text>
+      )}
+    </View>
+  );
+});
+
+const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDark, colors }) {
+  const fade = useRef(new Animated.Value(0)).current;
+  const translate = useRef(new Animated.Value(16)).current;
+
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue: 1,
+      duration: 320,
+      delay: 120 + index * 50,
+      useNativeDriver: true,
+    }).start();
+    Animated.timing(translate, {
+      toValue: 0,
+      duration: 320,
+      delay: 120 + index * 50,
+      useNativeDriver: true,
+    }).start();
+  }, [fade, index, translate]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.card,
+        {
+          opacity: fade,
+          transform: [{ translateY: translate }],
+          backgroundColor: colors.card,
+          borderColor: colors.cardBorder,
+        },
+      ]}
+    >
+      <View style={styles.rowBetweenStart}>
+        <View style={styles.rowStart}>
+          <Avatar avatarUrl={post.authorAvatar} name={post.authorName} isDark={isDark} size={48} />
+          <View>
+            <Text style={[styles.authorName, { color: colors.title }]}>{post.authorName}</Text>
+            <Text style={[styles.mutedText, { color: colors.muted }]}>{post.authorOrg || 'Community'}</Text>
+          </View>
+        </View>
+        <Text style={[styles.mutedText, { color: colors.subtle }]}>{formatRelativeTime(post.created_at)}</Text>
+      </View>
+
+      <Text style={[styles.threadTitle, { color: colors.title }]}>{post.title}</Text>
+      <Text style={[styles.threadBody, { color: colors.text }]}>
+        {post.body?.length > 180 ? `${post.body.slice(0, 180)}...` : post.body}
+      </Text>
+
+      <View style={styles.tagWrap}>
+        {(post.categories || []).map((tag) => (
+          <View
+            key={tag.id}
+            style={[
+              styles.tag,
+              {
+                borderColor: isDark ? 'rgba(56,189,248,0.45)' : '#7dd3fc',
+                backgroundColor: isDark ? 'rgba(14,116,144,0.3)' : '#e0f2fe',
+              },
+            ]}
+          >
+            <Text style={[styles.tagText, { color: isDark ? '#bae6fd' : '#0369a1' }]}>#{tag.label}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
+        <View style={styles.rowStartGapLarge}>
+          <View style={styles.rowStartGapSmall}>
+            <Text style={[styles.statLabel, { color: isDark ? '#fda4af' : '#e11d48' }]}>Likes</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats?.likes || 0}</Text>
+          </View>
+          <View style={styles.rowStartGapSmall}>
+            <Text style={[styles.statLabel, { color: '#38bdf8' }]}>Reply</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{stats?.replies || 0}</Text>
+          </View>
+        </View>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => onOpenThread(post)}>
+          <Text style={styles.openThreadText}>Open thread {'->'}</Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}, (prev, next) => (
+  prev.post === next.post
+  && prev.index === next.index
+  && prev.stats === next.stats
+  && prev.isDark === next.isDark
+));
+
 const CommunityForumScreen = ({ onNavigate }) => {
   const { isDark } = useAppTheme();
   const heroAnim = useRef(new Animated.Value(0)).current;
   const screenAnim = useRef(new Animated.Value(0)).current;
   const filter = useMemo(() => new Filter(), []);
+
   const [sessionUser, setSessionUser] = useState(null);
   const [categories, setCategories] = useState([]);
   const [threads, setThreads] = useState([]);
@@ -65,6 +178,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [selectedTag, setSelectedTag] = useState('all');
   const [loading, setLoading] = useState(false);
   const [feedError, setFeedError] = useState('');
+
   const [threadModalVisible, setThreadModalVisible] = useState(false);
   const [activeThread, setActiveThread] = useState(null);
   const [threadPosts, setThreadPosts] = useState([]);
@@ -73,19 +187,59 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [replyError, setReplyError] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
+
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeTitle, setComposeTitle] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [composeCategories, setComposeCategories] = useState([]);
   const [composeError, setComposeError] = useState('');
   const [composeLoading, setComposeLoading] = useState(false);
+
   const [likeBusyId, setLikeBusyId] = useState('');
+
+  const colors = useMemo(() => {
+    if (isDark) {
+      return {
+        screen: '#020617',
+        card: 'rgba(2,6,23,0.68)',
+        cardBorder: 'rgba(12,74,110,0.7)',
+        title: '#f0f9ff',
+        text: '#cbd5e1',
+        muted: '#94a3b8',
+        subtle: '#64748b',
+        divider: 'rgba(12,74,110,0.65)',
+        inputBg: 'rgba(2,6,23,0.7)',
+        inputBorder: 'rgba(12,74,110,0.65)',
+        inputText: '#e2e8f0',
+        modalBg: 'rgba(2,6,23,0.95)',
+        chipBg: 'rgba(2,6,23,0.6)',
+        chipBorder: 'rgba(12,74,110,0.65)',
+      };
+    }
+
+    return {
+      screen: '#f1f5f9',
+      card: '#ffffff',
+      cardBorder: '#cbd5e1',
+      title: '#0f172a',
+      text: '#334155',
+      muted: '#475569',
+      subtle: '#64748b',
+      divider: '#e2e8f0',
+      inputBg: '#ffffff',
+      inputBorder: '#cbd5e1',
+      inputText: '#1e293b',
+      modalBg: 'rgba(241,245,249,0.95)',
+      chipBg: '#f1f5f9',
+      chipBorder: '#cbd5e1',
+    };
+  }, [isDark]);
 
   useEffect(() => {
     Animated.timing(heroAnim, {
       toValue: 1,
-      duration: 500,
-      delay: 100,
+      duration: 450,
+      delay: 80,
       useNativeDriver: true,
     }).start();
   }, [heroAnim]);
@@ -93,8 +247,8 @@ const CommunityForumScreen = ({ onNavigate }) => {
   useEffect(() => {
     Animated.timing(screenAnim, {
       toValue: 1,
-      duration: 450,
-      delay: 40,
+      duration: 350,
+      delay: 20,
       useNativeDriver: true,
     }).start();
   }, [screenAnim]);
@@ -107,21 +261,24 @@ const CommunityForumScreen = ({ onNavigate }) => {
         setSessionUser(data?.session?.user || null);
       }
     };
+
     loadSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
         setSessionUser(session?.user || null);
       }
     });
+
     return () => {
       isMounted = false;
       listener?.subscription?.unsubscribe();
     };
   }, []);
 
-  const loadForumData = async () => {
+  const loadForumData = useCallback(async () => {
     setLoading(true);
     setFeedError('');
+
     try {
       const [categoryResult, threadResult] = await Promise.all([
         supabase
@@ -131,25 +288,17 @@ const CommunityForumScreen = ({ onNavigate }) => {
           .order('label', { ascending: true }),
         supabase
           .from('forum_threads')
-          .select(
-            'id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))'
-          )
+          .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
           .order('created_at', { ascending: false }),
       ]);
 
-      if (categoryResult.error) {
-        throw categoryResult.error;
-      }
-      if (threadResult.error) {
-        throw threadResult.error;
-      }
+      if (categoryResult.error) throw categoryResult.error;
+      if (threadResult.error) throw threadResult.error;
 
       const activeCategories = categoryResult.data || [];
       const rawThreads = threadResult.data || [];
 
-      const userIds = Array.from(
-        new Set(rawThreads.map((thread) => thread.user_id).filter(Boolean))
-      );
+      const userIds = Array.from(new Set(rawThreads.map((thread) => thread.user_id).filter(Boolean)));
       const profilesResult = userIds.length
         ? await supabase
             .from(SUPABASE_PROFILES_TABLE)
@@ -157,16 +306,12 @@ const CommunityForumScreen = ({ onNavigate }) => {
             .in('id', userIds)
         : { data: [] };
 
-      const profileMap = new Map(
-        (profilesResult.data || []).map((profile) => [profile.id, profile])
-      );
+      const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
 
       const hydratedThreads = rawThreads.map((thread) => {
         const profile = profileMap.get(thread.user_id) || {};
         const categoryLinks = thread.forum_thread_categories || [];
-        const mappedCategories = categoryLinks
-          .map((link) => link.forum_categories)
-          .filter(Boolean);
+        const mappedCategories = categoryLinks.map((link) => link.forum_categories).filter(Boolean);
         return {
           ...thread,
           categories: mappedCategories,
@@ -198,6 +343,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
           .from('forum_post_likes')
           .select('post_id, forum_posts(thread_id)')
           .in('post_id', postIds);
+
         (likesResult.data || []).forEach((row) => {
           const threadId = row.forum_posts?.thread_id;
           if (!threadId) return;
@@ -222,11 +368,11 @@ const CommunityForumScreen = ({ onNavigate }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadForumData();
-  }, []);
+  }, [loadForumData]);
 
   const tagFilters = useMemo(() => {
     const dynamic = categories.map((category) => ({
@@ -239,12 +385,10 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
   const filteredThreads = useMemo(() => {
     if (selectedTag === 'all') return threads;
-    return threads.filter((thread) =>
-      (thread.categories || []).some((category) => category.id === selectedTag)
-    );
-  }, [threads, selectedTag]);
+    return threads.filter((thread) => (thread.categories || []).some((category) => category.id === selectedTag));
+  }, [selectedTag, threads]);
 
-  const containsBadWords = (text) => {
+  const containsBadWords = useCallback((text) => {
     if (!text) return false;
     try {
       return filter.isProfane(text);
@@ -252,37 +396,35 @@ const CommunityForumScreen = ({ onNavigate }) => {
       console.warn('[Forum] bad-words filter failed:', error?.message || error);
       return false;
     }
-  };
+  }, [filter]);
 
-  const openThread = async (thread) => {
+  const openThread = useCallback(async (thread) => {
     setActiveThread(thread);
     setThreadModalVisible(true);
     setReplyText('');
     setReplyTarget(null);
     setReplyError('');
     setThreadLoading(true);
+
     try {
       const postsResult = await supabase
         .from('forum_posts')
         .select('id, thread_id, user_id, parent_post_id, body, created_at')
         .eq('thread_id', thread.id)
         .order('created_at', { ascending: true });
-      if (postsResult.error) {
-        throw postsResult.error;
-      }
+
+      if (postsResult.error) throw postsResult.error;
 
       const posts = postsResult.data || [];
-      const userIds = Array.from(new Set(posts.map((post) => post.user_id)));
+      const userIds = Array.from(new Set(posts.map((post) => post.user_id).filter(Boolean)));
       const profilesResult = userIds.length
         ? await supabase
             .from(SUPABASE_PROFILES_TABLE)
             .select('id, display_name, organization, avatar_url')
             .in('id', userIds)
         : { data: [] };
-      const profileMap = new Map(
-        (profilesResult.data || []).map((profile) => [profile.id, profile])
-      );
 
+      const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
       const postIds = posts.map((post) => post.id);
       const likesResult = postIds.length
         ? await supabase
@@ -290,6 +432,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
             .select('post_id, user_id')
             .in('post_id', postIds)
         : { data: [] };
+
       const likesMap = (likesResult.data || []).reduce((acc, like) => {
         if (!acc[like.post_id]) {
           acc[like.post_id] = new Set();
@@ -318,18 +461,18 @@ const CommunityForumScreen = ({ onNavigate }) => {
     } finally {
       setThreadLoading(false);
     }
-  };
+  }, [sessionUser?.id]);
 
-  const closeThread = () => {
+  const closeThread = useCallback(() => {
     setThreadModalVisible(false);
     setActiveThread(null);
     setThreadPosts([]);
     setReplyText('');
     setReplyTarget(null);
     setReplyError('');
-  };
+  }, []);
 
-  const handleSendReply = async () => {
+  const handleSendReply = useCallback(async () => {
     const trimmed = replyText.trim();
     if (!trimmed) {
       setReplyError('Reply cannot be empty.');
@@ -357,20 +500,21 @@ const CommunityForumScreen = ({ onNavigate }) => {
         body: trimmed,
         parent_post_id: replyTarget?.id || null,
       };
+
       const insertResult = await supabase
         .from('forum_posts')
         .insert(insertPayload)
         .select('id, thread_id, user_id, parent_post_id, body, created_at')
         .single();
-      if (insertResult.error) {
-        throw insertResult.error;
-      }
+
+      if (insertResult.error) throw insertResult.error;
 
       const profileResult = await supabase
         .from(SUPABASE_PROFILES_TABLE)
         .select('id, display_name, organization, avatar_url')
         .eq('id', sessionUser.id)
         .maybeSingle();
+
       const profile = profileResult.data || {};
       const newPost = {
         ...insertResult.data,
@@ -388,7 +532,10 @@ const CommunityForumScreen = ({ onNavigate }) => {
         const current = prev[activeThread.id] || { replies: 0, likes: 0 };
         return {
           ...prev,
-          [activeThread.id]: { ...current, replies: current.replies + 1 },
+          [activeThread.id]: {
+            ...current,
+            replies: current.replies + 1,
+          },
         };
       });
     } catch (error) {
@@ -397,14 +544,15 @@ const CommunityForumScreen = ({ onNavigate }) => {
     } finally {
       setReplyLoading(false);
     }
-  };
+  }, [activeThread, containsBadWords, replyTarget?.id, replyText, sessionUser]);
 
-  const toggleLike = async (post) => {
+  const toggleLike = useCallback(async (post) => {
     if (!sessionUser) {
       setReplyError('Please sign in to like a reply.');
       return;
     }
     if (likeBusyId === post.id) return;
+
     setLikeBusyId(post.id);
     setReplyError('');
     try {
@@ -430,6 +578,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
           return { ...item, userLiked: nextLiked, likeCount: nextCount };
         })
       );
+
       if (activeThread) {
         setThreadStats((prev) => {
           const current = prev[activeThread.id] || { replies: 0, likes: 0 };
@@ -448,11 +597,12 @@ const CommunityForumScreen = ({ onNavigate }) => {
     } finally {
       setLikeBusyId('');
     }
-  };
+  }, [activeThread, likeBusyId, sessionUser]);
 
-  const handleCreateThread = async () => {
+  const handleCreateThread = useCallback(async () => {
     const trimmedTitle = composeTitle.trim();
     const trimmedBody = composeBody.trim();
+
     if (!trimmedTitle || !trimmedBody) {
       setComposeError('Title and details are required.');
       return;
@@ -472,6 +622,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
     setComposeLoading(true);
     setComposeError('');
+
     try {
       const insertResult = await supabase
         .from('forum_threads')
@@ -482,19 +633,17 @@ const CommunityForumScreen = ({ onNavigate }) => {
         })
         .select('id, user_id, title, body, created_at, updated_at')
         .single();
-      if (insertResult.error) {
-        throw insertResult.error;
-      }
+
+      if (insertResult.error) throw insertResult.error;
 
       const threadId = insertResult.data.id;
       const categoryPayload = composeCategories.map((categoryId) => ({
         thread_id: threadId,
         category_id: categoryId,
       }));
+
       if (categoryPayload.length) {
-        const { error } = await supabase
-          .from('forum_thread_categories')
-          .insert(categoryPayload);
+        const { error } = await supabase.from('forum_thread_categories').insert(categoryPayload);
         if (error) throw error;
       }
 
@@ -503,11 +652,9 @@ const CommunityForumScreen = ({ onNavigate }) => {
         .select('id, display_name, organization, avatar_url')
         .eq('id', sessionUser.id)
         .maybeSingle();
-      const profile = profileResult.data || {};
 
-      const selectedCategories = categories.filter((category) =>
-        composeCategories.includes(category.id)
-      );
+      const profile = profileResult.data || {};
+      const selectedCategories = categories.filter((category) => composeCategories.includes(category.id));
 
       const newThread = {
         ...insertResult.data,
@@ -532,9 +679,9 @@ const CommunityForumScreen = ({ onNavigate }) => {
     } finally {
       setComposeLoading(false);
     }
-  };
+  }, [categories, composeBody, composeCategories, composeTitle, containsBadWords, sessionUser]);
 
-  const toggleComposeCategory = (categoryId) => {
+  const toggleComposeCategory = useCallback((categoryId) => {
     setComposeCategories((prev) => {
       if (prev.includes(categoryId)) {
         return prev.filter((id) => id !== categoryId);
@@ -546,40 +693,63 @@ const CommunityForumScreen = ({ onNavigate }) => {
       setComposeError('');
       return [...prev, categoryId];
     });
-  };
+  }, []);
 
-  const header = useMemo(
-    () => (
-      <View className="gap-5">
-        <View className="px-5 pt-12 flex-row items-center justify-between">
-          <TouchableOpacity
-            className={`h-10 w-10 items-center justify-center rounded-2xl border ${isDark ? 'border-sky-900/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'}`}
-            activeOpacity={0.85}
-            onPress={() => onNavigate?.('home')}
-          >
-            <Text className={`text-xl ${isDark ? 'text-sky-100' : 'text-slate-700'}`}>{'<'}</Text>
-          </TouchableOpacity>
-          <View className="items-center">
-            <Text className="text-[12px] uppercase tracking-[3px] text-sky-500">
-              Community
-            </Text>
-            <Text className={`text-[20px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>Forum Feed</Text>
-          </View>
-          <TouchableOpacity
-            className={`rounded-2xl border px-3 py-2 ${
-              isDark ? 'border-emerald-600/60 bg-emerald-900/30' : 'border-emerald-300 bg-emerald-100'
-            }`}
-            activeOpacity={0.85}
-            onPress={loadForumData}
-          >
-            <Text className={`text-[11px] font-semibold uppercase ${isDark ? 'text-emerald-200' : 'text-emerald-800'}`}>
-              Refresh
-            </Text>
-          </TouchableOpacity>
+  const onSelectTag = useCallback((tagId) => {
+    setSelectedTag(tagId);
+  }, []);
+
+  const keyExtractor = useCallback((item) => item.id, []);
+
+  const renderFeedItem = useCallback(({ item, index }) => (
+    <PostCard
+      post={item}
+      index={index}
+      stats={threadStats[item.id]}
+      onOpenThread={openThread}
+      isDark={isDark}
+      colors={colors}
+    />
+  ), [colors, isDark, openThread, threadStats]);
+
+  const listHeader = useMemo(() => (
+    <View style={styles.headerWrap}>
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={[
+            styles.iconButton,
+            { borderColor: colors.chipBorder, backgroundColor: colors.chipBg },
+          ]}
+          activeOpacity={0.85}
+          onPress={() => onNavigate?.('home')}
+        >
+          <Text style={[styles.iconButtonText, { color: isDark ? '#dbeafe' : '#334155' }]}>{'<'}</Text>
+        </TouchableOpacity>
+
+        <View style={styles.centerTitleWrap}>
+          <Text style={styles.kicker}>Community</Text>
+          <Text style={[styles.screenTitle, { color: colors.title }]}>Forum Feed</Text>
         </View>
 
-        <Animated.View
-          style={{
+        <TouchableOpacity
+          style={[
+            styles.refreshButton,
+            {
+              borderColor: isDark ? 'rgba(16,185,129,0.55)' : '#86efac',
+              backgroundColor: isDark ? 'rgba(6,95,70,0.3)' : '#dcfce7',
+            },
+          ]}
+          activeOpacity={0.85}
+          onPress={loadForumData}
+        >
+          <Text style={[styles.refreshButtonText, { color: isDark ? '#a7f3d0' : '#166534' }]}>Refresh</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Animated.View
+        style={[
+          styles.heroCard,
+          {
             opacity: heroAnim,
             transform: [
               {
@@ -589,238 +759,224 @@ const CommunityForumScreen = ({ onNavigate }) => {
                 }),
               },
             ],
-            marginHorizontal: 20,
-            borderRadius: 30,
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(12,74,110,0.6)' : '#cbd5e1',
-            backgroundColor: isDark ? 'rgba(2,6,23,0.9)' : '#ffffff',
-            padding: 20,
-          }}
-        >
-          <View className="items-center">
-            <LottieView
-              source={forumAnim}
-              autoPlay
-              loop
-              style={{ width: 160, height: 160 }}
-            />
-          </View>
-          <Text className="text-[12px] uppercase tracking-wide text-sky-400">
-            Collective insights
-          </Text>
-          <Text className={`mt-2 text-[20px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
-            Share field signals, lab wins, and policy drafts in one flow.
-          </Text>
-          <View className="mt-4 gap-3">
-            {HIGHLIGHTS.map((item) => (
-              <View key={item} className="flex-row items-start gap-2">
-                <Text className={`text-lg ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>-</Text>
-                <Text className={`flex-1 text-[13px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{item}</Text>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
+            borderColor: colors.cardBorder,
+            backgroundColor: colors.card,
+          },
+        ]}
+      >
+        <View style={styles.heroAnimWrap}>
+          <LottieView source={forumAnim} autoPlay loop style={{ width: 150, height: 150 }} />
+        </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="pl-5"
-          contentContainerClassName="pr-5 gap-3"
-        >
-          {tagFilters.map((tag) => {
-            const isActive = selectedTag === tag.id;
-            return (
-              <TouchableOpacity
-                key={tag.id}
-                activeOpacity={0.85}
-                onPress={() => setSelectedTag(tag.id)}
-                className={`rounded-2xl border px-4 py-2 ${
-                  isActive
-                    ? 'border-aquaaccent bg-aquaaccent/20'
-                    : isDark ? 'border-sky-900/70 bg-slate-950/60' : 'border-slate-300 bg-slate-100'
-                }`}
+        <Text style={styles.heroKicker}>Collective insights</Text>
+        <Text style={[styles.heroTitle, { color: colors.title }]}>Share field signals, lab wins, and policy drafts in one flow.</Text>
+
+        <View style={styles.highlightList}>
+          {HIGHLIGHTS.map((item) => (
+            <View key={item} style={styles.highlightRow}>
+              <Text style={[styles.highlightDot, { color: isDark ? '#6ee7b7' : '#059669' }]}>-</Text>
+              <Text style={[styles.highlightText, { color: colors.text }]}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      </Animated.View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tagsScroll}
+        contentContainerStyle={styles.tagsScrollContent}
+      >
+        {tagFilters.map((tag) => {
+          const isActive = selectedTag === tag.id;
+          return (
+            <TouchableOpacity
+              key={tag.id}
+              activeOpacity={0.85}
+              onPress={() => onSelectTag(tag.id)}
+              style={[
+                styles.tagFilter,
+                isActive
+                  ? styles.tagFilterActive
+                  : { borderColor: colors.chipBorder, backgroundColor: colors.chipBg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tagFilterText,
+                  { color: isActive ? '#22d3ee' : colors.text },
+                ]}
               >
-                <Text
-                  className={`text-[13px] ${
-                    isActive ? 'text-aquaaccent' : isDark ? 'text-slate-200' : 'text-slate-700'
-                  }`}
-                >
-                  {tag.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                {tag.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
-        {feedError ? (
-          <View
-            className={`mx-5 rounded-2xl border px-4 py-3 ${
-              isDark ? 'border-rose-900/60 bg-rose-950/40' : 'border-rose-300 bg-rose-100'
-            }`}
-          >
-            <Text className={`text-[12px] ${isDark ? 'text-rose-200' : 'text-rose-700'}`}>{feedError}</Text>
-          </View>
-        ) : null}
+      {!!feedError && (
+        <View
+          style={[
+            styles.errorCard,
+            {
+              borderColor: isDark ? 'rgba(190,24,93,0.5)' : '#fda4af',
+              backgroundColor: isDark ? 'rgba(136,19,55,0.28)' : '#ffe4e6',
+            },
+          ]}
+        >
+          <Text style={[styles.errorText, { color: isDark ? '#fecdd3' : '#be123c' }]}>{feedError}</Text>
+        </View>
+      )}
+    </View>
+  ), [colors, feedError, heroAnim, isDark, loadForumData, onNavigate, onSelectTag, selectedTag, tagFilters]);
+
+  const emptyComponent = useMemo(() => {
+    if (loading) {
+      return (
+        <View style={styles.emptyWrap}>
+          <ActivityIndicator color="#5eead4" />
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.emptyCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+        <Text style={[styles.emptyTitle, { color: colors.title }]}>No threads yet</Text>
+        <Text style={[styles.emptyText, { color: colors.text }]}>Start a thread and share what your team is seeing in the field.</Text>
       </View>
-    ),
-    [heroAnim, onNavigate, tagFilters, selectedTag, feedError, isDark]
-  );
+    );
+  }, [colors, loading]);
 
   return (
     <Animated.View
-      style={{
-        flex: 1,
-        backgroundColor: isDark ? '#020617' : '#f1f5f9',
-        opacity: screenAnim,
-        transform: [
-          {
-            translateY: screenAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [16, 0],
-            }),
-          },
-        ],
-      }}
+      style={[
+        styles.screen,
+        {
+          backgroundColor: colors.screen,
+          opacity: screenAnim,
+          transform: [
+            {
+              translateY: screenAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [14, 0],
+              }),
+            },
+          ],
+        },
+      ]}
     >
       <AnimatedFlatList
         data={filteredThreads}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <PostCard
-            post={item}
-            index={index}
-            stats={threadStats[item.id]}
-            onOpenThread={() => openThread(item)}
-          />
-        )}
-        ListHeaderComponent={header}
-        contentContainerStyle={{ paddingBottom: 128, gap: 16 }}
+        keyExtractor={keyExtractor}
+        renderItem={renderFeedItem}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={emptyComponent}
+        contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          loading ? (
-            <View className="items-center py-10">
-              <ActivityIndicator color="#5eead4" />
-            </View>
-          ) : (
-            <View className={`mx-5 rounded-2xl border px-4 py-6 ${isDark ? 'border-sky-900/60 bg-slate-950/60' : 'border-slate-300 bg-white'}`}>
-              <Text className={`text-[14px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>No threads yet</Text>
-              <Text className={`mt-2 text-[12px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                Start a thread and share what your team is seeing in the field.
-              </Text>
-            </View>
-          )
-        }
+        initialNumToRender={5}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        updateCellsBatchingPeriod={16}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
 
       <TouchableOpacity
-        activeOpacity={0.85}
-        style={{ position: 'absolute', bottom: 32, right: 24, flexDirection: 'row', alignItems: 'center', borderRadius: 9999, borderWidth: 1, borderColor: 'rgba(94,234,212,0.4)', backgroundColor: 'rgba(94,234,212,0.8)', paddingHorizontal: 20, paddingVertical: 12, elevation: 8, shadowColor: 'rgba(12,74,110,0.8)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 }}
+        activeOpacity={0.88}
         onPress={() => setComposeVisible(true)}
+        style={styles.fab}
       >
-        <Text className="mr-2 text-xl text-slate-950">+</Text>
-        <Text className="text-[14px] font-semibold text-slate-950">Start a thread</Text>
+        <Text style={styles.fabPlus}>+</Text>
+        <Text style={styles.fabLabel}>Start a thread</Text>
       </TouchableOpacity>
 
       <Modal visible={composeVisible} transparent animationType="slide">
-        <View className={`flex-1 ${isDark ? 'bg-slate-950/95' : 'bg-slate-100/95'}`}>
-          <KeyboardAvoidingView
-            className="flex-1"
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View className="px-5 pt-12 flex-row items-center justify-between">
-              <Text className={`text-[18px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>Start a thread</Text>
+        <View style={[styles.modalBackdrop, { backgroundColor: colors.modalBg }]}>
+          <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.modalTopBar}>
+              <Text style={[styles.modalTitle, { color: colors.title }]}>Start a thread</Text>
               <TouchableOpacity
                 onPress={() => setComposeVisible(false)}
-                className={`rounded-2xl border px-3 py-2 ${isDark ? 'border-sky-900/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'}`}
+                style={[styles.closeButton, { borderColor: colors.chipBorder, backgroundColor: colors.chipBg }]}
               >
-                <Text className={`text-[12px] ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>Close</Text>
+                <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView className="px-5" contentContainerClassName="pb-10">
-              <View className={`mt-5 rounded-2xl border px-4 py-3 ${isDark ? 'border-sky-900/60 bg-slate-950/60' : 'border-slate-300 bg-white'}`}>
-                <Text className={`text-[12px] uppercase tracking-wide ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
-                  Thread title
-                </Text>
+            <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentContainer}>
+              <View style={[styles.inputCard, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+                <Text style={[styles.inputLabel, { color: '#38bdf8' }]}>Thread title</Text>
                 <TextInput
                   value={composeTitle}
                   onChangeText={setComposeTitle}
                   placeholder="Summarize the issue or idea"
                   placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
-                  className={`mt-2 text-[14px] ${isDark ? 'text-slate-100' : 'text-slate-800'}`}
+                  style={[styles.input, { color: colors.inputText }]}
                 />
               </View>
 
-              <View className={`mt-4 rounded-2xl border px-4 py-3 ${isDark ? 'border-sky-900/60 bg-slate-950/60' : 'border-slate-300 bg-white'}`}>
-                <Text className={`text-[12px] uppercase tracking-wide ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
-                  Details
-                </Text>
+              <View style={[styles.inputCard, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+                <Text style={[styles.inputLabel, { color: '#38bdf8' }]}>Details</Text>
                 <TextInput
                   value={composeBody}
                   onChangeText={setComposeBody}
                   placeholder="Share context, data points, or questions"
                   placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
                   multiline
-                  className={`mt-2 min-h-[120px] text-[14px] ${isDark ? 'text-slate-100' : 'text-slate-800'}`}
+                  textAlignVertical="top"
+                  style={[styles.textArea, { color: colors.inputText }]}
                 />
               </View>
 
-              <View className="mt-5">
-                <Text className={`text-[12px] uppercase tracking-wide ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
-                  Categories (up to {MAX_CATEGORIES})
-                </Text>
-                <View className="mt-3 flex-row flex-wrap gap-2">
+              <View style={styles.categoriesSection}>
+                <Text style={[styles.inputLabel, { color: '#38bdf8' }]}>Categories (up to {MAX_CATEGORIES})</Text>
+                <View style={styles.categoriesWrap}>
                   {categories.map((category) => {
                     const active = composeCategories.includes(category.id);
                     return (
                       <TouchableOpacity
                         key={category.id}
                         onPress={() => toggleComposeCategory(category.id)}
-                        className={`rounded-full border px-4 py-2 ${
+                        style={[
+                          styles.categoryChip,
                           active
-                            ? 'border-aquaaccent bg-aquaaccent/20'
-                            : isDark ? 'border-sky-900/70 bg-slate-950/60' : 'border-slate-300 bg-slate-100'
-                        }`}
+                            ? styles.tagFilterActive
+                            : { borderColor: colors.chipBorder, backgroundColor: colors.chipBg },
+                        ]}
                       >
-                        <Text
-                          className={`text-[12px] ${
-                            active ? 'text-aquaaccent' : isDark ? 'text-slate-200' : 'text-slate-700'
-                          }`}
-                        >
-                          {category.label}
-                        </Text>
+                        <Text style={[styles.categoryChipText, { color: active ? '#22d3ee' : colors.text }]}>{category.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
               </View>
 
-              {composeError ? (
+              {!!composeError && (
                 <View
-                  className={`mt-4 rounded-2xl border px-4 py-3 ${
-                    isDark ? 'border-rose-900/60 bg-rose-950/40' : 'border-rose-300 bg-rose-100'
-                  }`}
+                  style={[
+                    styles.errorCard,
+                    {
+                      borderColor: isDark ? 'rgba(190,24,93,0.5)' : '#fda4af',
+                      backgroundColor: isDark ? 'rgba(136,19,55,0.28)' : '#ffe4e6',
+                    },
+                  ]}
                 >
-                  <Text className={`text-[12px] ${isDark ? 'text-rose-200' : 'text-rose-700'}`}>{composeError}</Text>
+                  <Text style={[styles.errorText, { color: isDark ? '#fecdd3' : '#be123c' }]}>{composeError}</Text>
                 </View>
-              ) : null}
+              )}
 
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={handleCreateThread}
                 disabled={composeLoading}
-                className={`mt-6 items-center rounded-2xl px-4 py-3 ${
-                  composeLoading
-                    ? isDark
-                      ? 'bg-slate-700'
-                      : 'bg-slate-300'
-                    : 'bg-aquaaccent'
-                }`}
+                style={[
+                  styles.primaryButton,
+                  composeLoading ? { backgroundColor: isDark ? '#334155' : '#cbd5e1' } : { backgroundColor: '#22d3ee' },
+                ]}
               >
                 {composeLoading ? (
                   <ActivityIndicator color={isDark ? '#e2e8f0' : '#0f172a'} />
                 ) : (
-                  <Text className="text-[14px] font-semibold text-slate-950">Post thread</Text>
+                  <Text style={styles.primaryButtonText}>Post thread</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -829,224 +985,168 @@ const CommunityForumScreen = ({ onNavigate }) => {
       </Modal>
 
       <Modal visible={threadModalVisible} transparent animationType="slide">
-        <View className={`flex-1 ${isDark ? 'bg-slate-950/95' : 'bg-slate-100/95'}`}>
-          <KeyboardAvoidingView
-            className="flex-1"
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View className="px-5 pt-12 flex-row items-center justify-between">
-              <Text className={`text-[18px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>Thread</Text>
+        <View style={[styles.modalBackdrop, { backgroundColor: colors.modalBg }]}>
+          <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.modalTopBar}>
+              <Text style={[styles.modalTitle, { color: colors.title }]}>Thread</Text>
               <TouchableOpacity
                 onPress={closeThread}
-                className={`rounded-2xl border px-3 py-2 ${isDark ? 'border-sky-900/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'}`}
+                style={[styles.closeButton, { borderColor: colors.chipBorder, backgroundColor: colors.chipBg }]}
               >
-                <Text className={`text-[12px] ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>Close</Text>
+                <Text style={[styles.closeButtonText, { color: colors.text }]}>Close</Text>
               </TouchableOpacity>
             </View>
 
-            {activeThread ? (
+            {!!activeThread && (
               <FlatList
                 data={threadPosts}
-                keyExtractor={(item) => item.id}
-                className="px-5"
-                contentContainerClassName="pb-24"
+                keyExtractor={keyExtractor}
+                style={styles.modalContent}
+                contentContainerStyle={styles.threadContent}
+                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={6}
+                maxToRenderPerBatch={8}
+                windowSize={8}
                 ListHeaderComponent={
-                  <View
-                    className={`mt-5 rounded-[24px] border p-4 ${
-                      isDark ? 'border-sky-900/70 bg-slate-950/60' : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-3">
-                        <View
-                          className={`h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border ${
-                            isDark ? 'border-sky-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'
-                          }`}
-                        >
-                          {activeThread.authorAvatar ? (
-                            <Image
-                              source={{ uri: activeThread.authorAvatar }}
-                              className="h-11 w-11"
-                            />
-                          ) : (
-                            <Text className={`text-[14px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
-                              {buildInitials(activeThread.authorName)}
-                            </Text>
-                          )}
-                        </View>
+                  <View style={[styles.threadHeaderCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+                    <View style={styles.rowBetweenStart}>
+                      <View style={styles.rowStart}>
+                        <Avatar
+                          avatarUrl={activeThread.authorAvatar}
+                          name={activeThread.authorName}
+                          isDark={isDark}
+                          size={44}
+                        />
                         <View>
-                          <Text className={`text-[15px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
-                            {activeThread.authorName}
-                          </Text>
-                          <Text className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                            {activeThread.authorOrg || 'Community'}
-                          </Text>
+                          <Text style={[styles.authorName, { color: colors.title }]}>{activeThread.authorName}</Text>
+                          <Text style={[styles.mutedText, { color: colors.muted }]}>{activeThread.authorOrg || 'Community'}</Text>
                         </View>
                       </View>
-                      <Text className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                        {formatRelativeTime(activeThread.created_at)}
-                      </Text>
+                      <Text style={[styles.mutedText, { color: colors.subtle }]}>{formatRelativeTime(activeThread.created_at)}</Text>
                     </View>
 
-                    <Text className={`mt-4 text-[16px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
-                      {activeThread.title}
-                    </Text>
-                    <Text className={`mt-2 text-[13px] leading-5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      {activeThread.body}
-                    </Text>
+                    <Text style={[styles.threadTitle, { color: colors.title }]}>{activeThread.title}</Text>
+                    <Text style={[styles.threadBody, { color: colors.text }]}>{activeThread.body}</Text>
 
-                    <View className="mt-4 flex-row flex-wrap gap-2">
+                    <View style={styles.tagWrap}>
                       {(activeThread.categories || []).map((tag) => (
                         <View
                           key={tag.id}
-                          className={`rounded-full border px-3 py-1 ${
-                            isDark ? 'border-sky-800/50 bg-sky-900/30' : 'border-sky-300 bg-sky-100'
-                          }`}
+                          style={[
+                            styles.tag,
+                            {
+                              borderColor: isDark ? 'rgba(56,189,248,0.45)' : '#7dd3fc',
+                              backgroundColor: isDark ? 'rgba(14,116,144,0.3)' : '#e0f2fe',
+                            },
+                          ]}
                         >
-                          <Text className={`text-[11px] ${isDark ? 'text-sky-200' : 'text-sky-700'}`}>#{tag.label}</Text>
+                          <Text style={[styles.tagText, { color: isDark ? '#bae6fd' : '#0369a1' }]}>#{tag.label}</Text>
                         </View>
                       ))}
                     </View>
                   </View>
                 }
                 renderItem={({ item }) => (
-                  <View
-                    className={`mt-4 rounded-[22px] border p-4 ${
-                      isDark ? 'border-sky-900/70 bg-slate-950/60' : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-3">
-                        <View
-                          className={`h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border ${
-                            isDark ? 'border-sky-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'
-                          }`}
-                        >
-                          {item.authorAvatar ? (
-                            <Image source={{ uri: item.authorAvatar }} className="h-10 w-10" />
-                          ) : (
-                            <Text className={`text-[13px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
-                              {buildInitials(item.authorName)}
-                            </Text>
-                          )}
-                        </View>
+                  <View style={[styles.replyCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+                    <View style={styles.rowBetweenStart}>
+                      <View style={styles.rowStart}>
+                        <Avatar avatarUrl={item.authorAvatar} name={item.authorName} isDark={isDark} size={40} />
                         <View>
-                          <Text className={`text-[14px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
-                            {item.authorName}
-                          </Text>
-                          <Text className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                            {item.authorOrg || 'Community'}
-                          </Text>
+                          <Text style={[styles.replyAuthor, { color: colors.title }]}>{item.authorName}</Text>
+                          <Text style={[styles.mutedText, { color: colors.muted }]}>{item.authorOrg || 'Community'}</Text>
                         </View>
                       </View>
-                      <Text className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                        {formatRelativeTime(item.created_at)}
-                      </Text>
+                      <Text style={[styles.mutedText, { color: colors.subtle }]}>{formatRelativeTime(item.created_at)}</Text>
                     </View>
 
-                    <Text className={`mt-3 text-[13px] leading-5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                      {item.body}
-                    </Text>
+                    <Text style={[styles.replyBody, { color: colors.text }]}>{item.body}</Text>
 
-                    <View className="mt-4 flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-4">
+                    <View style={styles.replyActionsRow}>
+                      <View style={styles.rowStartGapLarge}>
                         <TouchableOpacity
                           activeOpacity={0.8}
                           onPress={() => toggleLike(item)}
                           disabled={likeBusyId === item.id}
-                          className="flex-row items-center gap-1"
+                          style={styles.rowStartGapSmall}
                         >
                           <Text
-                            className={`text-[12px] font-semibold ${
-                              item.userLiked
-                                ? isDark
-                                  ? 'text-rose-200'
-                                  : 'text-rose-700'
-                                : isDark
-                                ? 'text-rose-300'
-                                : 'text-rose-600'
-                            }`}
+                            style={[
+                              styles.replyAction,
+                              {
+                                color: item.userLiked
+                                  ? isDark
+                                    ? '#fecdd3'
+                                    : '#be123c'
+                                  : isDark
+                                  ? '#fda4af'
+                                  : '#e11d48',
+                              },
+                            ]}
                           >
                             Like
                           </Text>
-                          <Text className={`text-[12px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{item.likeCount}</Text>
+                          <Text style={[styles.replyCount, { color: colors.text }]}>{item.likeCount}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          onPress={() => setReplyTarget(item)}
-                          className="flex-row items-center gap-1"
-                        >
-                          <Text className="text-[12px] font-semibold text-sky-300">Reply</Text>
+
+                        <TouchableOpacity activeOpacity={0.8} onPress={() => setReplyTarget(item)} style={styles.rowStartGapSmall}>
+                          <Text style={[styles.replyAction, { color: '#38bdf8' }]}>Reply</Text>
                         </TouchableOpacity>
                       </View>
-                      {item.parent_post_id ? (
-                        <Text className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>Reply</Text>
-                      ) : null}
+
+                      {!!item.parent_post_id && <Text style={[styles.mutedText, { color: colors.subtle }]}>Reply</Text>}
                     </View>
                   </View>
                 )}
                 ListEmptyComponent={
                   threadLoading ? (
-                    <View className="items-center py-8">
+                    <View style={styles.emptyWrap}>
                       <ActivityIndicator color="#5eead4" />
                     </View>
                   ) : (
-                    <View
-                      className={`mt-4 rounded-2xl border px-4 py-6 ${
-                        isDark ? 'border-sky-900/60 bg-slate-950/60' : 'border-slate-300 bg-white'
-                      }`}
-                    >
-                      <Text className={`text-[13px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        No replies yet. Be the first to respond.
-                      </Text>
+                    <View style={[styles.emptyCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+                      <Text style={[styles.emptyText, { color: colors.text }]}>No replies yet. Be the first to respond.</Text>
                     </View>
                   )
                 }
                 ListFooterComponent={
-                  <View
-                    className={`mt-6 rounded-2xl border px-4 py-4 ${
-                      isDark ? 'border-sky-900/60 bg-slate-950/60' : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    {replyTarget ? (
-                      <View className="mb-3 flex-row items-center justify-between">
-                        <Text className="text-[12px] text-sky-300">
-                          Replying to {replyTarget.authorName}
-                        </Text>
+                  <View style={[styles.replyComposer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
+                    {!!replyTarget && (
+                      <View style={styles.replyTargetRow}>
+                        <Text style={styles.replyingToText}>Replying to {replyTarget.authorName}</Text>
                         <TouchableOpacity onPress={() => setReplyTarget(null)}>
-                          <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Cancel</Text>
+                          <Text style={[styles.mutedText, { color: colors.muted }]}>Cancel</Text>
                         </TouchableOpacity>
                       </View>
-                    ) : null}
+                    )}
+
                     <TextInput
                       value={replyText}
                       onChangeText={setReplyText}
                       placeholder="Write a reply"
                       placeholderTextColor={isDark ? '#94a3b8' : '#64748b'}
                       multiline
-                      className={`min-h-[80px] text-[13px] ${isDark ? 'text-slate-100' : 'text-slate-800'}`}
+                      textAlignVertical="top"
+                      style={[styles.replyInput, { color: colors.inputText }]}
                     />
-                    {replyError ? (
-                      <Text className={`mt-2 text-[12px] ${isDark ? 'text-rose-200' : 'text-rose-700'}`}>{replyError}</Text>
-                    ) : null}
+
+                    {!!replyError && <Text style={[styles.replyErrorText, { color: isDark ? '#fecdd3' : '#be123c' }]}>{replyError}</Text>}
+
                     <TouchableOpacity
                       activeOpacity={0.85}
                       onPress={handleSendReply}
                       disabled={replyLoading}
-                      className={`mt-4 items-center rounded-2xl px-4 py-3 ${
-                        replyLoading ? 'bg-slate-700' : 'bg-aquaaccent'
-                      }`}
+                      style={[styles.primaryButton, replyLoading ? { backgroundColor: '#334155' } : { backgroundColor: '#22d3ee' }]}
                     >
                       {replyLoading ? (
                         <ActivityIndicator color="#0f172a" />
                       ) : (
-                        <Text className="text-[14px] font-semibold text-slate-950">Send reply</Text>
+                        <Text style={styles.primaryButtonText}>Send reply</Text>
                       )}
                     </TouchableOpacity>
                   </View>
                 }
               />
-            ) : null}
+            )}
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -1054,99 +1154,247 @@ const CommunityForumScreen = ({ onNavigate }) => {
   );
 };
 
-const PostCard = ({ post, index, stats, onOpenThread }) => {
-  const { isDark } = useAppTheme();
-  const fade = useRef(new Animated.Value(0)).current;
-  const translate = useRef(new Animated.Value(16)).current;
-
-  useEffect(() => {
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: 350,
-      delay: 200 + index * 120,
-      useNativeDriver: true,
-    }).start();
-    Animated.timing(translate, {
-      toValue: 0,
-      duration: 350,
-      delay: 200 + index * 120,
-      useNativeDriver: true,
-    }).start();
-  }, [fade, translate, index]);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: fade,
-        transform: [{ translateY: translate }],
-        marginHorizontal: 20,
-        borderRadius: 28,
-        borderWidth: 1,
-        borderColor: isDark ? 'rgba(12,74,110,0.7)' : '#cbd5e1',
-        backgroundColor: isDark ? 'rgba(2,6,23,0.6)' : '#ffffff',
-        padding: 20,
-      }}
-    >
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-3">
-          <View
-            className={`h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border ${
-              isDark ? 'border-sky-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'
-            }`}
-          >
-            {post.authorAvatar ? (
-              <Image source={{ uri: post.authorAvatar }} className="h-12 w-12" />
-            ) : (
-              <Text className={`text-[15px] font-semibold ${isDark ? 'text-sky-100' : 'text-slate-800'}`}>
-                {buildInitials(post.authorName)}
-              </Text>
-            )}
-          </View>
-          <View>
-            <Text className={`text-[15px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>{post.authorName}</Text>
-            <Text className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              {post.authorOrg || 'Community'}
-            </Text>
-          </View>
-        </View>
-        <Text className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>{formatRelativeTime(post.created_at)}</Text>
-      </View>
-
-      <Text className={`mt-4 text-[16px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>{post.title}</Text>
-      <Text className={`mt-2 text-[13px] leading-5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-        {post.body?.length > 180 ? `${post.body.slice(0, 180)}...` : post.body}
-      </Text>
-
-      <View className="mt-4 flex-row flex-wrap gap-2">
-        {(post.categories || []).map((tag) => (
-          <View
-            key={tag.id}
-            className={`rounded-full border px-3 py-1 ${
-              isDark ? 'border-sky-800/50 bg-sky-900/30' : 'border-sky-300 bg-sky-100'
-            }`}
-          >
-            <Text className={`text-[11px] ${isDark ? 'text-sky-200' : 'text-sky-700'}`}>#{tag.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View className={`mt-5 flex-row items-center justify-between border-t pt-4 ${isDark ? 'border-sky-900/60' : 'border-slate-200'}`}>
-        <View className="flex-row items-center gap-4">
-          <View className="flex-row items-center gap-1">
-            <Text className={`text-[12px] font-semibold ${isDark ? 'text-rose-300' : 'text-rose-600'}`}>Likes</Text>
-            <Text className={`text-[12px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{stats?.likes || 0}</Text>
-          </View>
-          <View className="flex-row items-center gap-1">
-            <Text className="text-[12px] font-semibold text-sky-300">Reply</Text>
-            <Text className={`text-[12px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{stats?.replies || 0}</Text>
-          </View>
-        </View>
-        <TouchableOpacity activeOpacity={0.85} onPress={onOpenThread}>
-          <Text className="text-[12px] font-semibold text-aquaaccent">Open thread {'->'}</Text>
-        </TouchableOpacity>
-      </View>
-    </Animated.View>
-  );
-};
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  flex1: { flex: 1 },
+  headerWrap: { gap: 18 },
+  topBar: {
+    paddingTop: 48,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  centerTitleWrap: { alignItems: 'center' },
+  kicker: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 2.8,
+    color: '#0ea5e9',
+  },
+  screenTitle: {
+    marginTop: 2,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconButtonText: { fontSize: 20, fontWeight: '600' },
+  refreshButton: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  refreshButtonText: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  heroCard: {
+    marginHorizontal: 20,
+    borderRadius: 30,
+    borderWidth: 1,
+    padding: 20,
+  },
+  heroAnimWrap: { alignItems: 'center' },
+  heroKicker: {
+    marginTop: 4,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+    color: '#38bdf8',
+  },
+  heroTitle: {
+    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 27,
+  },
+  highlightList: { marginTop: 16, gap: 10 },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  highlightDot: { fontSize: 18, lineHeight: 18 },
+  highlightText: { flex: 1, fontSize: 13, lineHeight: 20 },
+  tagsScroll: { paddingLeft: 20 },
+  tagsScrollContent: { paddingRight: 20, gap: 10 },
+  tagFilter: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  tagFilterActive: {
+    borderWidth: 1,
+    borderColor: '#22d3ee',
+    backgroundColor: 'rgba(34,211,238,0.2)',
+  },
+  tagFilterText: { fontSize: 13, fontWeight: '500' },
+  errorCard: {
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  errorText: { fontSize: 12 },
+  feedContent: { paddingBottom: 128, gap: 16 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 28 },
+  emptyCard: {
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  emptyTitle: { fontSize: 14, fontWeight: '700' },
+  emptyText: { marginTop: 8, fontSize: 12, lineHeight: 18 },
+  fab: {
+    position: 'absolute',
+    bottom: 32,
+    right: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(94,234,212,0.45)',
+    backgroundColor: 'rgba(94,234,212,0.88)',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  fabPlus: { marginRight: 8, fontSize: 21, color: '#0f172a' },
+  fabLabel: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  modalBackdrop: { flex: 1 },
+  modalTopBar: {
+    paddingTop: 48,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  closeButton: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  closeButtonText: { fontSize: 12, fontWeight: '500' },
+  modalContent: { paddingHorizontal: 20 },
+  modalContentContainer: { paddingBottom: 24 },
+  inputCard: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontWeight: '600',
+  },
+  input: { marginTop: 8, fontSize: 14 },
+  textArea: { marginTop: 8, minHeight: 120, fontSize: 14 },
+  categoriesSection: { marginTop: 18 },
+  categoriesWrap: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  categoryChipText: { fontSize: 12, fontWeight: '500' },
+  primaryButton: {
+    marginTop: 18,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  primaryButtonText: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
+  card: {
+    marginHorizontal: 20,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 20,
+  },
+  rowBetweenStart: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  rowStart: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowStartGapLarge: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  rowStartGapSmall: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  avatarText: { fontSize: 15, fontWeight: '700' },
+  authorName: { fontSize: 15, fontWeight: '700' },
+  mutedText: { fontSize: 11 },
+  threadTitle: { marginTop: 14, fontSize: 16, fontWeight: '700' },
+  threadBody: { marginTop: 8, fontSize: 13, lineHeight: 20 },
+  tagWrap: { marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tag: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
+  tagText: { fontSize: 11 },
+  statsRow: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statLabel: { fontSize: 12, fontWeight: '700' },
+  statValue: { fontSize: 12 },
+  openThreadText: { fontSize: 12, fontWeight: '700', color: '#22d3ee' },
+  threadContent: { paddingBottom: 22 },
+  threadHeaderCard: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 16,
+  },
+  replyCard: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
+  },
+  replyAuthor: { fontSize: 14, fontWeight: '700' },
+  replyBody: { marginTop: 10, fontSize: 13, lineHeight: 20 },
+  replyActionsRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  replyAction: { fontSize: 12, fontWeight: '700' },
+  replyCount: { fontSize: 12 },
+  replyComposer: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+  },
+  replyTargetRow: {
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  replyingToText: { fontSize: 12, color: '#38bdf8' },
+  replyInput: { minHeight: 80, fontSize: 13 },
+  replyErrorText: { marginTop: 8, fontSize: 12 },
+});
 
 export default CommunityForumScreen;

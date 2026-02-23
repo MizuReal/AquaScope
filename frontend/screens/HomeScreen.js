@@ -179,7 +179,7 @@ const isAllowedQualityPrompt = (text = '') => {
 	return containsKeyword(text, qualityKeywords);
 };
 
-const HomeScreen = ({ onNavigate }) => {
+const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const { isDark } = useAppTheme();
   const heroAnim = useRef(new Animated.Value(0)).current;
   const cardsAnim = useRef(new Animated.Value(0)).current;
@@ -535,6 +535,12 @@ const HomeScreen = ({ onNavigate }) => {
 	}, []);
 
 	const currentThread = chatThreads[activeChatTab === 'quality' ? 'quality' : 'data'] || [];
+
+	useEffect(() => {
+		if (openChatSignal) {
+			setChatOpen(true);
+		}
+	}, [openChatSignal]);
 
 	return (
 		<View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}>

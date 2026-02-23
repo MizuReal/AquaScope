@@ -53,9 +53,9 @@ function useOnNavigate(navigation) {
 
 /* ── Tab-screen wrappers (stable component refs) ── */
 
-function HomeTab({ navigation }) {
+function HomeTab({ navigation, route }) {
   const onNavigate = useOnNavigate(navigation);
-  return <HomeScreen onNavigate={onNavigate} />;
+  return <HomeScreen onNavigate={onNavigate} openChatSignal={route?.params?.openChatSignal} />;
 }
 
 function ForumTab({ navigation }) {

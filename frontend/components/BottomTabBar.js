@@ -306,7 +306,7 @@ const BottomTabBar = ({ state, navigation }) => {
                     elevation: 5,
                   }}
                   onPress={() => {
-                    if (!isFocused) navigation.navigate(tab.name);
+                    navigation.navigate(tab.name, { openChatSignal: Date.now() });
                   }}
                 >
                   <MaterialCommunityIcons
