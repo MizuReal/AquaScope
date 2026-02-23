@@ -597,8 +597,8 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
         onClose={() => setDetailVisible(false)}
       />
       <Animated.View
-        className="flex-1"
         style={{
+          flex: 1,
           opacity: screenAnim,
           transform: [
             {

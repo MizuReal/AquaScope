@@ -554,12 +554,14 @@ const HomeScreen = ({ onNavigate }) => {
 								}),
 							},
 						],
+						borderRadius: 34,
+						borderWidth: 1,
+						borderColor: isDark ? 'rgba(12,74,110,0.7)' : '#cbd5e1',
+						backgroundColor: isDark ? 'rgba(2,6,23,0.9)' : '#ffffff',
+						paddingHorizontal: 20,
+						paddingBottom: 24,
+						paddingTop: 28,
 					}}
-					className={`rounded-[34px] border px-5 pb-6 pt-7 ${
-						isDark
-							? 'border-sky-900/70 bg-gradient-to-br from-slate-950/90 via-sky-950/40 to-emerald-900/20'
-							: 'border-slate-300 bg-white'
-					}`}
 				>
 					<View className="mb-5 flex-row items-center justify-between">
 						<View className="flex-row items-center gap-3">
@@ -703,10 +705,12 @@ const HomeScreen = ({ onNavigate }) => {
 								}),
 							},
 						],
+						borderRadius: 30,
+						padding: 20,
+						borderWidth: 1,
+						borderColor: isDark ? 'rgba(12,74,110,0.7)' : '#cbd5e1',
+						backgroundColor: isDark ? 'rgba(2,6,23,0.7)' : '#ffffff',
 					}}
-					className={`rounded-[30px] p-5 ${
-						isDark ? 'border border-sky-900/70 bg-slate-950/70' : 'border border-slate-300 bg-white'
-					}`}
 				>
 					<Text className={`text-[12px] uppercase tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>Chemistry pulse</Text>
 					<View className="mt-3 flex-row gap-3">

@@ -572,8 +572,8 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Animated.View
-        className="flex-1"
         style={{
+          flex: 1,
           opacity: screenAnim,
           transform: [
             {

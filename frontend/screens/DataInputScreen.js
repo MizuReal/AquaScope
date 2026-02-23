@@ -1149,12 +1149,14 @@ const DataInputScreen = ({ onNavigate }) => {
                   }),
                 },
               ],
+              borderRadius: 34,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(12,74,110,0.7)' : '#cbd5e1',
+              backgroundColor: isDark ? 'rgba(2,6,23,0.9)' : '#ffffff',
+              paddingHorizontal: 20,
+              paddingBottom: 24,
+              paddingTop: 28,
             }}
-            className={`rounded-[34px] border px-5 pb-6 pt-7 ${
-              isDark
-                ? 'border-sky-900/70 bg-gradient-to-br from-slate-950/90 via-sky-950/30 to-emerald-900/20'
-                : 'border-slate-300 bg-white'
-            }`}
           >
             <View className="flex-row items-center justify-between">
               <TouchableOpacity
@@ -1367,10 +1369,12 @@ const DataInputScreen = ({ onNavigate }) => {
                   }),
                 },
               ],
+              borderRadius: 34,
+              padding: 20,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(12,74,110,0.8)' : '#cbd5e1',
+              backgroundColor: isDark ? 'rgba(2,6,23,0.7)' : '#ffffff',
             }}
-            className={`rounded-[34px] p-5 ${
-              isDark ? 'border border-sky-900/80 bg-slate-950/70' : 'border border-slate-300 bg-white'
-            }`}
           >
             <View className="flex-row items-start justify-between gap-4">
               <View className="flex-1">
@@ -1571,8 +1575,8 @@ const DataInputScreen = ({ onNavigate }) => {
                   }),
                 },
               ],
+              gap: 12,
             }}
-            className="gap-3"
           >
             {/* Manual entry section header */}
             <View className="flex-row items-center justify-between px-1 pt-1">

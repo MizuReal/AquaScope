@@ -265,8 +265,9 @@ const ProfileScreen = ({ onNavigate }) => {
 
   return (
     <Animated.View
-      className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}
       style={{
+        flex: 1,
+        backgroundColor: isDark ? '#020617' : '#f1f5f9',
         opacity: screenAnim,
         transform: [
           {

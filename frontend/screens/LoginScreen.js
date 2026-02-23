@@ -371,7 +371,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
             </View>
 
             {/* Trust badges */}
-            <Animated.View style={animBlock(badgeAnim)} className="mt-4 flex-row justify-around">
+            <Animated.View style={[animBlock(badgeAnim), { marginTop: 16, flexDirection: 'row', justifyContent: 'space-around' }]}>
               <TrustBadge icon="shield-check-outline" label={'End-to-end\nencrypted'} isDark={isDark} />
               <View className={`w-px ${isDark ? 'bg-sky-900/50' : 'bg-slate-200'}`} />
               <TrustBadge icon="molecule" label={'AI-backed\ndiagnostics'} isDark={isDark} />

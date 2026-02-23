@@ -1,5 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, startTransition } from 'react';
-import { InteractionManager } from 'react-native';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const THEME_STORAGE_KEY = '@waterops:theme';
@@ -54,19 +53,20 @@ export const ThemeProvider = ({ children }) => {
 
   const toggleTheme = useCallback(() => {
     console.debug('[Theme] toggleTheme called');
-    // Wrap in startTransition so React treats the re-render as non-urgent.
-    // This prevents the massive cascading re-render from blocking the UI
-    // thread, which caused the intermittent NavigationContainer teardown.
-    startTransition(() => {
-      setThemeModeState((prev) => {
-        const next = prev === 'dark' ? 'light' : 'dark';
-        console.debug(`[Theme] transitioning ${prev} → ${next}`);
-        // Persist outside the updater to avoid side-effects in render
-        AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch((e) =>
-          console.warn('[Theme] Failed to persist theme mode:', e),
-        );
-        return next;
-      });
+    // Plain synchronous state update — do NOT use startTransition here.
+    // startTransition creates a concurrent-like render that can expose
+    // React Navigation's internal context before it has fully propagated,
+    // especially on freshly mounted NavigationContainers (e.g. right
+    // after login).  The BottomTabBar's deferred-action pattern already
+    // ensures the Modal is fully unmounted before this fires, so the
+    // original performance concern is addressed without concurrent mode.
+    setThemeModeState((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      console.debug(`[Theme] transitioning ${prev} → ${next}`);
+      AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch((e) =>
+        console.warn('[Theme] Failed to persist theme mode:', e),
+      );
+      return next;
     });
   }, []);
 

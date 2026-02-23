@@ -92,14 +92,7 @@ function ProfileTab({ navigation }) {
 
 function LoginWithTheme({ onLoginSuccess }) {
   const { isDark } = useAppTheme();
-  return (
-    <SafeAreaProvider>
-      <View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}>
-        <LoginScreen onLoginSuccess={onLoginSuccess} />
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-      </View>
-    </SafeAreaProvider>
-  );
+  return <View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}><LoginScreen onLoginSuccess={onLoginSuccess} /></View>;
 }
 
 function ThemedStatusBar() {
@@ -112,10 +105,19 @@ function renderTabBar(props) {
   return <BottomTabBar {...props} />;
 }
 
+function renderHiddenTabBar() {
+  return null;
+}
+
 /* ── Stable screen options (created once, outside any component) ── */
 const TAB_SCREEN_OPTIONS = {
   headerShown: false,
   freezeOnBlur: false,
+  animationEnabled: false,
+};
+
+const LOGIN_SCREEN_OPTIONS = {
+  headerShown: false,
   animationEnabled: false,
 };
 
@@ -173,31 +175,34 @@ const AppContent = React.memo(function AppContent() {
     };
   }, []);
 
-  /* ── Not authenticated → show Login ── */
-  if (!isAuthenticated) {
-    return <LoginWithTheme onLoginSuccess={() => setIsAuthenticated(true)} />;
-  }
-
-  /* ── Authenticated → bottom-tab navigator ── */
   return (
     <SafeAreaProvider>
       <NavigationContainer onStateChange={onNavStateChange} onReady={onNavReady}>
         <Tab.Navigator
-          tabBar={renderTabBar}
-          screenOptions={TAB_SCREEN_OPTIONS}
-          initialRouteName="Home"
+          key={isAuthenticated ? 'auth-on' : 'auth-off'}
+          tabBar={isAuthenticated ? renderTabBar : renderHiddenTabBar}
+          screenOptions={isAuthenticated ? TAB_SCREEN_OPTIONS : LOGIN_SCREEN_OPTIONS}
+          initialRouteName={isAuthenticated ? 'Home' : 'Login'}
           detachInactiveScreens={false}
         >
-          {/* Visible in the tab bar */}
-          <Tab.Screen name="Forum" component={ForumTab} />
-          <Tab.Screen name="History" component={HistoryTab} />
-          <Tab.Screen name="Home" component={HomeTab} />
-          <Tab.Screen name="Container" component={ContainerTab} />
-          <Tab.Screen name="Analytics" component={AnalyticsTab} />
+          {isAuthenticated ? (
+            <>
+              {/* Visible in the tab bar */}
+              <Tab.Screen name="Forum" component={ForumTab} />
+              <Tab.Screen name="History" component={HistoryTab} />
+              <Tab.Screen name="Home" component={HomeTab} />
+              <Tab.Screen name="Container" component={ContainerTab} />
+              <Tab.Screen name="Analytics" component={AnalyticsTab} />
 
-          {/* Hidden tabs — reachable via navigation.navigate() only */}
-          <Tab.Screen name="DataInput" component={DataInputTab} />
-          <Tab.Screen name="Profile" component={ProfileTab} />
+              {/* Hidden tabs — reachable via navigation.navigate() only */}
+              <Tab.Screen name="DataInput" component={DataInputTab} />
+              <Tab.Screen name="Profile" component={ProfileTab} />
+            </>
+          ) : (
+            <Tab.Screen name="Login">
+              {() => <LoginWithTheme onLoginSuccess={() => setIsAuthenticated(true)} />}
+            </Tab.Screen>
+          )}
         </Tab.Navigator>
         <ThemedStatusBar />
       </NavigationContainer>

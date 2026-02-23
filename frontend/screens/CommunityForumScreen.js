@@ -26,6 +26,7 @@ const HIGHLIGHTS = [
 ];
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const MAX_CATEGORIES = 5;
 
@@ -588,12 +589,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
                 }),
               },
             ],
+            marginHorizontal: 20,
+            borderRadius: 30,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(12,74,110,0.6)' : '#cbd5e1',
+            backgroundColor: isDark ? 'rgba(2,6,23,0.9)' : '#ffffff',
+            padding: 20,
           }}
-          className={`mx-5 rounded-[30px] border p-5 ${
-            isDark
-              ? 'border-sky-900/60 bg-gradient-to-br from-slate-950/90 via-sky-950/40 to-emerald-950/30'
-              : 'border-slate-300 bg-white'
-          }`}
         >
           <View className="items-center">
             <LottieView
@@ -666,8 +668,9 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
   return (
     <Animated.View
-      className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}
       style={{
+        flex: 1,
+        backgroundColor: isDark ? '#020617' : '#f1f5f9',
         opacity: screenAnim,
         transform: [
           {
@@ -691,7 +694,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
           />
         )}
         ListHeaderComponent={header}
-        contentContainerClassName="pb-32 gap-4"
+        contentContainerStyle={{ paddingBottom: 128, gap: 16 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           loading ? (
@@ -711,7 +714,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
       <TouchableOpacity
         activeOpacity={0.85}
-        className="absolute bottom-8 right-6 flex-row items-center rounded-full border border-aquaaccent/40 bg-aquaaccent/80 px-5 py-3 shadow-lg shadow-sky-900/80"
+        style={{ position: 'absolute', bottom: 32, right: 24, flexDirection: 'row', alignItems: 'center', borderRadius: 9999, borderWidth: 1, borderColor: 'rgba(94,234,212,0.4)', backgroundColor: 'rgba(94,234,212,0.8)', paddingHorizontal: 20, paddingVertical: 12, elevation: 8, shadowColor: 'rgba(12,74,110,0.8)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 }}
         onPress={() => setComposeVisible(true)}
       >
         <Text className="mr-2 text-xl text-slate-950">+</Text>
@@ -1076,10 +1079,13 @@ const PostCard = ({ post, index, stats, onOpenThread }) => {
       style={{
         opacity: fade,
         transform: [{ translateY: translate }],
+        marginHorizontal: 20,
+        borderRadius: 28,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(12,74,110,0.7)' : '#cbd5e1',
+        backgroundColor: isDark ? 'rgba(2,6,23,0.6)' : '#ffffff',
+        padding: 20,
       }}
-      className={`mx-5 rounded-[28px] border p-5 ${
-        isDark ? 'border-sky-900/70 bg-slate-950/60' : 'border-slate-300 bg-white'
-      }`}
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-3">
