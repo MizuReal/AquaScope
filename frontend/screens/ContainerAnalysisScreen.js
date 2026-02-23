@@ -13,14 +13,21 @@ import {
   TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import PredictButton from '../components/PredictButton';
 import { useAppTheme } from '../utils/theme';
+import { supabase } from '../utils/supabaseClient';
 import {
   analyzeContainer,
   chatContainerWithGemini,
   getContainerCleaningSuggestion,
 } from '../utils/api';
+
+const SUPABASE_CONTAINER_SCANS_TABLE = process.env.EXPO_PUBLIC_SUPABASE_CONTAINER_SCANS_TABLE || 'container_scans';
+const SUPABASE_CONTAINER_SCAN_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_CONTAINER_SCAN_BUCKET || 'container-scans';
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
@@ -404,6 +411,103 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
   // the previous request finishes.
   const abortRef = useRef(null);
 
+  const uploadContainerScanImage = useCallback(async (userId, asset) => {
+    if (!userId || !asset?.uri) {
+      return null;
+    }
+
+    try {
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 720 } }],
+        {
+          compress: 0.55,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: false,
+        }
+      );
+
+      const base64Data = await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType?.Base64 || 'base64',
+      });
+      const fileBody = decode(base64Data);
+      const filePath = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(SUPABASE_CONTAINER_SCAN_BUCKET)
+        .upload(filePath, fileBody, {
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) {
+        console.warn('[Supabase] container image upload failed:', uploadError.message || uploadError);
+        return null;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from(SUPABASE_CONTAINER_SCAN_BUCKET)
+        .getPublicUrl(filePath);
+
+      return publicData?.publicUrl || null;
+    } catch (error) {
+      console.warn('[Supabase] container image processing/upload error:', error?.message || error);
+      return null;
+    }
+  }, []);
+
+  const persistContainerScan = useCallback(async (analysis, asset) => {
+    const sessionResult = await supabase.auth.getSession();
+    const userId = sessionResult?.data?.session?.user?.id || null;
+    if (!userId || !analysis) {
+      return;
+    }
+
+    const uploadedImageUrl = await uploadContainerScanImage(userId, asset);
+
+    const record = {
+      user_id: userId,
+      predicted_class: analysis?.predicted_class || 'Unknown',
+      confidence: Number.isFinite(analysis?.confidence) ? analysis.confidence : null,
+      is_valid: Boolean(analysis?.is_valid),
+      rejection_reason: analysis?.rejection_reason || null,
+      entropy: Number.isFinite(analysis?.entropy) ? analysis.entropy : null,
+      margin: Number.isFinite(analysis?.margin) ? analysis.margin : null,
+      probabilities:
+        analysis?.probabilities && typeof analysis.probabilities === 'object'
+          ? analysis.probabilities
+          : {},
+      image_uri: uploadedImageUrl,
+    };
+
+    const { error: insertError } = await supabase.from(SUPABASE_CONTAINER_SCANS_TABLE).insert(record);
+    if (insertError) {
+      console.warn('[Supabase] container scan insert failed:', insertError.message || insertError);
+    }
+  }, [uploadContainerScanImage]);
+
+  const runAnalysisForAsset = useCallback(async (asset) => {
+    setImage(asset);
+    setResult(null);
+    setLoading(true);
+    setError('');
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const analysis = await analyzeContainer(asset, controller.signal);
+      setResult(analysis);
+      await persistContainerScan(analysis, asset);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        setError(err.message || 'Analysis failed.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [persistContainerScan]);
+
   useEffect(() => {
     Animated.timing(screenAnim, {
       toValue: 1,
@@ -430,27 +534,7 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
     if (pickerResult.canceled || !pickerResult.assets?.length) return;
 
     const asset = pickerResult.assets[0];
-    setImage(asset);
-    setResult(null);
-    setLoading(true);
-    setError('');
-
-    // Cancel any previous in-flight request before starting a new one
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const analysis = await analyzeContainer(asset, controller.signal);
-      setResult(analysis);
-    } catch (err) {
-      if (err?.name !== 'AbortError') {
-        setError(err.message || 'Analysis failed.');
-      }
-      // AbortError means this request was intentionally cancelled by a newer one — ignore
-    } finally {
-      setLoading(false);
-    }
+    await runAnalysisForAsset(asset);
   };
 
   /* Gallery pick → classify */
@@ -471,26 +555,7 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
     if (pickerResult.canceled || !pickerResult.assets?.length) return;
 
     const asset = pickerResult.assets[0];
-    setImage(asset);
-    setResult(null);
-    setLoading(true);
-    setError('');
-
-    // Cancel any previous in-flight request before starting a new one
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const analysis = await analyzeContainer(asset, controller.signal);
-      setResult(analysis);
-    } catch (err) {
-      if (err?.name !== 'AbortError') {
-        setError(err.message || 'Analysis failed.');
-      }
-    } finally {
-      setLoading(false);
-    }
+    await runAnalysisForAsset(asset);
   };
 
   /* Derive display data from result */

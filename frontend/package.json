@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@supabase/supabase-js": "^2.91.1",
     "babel-preset-expo": "~54.0.10",
     "bad-words": "^3.0.4",

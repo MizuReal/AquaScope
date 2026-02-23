@@ -1182,60 +1182,176 @@ const DataInputScreen = ({ onNavigate }) => {
               </View>
               <View
                 className={`rounded-2xl border px-3 py-2 ${
-                  isDark ? 'border-emerald-500/50 bg-emerald-900/20' : 'border-emerald-300 bg-emerald-100'
+                  isDark ? 'border-sky-500/50 bg-sky-900/20' : 'border-sky-300 bg-sky-100'
                 }`}
               >
                 <View className="flex-row items-center gap-1.5">
                   <MaterialCommunityIcons
-                    name="cloud-check-outline"
+                    name="text-recognition"
                     size={12}
-                    color={isDark ? '#a7f3d0' : '#065f46'}
+                    color={isDark ? '#7dd3fc' : '#0369a1'}
                   />
                   <Text
                     className={`text-[11px] font-semibold uppercase tracking-wide ${
-                      isDark ? 'text-emerald-200' : 'text-emerald-800'
+                      isDark ? 'text-sky-200' : 'text-sky-800'
                     }`}
                   >
-                    Auto-sync ready
+                    OCR Ready
                   </Text>
                 </View>
               </View>
             </View>
 
-            <View className="mt-6">
-              <Text className={`text-[11px] uppercase tracking-[3px] ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
+            <View className="mt-6 items-center">
+              <Text className={`text-[11px] uppercase tracking-[3px] text-center ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
                 Field capture
               </Text>
-              <Text className={`mt-2 text-[22px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
+              <Text className={`mt-2 text-[22px] font-semibold text-center ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
                 {getGreetingLabel()}, {profileName ? profileName.split(' ')[0] : 'operator'}
               </Text>
-              <Text className={`mt-2 text-[13px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <Text className={`mt-2 text-[13px] text-center ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Manual + OCR capture for downstream risk scoring and model retraining.
               </Text>
             </View>
 
             <View className="mt-5 flex-row gap-3">
-              <View className={`flex-1 rounded-3xl border p-4 ${isDark ? 'border-slate-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-50'}`}>
-                <View className="flex-row items-center gap-1.5">
-                  <MaterialCommunityIcons name="water-outline" size={12} color={isDark ? '#94a3b8' : '#64748b'} />
-                  <Text className={`text-[11px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {/* Last sample card */}
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(14,165,233,0.22)' : '#bae6fd',
+                  backgroundColor: isDark ? 'rgba(2,12,30,0.85)' : '#f0f9ff',
+                  padding: 11,
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Accent glow strip */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    borderTopLeftRadius: 20,
+                    borderTopRightRadius: 20,
+                    backgroundColor: isDark ? '#0ea5e9' : '#38bdf8',
+                    opacity: 0.7,
+                  }}
+                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                  <View
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 9,
+                      backgroundColor: isDark ? 'rgba(14,165,233,0.18)' : '#bae6fd',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <MaterialCommunityIcons name="water-check-outline" size={13} color={isDark ? '#38bdf8' : '#0284c7'} />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontWeight: '700',
+                      letterSpacing: 1.1,
+                      textTransform: 'uppercase',
+                      color: isDark ? '#38bdf8' : '#0284c7',
+                    }}
+                  >
                     Last sample
                   </Text>
                 </View>
-                <Text className={`mt-2 text-[18px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: isDark ? '#f0f9ff' : '#0c4a6e',
+                    lineHeight: 17,
+                  }}
+                  numberOfLines={1}
+                >
                   {latestSampleLabel}
                 </Text>
-                <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{latestSampleMeta}</Text>
-              </View>
-              <View className={`flex-1 rounded-3xl border p-4 ${isDark ? 'border-slate-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-50'}`}>
-                <View className="flex-row items-center gap-1.5">
-                  <Feather name="bar-chart-2" size={12} color={isDark ? '#94a3b8' : '#64748b'} />
-                  <Text className={`text-[11px] uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Samples today
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                  <Feather name="clock" size={9} color={isDark ? '#64748b' : '#7dd3fc'} />
+                  <Text style={{ fontSize: 10, color: isDark ? '#64748b' : '#0369a1' }} numberOfLines={1}>
+                    {latestSampleMeta}
                   </Text>
                 </View>
-                <Text className={`mt-2 text-[18px] font-semibold ${isDark ? 'text-sky-50' : 'text-slate-900'}`}>{todaySamplesCount}</Text>
-                <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Total saved {totalSamplesCount}</Text>
+              </View>
+
+              {/* Samples today card */}
+              <View
+                style={{
+                  flex: 1,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(139,92,246,0.28)' : '#ddd6fe',
+                  backgroundColor: isDark ? 'rgba(10,4,30,0.85)' : '#faf5ff',
+                  padding: 11,
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Accent glow strip */}
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 3,
+                    borderTopLeftRadius: 20,
+                    borderTopRightRadius: 20,
+                    backgroundColor: isDark ? '#8b5cf6' : '#a78bfa',
+                    opacity: 0.75,
+                  }}
+                />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                  <View
+                    style={{
+                      width: 26,
+                      height: 26,
+                      borderRadius: 9,
+                      backgroundColor: isDark ? 'rgba(139,92,246,0.18)' : '#ede9fe',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <MaterialCommunityIcons name="chart-bar" size={13} color={isDark ? '#a78bfa' : '#7c3aed'} />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 9,
+                      fontWeight: '700',
+                      letterSpacing: 1.1,
+                      textTransform: 'uppercase',
+                      color: isDark ? '#a78bfa' : '#7c3aed',
+                    }}
+                  >
+                    Today
+                  </Text>
+                </View>
+                <Text
+                  style={{
+                    fontSize: 22,
+                    fontWeight: '800',
+                    color: isDark ? '#ede9fe' : '#4c1d95',
+                    lineHeight: 26,
+                  }}
+                >
+                  {todaySamplesCount}
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 }}>
+                  <MaterialCommunityIcons name="database-outline" size={9} color={isDark ? '#64748b' : '#a78bfa'} />
+                  <Text style={{ fontSize: 10, color: isDark ? '#64748b' : '#6d28d9' }}>
+                    {totalSamplesCount} total saved
+                  </Text>
+                </View>
               </View>
             </View>
           </Animated.View>
