@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import './global.css';
 
@@ -140,7 +140,30 @@ function onNavReady() {
 // every theme toggle and tears down the navigation context.
 
 const AppContent = React.memo(function AppContent() {
+  const { isDark } = useAppTheme();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const navigationTheme = useMemo(() => {
+    if (isDark) {
+      return {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          background: '#020617',
+          card: '#020617',
+        },
+      };
+    }
+
+    return {
+      ...DefaultTheme,
+      colors: {
+        ...DefaultTheme.colors,
+        background: '#f1f5f9',
+        card: '#f1f5f9',
+      },
+    };
+  }, [isDark]);
 
   useEffect(() => {
     let isMounted = true;
@@ -177,7 +200,7 @@ const AppContent = React.memo(function AppContent() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer onStateChange={onNavStateChange} onReady={onNavReady}>
+      <NavigationContainer theme={navigationTheme} onStateChange={onNavStateChange} onReady={onNavReady}>
         <Tab.Navigator
           key={isAuthenticated ? 'auth-on' : 'auth-off'}
           tabBar={isAuthenticated ? renderTabBar : renderHiddenTabBar}

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supabaseClient';
 import { useAppTheme } from '../utils/theme';
 
@@ -155,14 +156,22 @@ const AnalysisScreen = ({ onNavigate }) => {
   const [error, setError] = useState('');
   const screenAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    Animated.timing(screenAnim, {
-      toValue: 1,
-      duration: 450,
-      delay: 50,
-      useNativeDriver: true,
-    }).start();
-  }, [screenAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      screenAnim.setValue(0);
+      const animation = Animated.timing(screenAnim, {
+        toValue: 1,
+        duration: 320,
+        delay: 0,
+        useNativeDriver: true,
+      });
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [screenAnim])
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -390,10 +399,10 @@ const AnalysisScreen = ({ onNavigate }) => {
   const riskDistTotal = analytics.statusDistribution.reduce((sum, row) => sum + row.population, 0);
 
   return (
+    <View style={{ flex: 1, backgroundColor: isDark ? '#020617' : '#f1f5f9' }}>
     <Animated.View
       style={{
         flex: 1,
-        backgroundColor: isDark ? '#020617' : '#f1f5f9',
         opacity: screenAnim,
         transform: [
           {
@@ -829,6 +838,7 @@ const AnalysisScreen = ({ onNavigate }) => {
       </ScrollView>
       </KeyboardAvoidingView>
     </Animated.View>
+    </View>
   );
 };
 

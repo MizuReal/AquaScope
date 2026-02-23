@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { useFocusEffect } from '@react-navigation/native';
 import InputField from '../components/InputField';
 import PredictButton from '../components/PredictButton';
 import { supabase } from '../utils/supabaseClient';
@@ -254,14 +255,22 @@ const ProfileScreen = ({ onNavigate }) => {
     };
   }, []);
 
-  useEffect(() => {
-    Animated.timing(screenAnim, {
-      toValue: 1,
-      duration: 450,
-      delay: 50,
-      useNativeDriver: true,
-    }).start();
-  }, [screenAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      screenAnim.setValue(0);
+      const animation = Animated.timing(screenAnim, {
+        toValue: 1,
+        duration: 320,
+        delay: 0,
+        useNativeDriver: true,
+      });
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [screenAnim])
+  );
 
   return (
     <Animated.View

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 import LottieView from 'lottie-react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supabaseClient';
 import { assessMicrobialRisk } from '../utils/api';
 import WaterResultScreen from './WaterResultScreen';
@@ -231,14 +232,22 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
   const containerHistoryRef = useRef(null);
   const filterKey = `${selectedStartDate}|${selectedEndDate}|${riskCategories.slice().sort().join(',')}`;
 
-  useEffect(() => {
-    Animated.timing(screenAnim, {
-      toValue: 1,
-      duration: 450,
-      delay: 80,
-      useNativeDriver: true,
-    }).start();
-  }, [screenAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      screenAnim.setValue(0);
+      const animation = Animated.timing(screenAnim, {
+        toValue: 1,
+        duration: 320,
+        delay: 0,
+        useNativeDriver: true,
+      });
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [screenAnim])
+  );
 
   useEffect(() => {
     isMountedRef.current = true;

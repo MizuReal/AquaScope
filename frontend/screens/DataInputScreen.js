@@ -24,6 +24,7 @@ if (UIManager.setLayoutAnimationEnabledExperimental) {
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { Camera, CameraView } from 'expo-camera';
 import { Accelerometer } from 'expo-sensors';
+import { useFocusEffect } from '@react-navigation/native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import InputField from '../components/InputField';
 import PredictButton from '../components/PredictButton';
@@ -452,22 +453,33 @@ const DataInputScreen = ({ onNavigate }) => {
     };
   }, [ocrLoading, spinnerValue]);
 
-  useEffect(() => {
-    Animated.stagger(120, [
-      Animated.timing(heroAnim, {
-        toValue: 1,
-        duration: 500,
-        delay: 80,
-        useNativeDriver: true,
-      }),
-      Animated.timing(sectionsAnim, {
-        toValue: 1,
-        duration: 500,
-        delay: 80,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [heroAnim, sectionsAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      heroAnim.setValue(0);
+      sectionsAnim.setValue(0);
+
+      const animation = Animated.stagger(70, [
+        Animated.timing(heroAnim, {
+          toValue: 1,
+          duration: 320,
+          delay: 0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sectionsAnim, {
+          toValue: 1,
+          duration: 320,
+          delay: 0,
+          useNativeDriver: true,
+        }),
+      ]);
+
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [heroAnim, sectionsAnim])
+  );
 
   useEffect(() => {
     let isMounted = true;

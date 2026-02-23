@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Animated, Modal, TextInput, Image } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../utils/supabaseClient';
 import { chatWithGemini } from '../utils/api';
 import homeWaterAnim from '../assets/public/HomeWater.json';
@@ -325,22 +326,33 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 		}
 	};
 
-	useEffect(() => {
-		Animated.parallel([
-			Animated.timing(heroAnim, {
-				toValue: 1,
-				duration: 500,
-				delay: 80,
-				useNativeDriver: true,
-			}),
-			Animated.timing(cardsAnim, {
-				toValue: 1,
-				duration: 500,
-				delay: 220,
-				useNativeDriver: true,
-			}),
-		]).start();
-	}, [heroAnim, cardsAnim]);
+	useFocusEffect(
+		useCallback(() => {
+			heroAnim.setValue(0);
+			cardsAnim.setValue(0);
+
+			const animation = Animated.parallel([
+				Animated.timing(heroAnim, {
+					toValue: 1,
+					duration: 320,
+					delay: 0,
+					useNativeDriver: true,
+				}),
+				Animated.timing(cardsAnim, {
+					toValue: 1,
+					duration: 320,
+					delay: 60,
+					useNativeDriver: true,
+				}),
+			]);
+
+			animation.start();
+
+			return () => {
+				animation.stop();
+			};
+		}, [cardsAnim, heroAnim])
+	);
 
 	useEffect(() => {
 		let isMounted = true;

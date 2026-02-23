@@ -16,19 +16,28 @@ import {
 } from 'react-native';
 import Filter from 'bad-words';
 import LottieView from 'lottie-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import forumAnim from '../assets/public/forumanim.json';
 import { supabase } from '../utils/supabaseClient';
 import { useAppTheme } from '../utils/theme';
 
-const HIGHLIGHTS = [
-  'AI-assisted water quality insights powered by field data and lab checks.',
-  'Automated microbial risk triage with explainable parameter flags.',
-  'OCR + fiducial capture streamlines sampling and reporting workflows.',
-];
-
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const MAX_CATEGORIES = 5;
+
+const normalizeAvatarUrl = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/')) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  if (!SUPABASE_URL) return trimmed;
+  if (trimmed.startsWith('/')) return `${SUPABASE_URL}${trimmed}`;
+  if (trimmed.startsWith('storage/')) return `${SUPABASE_URL}/${trimmed}`;
+  return trimmed;
+};
 
 const buildInitials = (value) => {
   if (!value) return 'NA';
@@ -82,16 +91,17 @@ const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDa
   const translate = useRef(new Animated.Value(16)).current;
 
   useEffect(() => {
+    const itemDelay = 40 + Math.min(index, 5) * 24;
     Animated.timing(fade, {
       toValue: 1,
-      duration: 320,
-      delay: 120 + index * 50,
+      duration: 220,
+      delay: itemDelay,
       useNativeDriver: true,
     }).start();
     Animated.timing(translate, {
       toValue: 0,
-      duration: 320,
-      delay: 120 + index * 50,
+      duration: 220,
+      delay: itemDelay,
       useNativeDriver: true,
     }).start();
   }, [fade, index, translate]);
@@ -144,11 +154,11 @@ const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDa
       <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
         <View style={styles.rowStartGapLarge}>
           <View style={styles.rowStartGapSmall}>
-            <Text style={[styles.statLabel, { color: isDark ? '#fda4af' : '#e11d48' }]}>Likes</Text>
+            <Text style={[styles.statLabel, { color: isDark ? '#fda4af' : '#e11d48' }]}>♥</Text>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats?.likes || 0}</Text>
           </View>
           <View style={styles.rowStartGapSmall}>
-            <Text style={[styles.statLabel, { color: '#38bdf8' }]}>Reply</Text>
+            <Text style={[styles.statLabel, { color: '#38bdf8' }]}>↩</Text>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats?.replies || 0}</Text>
           </View>
         </View>
@@ -167,7 +177,7 @@ const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDa
 
 const CommunityForumScreen = ({ onNavigate }) => {
   const { isDark } = useAppTheme();
-  const heroAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
   const screenAnim = useRef(new Animated.Value(0)).current;
   const filter = useMemo(() => new Filter(), []);
 
@@ -196,6 +206,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [composeLoading, setComposeLoading] = useState(false);
 
   const [likeBusyId, setLikeBusyId] = useState('');
+  const fabBottomOffset = insets.bottom + 92;
 
   const colors = useMemo(() => {
     if (isDark) {
@@ -235,23 +246,24 @@ const CommunityForumScreen = ({ onNavigate }) => {
     };
   }, [isDark]);
 
-  useEffect(() => {
-    Animated.timing(heroAnim, {
-      toValue: 1,
-      duration: 450,
-      delay: 80,
-      useNativeDriver: true,
-    }).start();
-  }, [heroAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      screenAnim.setValue(0);
 
-  useEffect(() => {
-    Animated.timing(screenAnim, {
-      toValue: 1,
-      duration: 350,
-      delay: 20,
-      useNativeDriver: true,
-    }).start();
-  }, [screenAnim]);
+      const animation = Animated.timing(screenAnim, {
+        toValue: 1,
+        duration: 300,
+        delay: 10,
+        useNativeDriver: true,
+      });
+
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [screenAnim])
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -306,6 +318,8 @@ const CommunityForumScreen = ({ onNavigate }) => {
             .in('id', userIds)
         : { data: [] };
 
+      if (profilesResult.error) throw profilesResult.error;
+
       const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
 
       const hydratedThreads = rawThreads.map((thread) => {
@@ -317,7 +331,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
           categories: mappedCategories,
           authorName: profile.display_name || 'Community member',
           authorOrg: profile.organization || '',
-          authorAvatar: profile.avatar_url || '',
+          authorAvatar: normalizeAvatarUrl(profile.avatar_url),
         };
       });
 
@@ -424,6 +438,8 @@ const CommunityForumScreen = ({ onNavigate }) => {
             .in('id', userIds)
         : { data: [] };
 
+      if (profilesResult.error) throw profilesResult.error;
+
       const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
       const postIds = posts.map((post) => post.id);
       const likesResult = postIds.length
@@ -448,7 +464,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
           ...post,
           authorName: profile.display_name || 'Community member',
           authorOrg: profile.organization || '',
-          authorAvatar: profile.avatar_url || '',
+          authorAvatar: normalizeAvatarUrl(profile.avatar_url),
           likeCount: likedBy.size,
           userLiked: sessionUser?.id ? likedBy.has(sessionUser.id) : false,
         };
@@ -520,7 +536,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         ...insertResult.data,
         authorName: profile.display_name || 'You',
         authorOrg: profile.organization || '',
-        authorAvatar: profile.avatar_url || '',
+        authorAvatar: normalizeAvatarUrl(profile.avatar_url),
         likeCount: 0,
         userLiked: false,
       };
@@ -661,7 +677,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         categories: selectedCategories,
         authorName: profile.display_name || 'You',
         authorOrg: profile.organization || '',
-        authorAvatar: profile.avatar_url || '',
+        authorAvatar: normalizeAvatarUrl(profile.avatar_url),
       };
 
       setThreads((prev) => [newThread, ...prev]);
@@ -746,41 +762,6 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </TouchableOpacity>
       </View>
 
-      <Animated.View
-        style={[
-          styles.heroCard,
-          {
-            opacity: heroAnim,
-            transform: [
-              {
-                translateY: heroAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [18, 0],
-                }),
-              },
-            ],
-            borderColor: colors.cardBorder,
-            backgroundColor: colors.card,
-          },
-        ]}
-      >
-        <View style={styles.heroAnimWrap}>
-          <LottieView source={forumAnim} autoPlay loop style={{ width: 150, height: 150 }} />
-        </View>
-
-        <Text style={styles.heroKicker}>Collective insights</Text>
-        <Text style={[styles.heroTitle, { color: colors.title }]}>Share field signals, lab wins, and policy drafts in one flow.</Text>
-
-        <View style={styles.highlightList}>
-          {HIGHLIGHTS.map((item) => (
-            <View key={item} style={styles.highlightRow}>
-              <Text style={[styles.highlightDot, { color: isDark ? '#6ee7b7' : '#059669' }]}>-</Text>
-              <Text style={[styles.highlightText, { color: colors.text }]}>{item}</Text>
-            </View>
-          ))}
-        </View>
-      </Animated.View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -828,7 +809,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </View>
       )}
     </View>
-  ), [colors, feedError, heroAnim, isDark, loadForumData, onNavigate, onSelectTag, selectedTag, tagFilters]);
+  ), [colors, feedError, isDark, loadForumData, onNavigate, onSelectTag, selectedTag, tagFilters]);
 
   const emptyComponent = useMemo(() => {
     if (loading) {
@@ -848,11 +829,11 @@ const CommunityForumScreen = ({ onNavigate }) => {
   }, [colors, loading]);
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.screen }}>
     <Animated.View
       style={[
         styles.screen,
         {
-          backgroundColor: colors.screen,
           opacity: screenAnim,
           transform: [
             {
@@ -883,9 +864,9 @@ const CommunityForumScreen = ({ onNavigate }) => {
       <TouchableOpacity
         activeOpacity={0.88}
         onPress={() => setComposeVisible(true)}
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottomOffset }]}
       >
-        <Text style={styles.fabPlus}>+</Text>
+        <LottieView source={forumAnim} autoPlay loop style={styles.fabAnim} />
         <Text style={styles.fabLabel}>Start a thread</Text>
       </TouchableOpacity>
 
@@ -1083,17 +1064,17 @@ const CommunityForumScreen = ({ onNavigate }) => {
                               },
                             ]}
                           >
-                            Like
+                            {item.userLiked ? '♥' : '♡'}
                           </Text>
                           <Text style={[styles.replyCount, { color: colors.text }]}>{item.likeCount}</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity activeOpacity={0.8} onPress={() => setReplyTarget(item)} style={styles.rowStartGapSmall}>
-                          <Text style={[styles.replyAction, { color: '#38bdf8' }]}>Reply</Text>
+                          <Text style={[styles.replyAction, { color: '#38bdf8' }]}>↩</Text>
                         </TouchableOpacity>
                       </View>
 
-                      {!!item.parent_post_id && <Text style={[styles.mutedText, { color: colors.subtle }]}>Reply</Text>}
+                      {!!item.parent_post_id && <Text style={[styles.mutedText, { color: colors.subtle }]}>↩</Text>}
                     </View>
                   </View>
                 )}
@@ -1151,6 +1132,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </View>
       </Modal>
     </Animated.View>
+    </View>
   );
 };
 
@@ -1197,34 +1179,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '700',
   },
-  heroCard: {
-    marginHorizontal: 20,
-    borderRadius: 30,
-    borderWidth: 1,
-    padding: 20,
-  },
-  heroAnimWrap: { alignItems: 'center' },
-  heroKicker: {
-    marginTop: 4,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.7,
-    color: '#38bdf8',
-  },
-  heroTitle: {
-    marginTop: 8,
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 27,
-  },
-  highlightList: { marginTop: 16, gap: 10 },
-  highlightRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  highlightDot: { fontSize: 18, lineHeight: 18 },
-  highlightText: { flex: 1, fontSize: 13, lineHeight: 20 },
   tagsScroll: { paddingLeft: 20 },
   tagsScrollContent: { paddingRight: 20, gap: 10 },
   tagFilter: {
@@ -1260,7 +1214,6 @@ const styles = StyleSheet.create({
   emptyText: { marginTop: 8, fontSize: 12, lineHeight: 18 },
   fab: {
     position: 'absolute',
-    bottom: 32,
     right: 24,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1271,7 +1224,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
   },
-  fabPlus: { marginRight: 8, fontSize: 21, color: '#0f172a' },
+  fabAnim: { width: 24, height: 24, marginRight: 8 },
   fabLabel: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
   modalBackdrop: { flex: 1 },
   modalTopBar: {

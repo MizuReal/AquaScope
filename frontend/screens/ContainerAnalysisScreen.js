@@ -17,6 +17,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import PredictButton from '../components/PredictButton';
 import { useAppTheme } from '../utils/theme';
 import { supabase } from '../utils/supabaseClient';
@@ -508,14 +509,22 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
     }
   }, [persistContainerScan]);
 
-  useEffect(() => {
-    Animated.timing(screenAnim, {
-      toValue: 1,
-      duration: 450,
-      delay: 80,
-      useNativeDriver: true,
-    }).start();
-  }, [screenAnim]);
+  useFocusEffect(
+    useCallback(() => {
+      screenAnim.setValue(0);
+      const animation = Animated.timing(screenAnim, {
+        toValue: 1,
+        duration: 320,
+        delay: 0,
+        useNativeDriver: true,
+      });
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }, [screenAnim])
+  );
 
   /* Capture → upload → classify */
   const handleCapture = async () => {
