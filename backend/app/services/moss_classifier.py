@@ -27,8 +27,10 @@ ENTROPY_THRESHOLD    = 0.6    # max allowed Shannon entropy (uniform 4-class ≈
 MARGIN_THRESHOLD     = 0.25   # minimum gap between top-1 and top-2 probability
                               # catches random images where the model hedges between classes
 
-# Resolve model paths relative to project root
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# Resolve model paths relative to project root.
+# This file is typically /app/app/services/moss_classifier.py in Docker/HF Space,
+# so parents[2] resolves to /app (repo root).
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_MODEL_TS = _PROJECT_ROOT / "moss_model" / "best.torchscript"
 _LOCAL_MODEL_PT = _PROJECT_ROOT / "moss_model" / "best.pt"
 
@@ -77,17 +79,56 @@ def _resolve_artifact_paths() -> tuple[Path, Path]:
     if _MODEL_TS_PATH is not None and _MODEL_PT_PATH is not None:
         return _MODEL_TS_PATH, _MODEL_PT_PATH
 
-    ts_path = Path(_MODEL_PATH_TS_ENV) if _MODEL_PATH_TS_ENV else (
-        _RUNTIME_MODEL_DIR / "best.torchscript" if _MODEL_URL_TS else _LOCAL_MODEL_TS
-    )
-    pt_path = Path(_MODEL_PATH_PT_ENV) if _MODEL_PATH_PT_ENV else (
-        _RUNTIME_MODEL_DIR / "best.pt" if _MODEL_URL_PT else _LOCAL_MODEL_PT
-    )
+    ts_candidates = []
+    pt_candidates = []
+
+    if _MODEL_PATH_TS_ENV:
+        ts_candidates.append(Path(_MODEL_PATH_TS_ENV))
+    if _MODEL_PATH_PT_ENV:
+        pt_candidates.append(Path(_MODEL_PATH_PT_ENV))
+
+    if _MODEL_URL_TS:
+        ts_candidates.append(_RUNTIME_MODEL_DIR / "best.torchscript")
+    if _MODEL_URL_PT:
+        pt_candidates.append(_RUNTIME_MODEL_DIR / "best.pt")
+
+    # Local fallbacks in common runtime locations
+    ts_candidates.extend([
+        _LOCAL_MODEL_TS,
+        Path("/app/moss_model/best.torchscript"),
+        Path.cwd() / "moss_model" / "best.torchscript",
+    ])
+    pt_candidates.extend([
+        _LOCAL_MODEL_PT,
+        Path("/app/moss_model/best.pt"),
+        Path.cwd() / "moss_model" / "best.pt",
+    ])
+
+    # Keep order, drop duplicates
+    seen_ts: set[Path] = set()
+    ts_candidates = [path for path in ts_candidates if not (path in seen_ts or seen_ts.add(path))]
+    seen_pt: set[Path] = set()
+    pt_candidates = [path for path in pt_candidates if not (path in seen_pt or seen_pt.add(path))]
+
+    ts_path = ts_candidates[0]
+    pt_path = pt_candidates[0]
 
     if _MODEL_URL_TS and not ts_path.exists():
         _download_file(_MODEL_URL_TS, ts_path)
     if _MODEL_URL_PT and not pt_path.exists():
         _download_file(_MODEL_URL_PT, pt_path)
+
+    if not ts_path.exists():
+        for candidate in ts_candidates:
+            if candidate.exists():
+                ts_path = candidate
+                break
+
+    if not pt_path.exists():
+        for candidate in pt_candidates:
+            if candidate.exists():
+                pt_path = candidate
+                break
 
     _MODEL_TS_PATH = ts_path
     _MODEL_PT_PATH = pt_path
@@ -107,6 +148,7 @@ def _load_model():
         raise FileNotFoundError(
             "Moss TorchScript model not found. "
             f"Checked path: {model_ts_path}. "
+            f"PROJECT_ROOT={_PROJECT_ROOT}. "
             "Set MODEL_URL_TS for remote download or provide local moss_model/best.torchscript."
         )
 

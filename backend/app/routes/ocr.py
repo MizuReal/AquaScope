@@ -56,7 +56,11 @@ async def parse_data_card(
         logger.exception("OCR decoding failed")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    logger.info("Fixed-form OCR parsed fields: %s", parsed)
+    logger.info(
+        "Fixed-form OCR parsed %d fields (keys=%s)",
+        len(parsed),
+        sorted(parsed.keys()),
+    )
     return {"parsed": parsed}
 
 

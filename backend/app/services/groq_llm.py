@@ -18,7 +18,6 @@ except ImportError:
 from groq import Groq, RateLimitError
 
 logger = logging.getLogger(__name__)
-logger.info("GROQ_API_KEY present after dotenv: %s", bool(os.getenv("GROQ_API_KEY")))
 
 _MODEL = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 3
@@ -59,7 +58,6 @@ def _get_client() -> Groq:
     if _client_instance is not None:
         return _client_instance
     api_key = os.getenv("GROQ_API_KEY", "")
-    logger.info("_get_client: GROQ_API_KEY length=%d", len(api_key))
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is not set in the environment")
     _client_instance = Groq(api_key=api_key)

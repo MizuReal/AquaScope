@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 const CONTAINER_CLASS_RISK_MAP = {
   Clean: { level: 'low', score: 1, status: 'ok' },
