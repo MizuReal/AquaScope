@@ -121,18 +121,6 @@ const LOGIN_SCREEN_OPTIONS = {
   animationEnabled: false,
 };
 
-/* ── Navigation state logger — helps diagnose intermittent context errors ── */
-function onNavStateChange(state) {
-  if (__DEV__) {
-    const route = state?.routes?.[state.index];
-    console.debug('[Nav] state →', route?.name ?? 'unknown', `(index ${state?.index})`);
-  }
-}
-
-function onNavReady() {
-  console.debug('[Nav] NavigationContainer ready');
-}
-
 /* ── Main app content ── */
 // React.memo prevents re-renders triggered by ThemeProvider state changes.
 // In React 19 + React Navigation v7 the "children-as-props" bailout is no
@@ -200,7 +188,7 @@ const AppContent = React.memo(function AppContent() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navigationTheme} onStateChange={onNavStateChange} onReady={onNavReady}>
+      <NavigationContainer theme={navigationTheme}>
         <Tab.Navigator
           key={isAuthenticated ? 'auth-on' : 'auth-off'}
           tabBar={isAuthenticated ? renderTabBar : renderHiddenTabBar}

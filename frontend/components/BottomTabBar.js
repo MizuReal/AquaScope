@@ -45,7 +45,6 @@ const BottomTabBar = ({ state, navigation }) => {
     if (afterClose) {
       pendingAction.current = afterClose;
     }
-    console.debug('[BottomTabBar] closeMenu, hasPendingAction:', !!afterClose);
     setMenuOpen(false);
   }, []);
 
@@ -56,7 +55,6 @@ const BottomTabBar = ({ state, navigation }) => {
       pendingAction.current = null;
       // Wait until the current interaction (Modal fade, layout) completes
       const handle = InteractionManager.runAfterInteractions(() => {
-        console.debug('[BottomTabBar] running deferred action after menu close');
         action();
       });
       return () => handle.cancel();
@@ -65,7 +63,6 @@ const BottomTabBar = ({ state, navigation }) => {
 
   const handleLogout = useCallback(() => {
     closeMenu(() => {
-      console.debug('[BottomTabBar] executing deferred logout');
       supabase.auth
         .signOut()
         .catch((e) => console.warn('[Supabase] signOut error:', e));
@@ -74,7 +71,6 @@ const BottomTabBar = ({ state, navigation }) => {
 
   const handleThemeToggle = useCallback(() => {
     closeMenu(() => {
-      console.debug('[BottomTabBar] executing deferred theme toggle');
       toggleTheme();
     });
   }, [closeMenu, toggleTheme]);
@@ -82,7 +78,6 @@ const BottomTabBar = ({ state, navigation }) => {
   const handleMenuNavigate = useCallback(
     (routeName) => {
       closeMenu(() => {
-        console.debug('[BottomTabBar] executing deferred navigate →', routeName);
         navigation.navigate(routeName);
       });
     },

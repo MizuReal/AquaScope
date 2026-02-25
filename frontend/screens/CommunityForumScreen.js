@@ -24,8 +24,10 @@ import { useAppTheme } from '../utils/theme';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
+const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const MAX_CATEGORIES = 5;
+const THREADS_BATCH_SIZE = 5;
 
 const normalizeAvatarUrl = (value) => {
   if (!value || typeof value !== 'string') return '';
@@ -34,8 +36,15 @@ const normalizeAvatarUrl = (value) => {
   if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/')) return trimmed;
   if (trimmed.startsWith('//')) return `https:${trimmed}`;
   if (!SUPABASE_URL) return trimmed;
-  if (trimmed.startsWith('/')) return `${SUPABASE_URL}${trimmed}`;
+  if (trimmed.startsWith('/storage/')) return `${SUPABASE_URL}${trimmed}`;
   if (trimmed.startsWith('storage/')) return `${SUPABASE_URL}/${trimmed}`;
+  if (trimmed.startsWith(`${SUPABASE_AVATAR_BUCKET}/`)) {
+    return `${SUPABASE_URL}/storage/v1/object/public/${trimmed}`;
+  }
+  if (!trimmed.includes('/')) {
+    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_AVATAR_BUCKET}/${trimmed}`;
+  }
+  if (trimmed.startsWith('/')) return `${SUPABASE_URL}${trimmed}`;
   return trimmed;
 };
 
@@ -86,7 +95,7 @@ const Avatar = memo(function Avatar({ avatarUrl, name, isDark, size = 44 }) {
   );
 });
 
-const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDark, colors }) {
+const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, onToggleLike, likeBusyId, canLike, isDark, colors }) {
   const fade = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(16)).current;
 
@@ -153,10 +162,30 @@ const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDa
 
       <View style={[styles.statsRow, { borderTopColor: colors.divider }]}>
         <View style={styles.rowStartGapLarge}>
-          <View style={styles.rowStartGapSmall}>
-            <Text style={[styles.statLabel, { color: isDark ? '#fda4af' : '#e11d48' }]}>♥</Text>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => onToggleLike(post)}
+            disabled={!canLike || likeBusyId === post.id}
+            style={styles.rowStartGapSmall}
+          >
+            <Text
+              style={[
+                styles.statLabel,
+                {
+                  color: stats?.userLiked
+                    ? isDark
+                      ? '#fecdd3'
+                      : '#be123c'
+                    : isDark
+                    ? '#fda4af'
+                    : '#e11d48',
+                },
+              ]}
+            >
+              {stats?.userLiked ? '♥' : '♡'}
+            </Text>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats?.likes || 0}</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.rowStartGapSmall}>
             <Text style={[styles.statLabel, { color: '#38bdf8' }]}>↩</Text>
             <Text style={[styles.statValue, { color: colors.text }]}>{stats?.replies || 0}</Text>
@@ -172,6 +201,8 @@ const PostCard = memo(function PostCard({ post, index, stats, onOpenThread, isDa
   prev.post === next.post
   && prev.index === next.index
   && prev.stats === next.stats
+  && prev.likeBusyId === next.likeBusyId
+  && prev.canLike === next.canLike
   && prev.isDark === next.isDark
 ));
 
@@ -182,11 +213,15 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const filter = useMemo(() => new Filter(), []);
 
   const [sessionUser, setSessionUser] = useState(null);
+  const [myAvatarUrl, setMyAvatarUrl] = useState('');
+  const [myDisplayName, setMyDisplayName] = useState('');
   const [categories, setCategories] = useState([]);
   const [threads, setThreads] = useState([]);
   const [threadStats, setThreadStats] = useState({});
   const [selectedTag, setSelectedTag] = useState('all');
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreThreads, setHasMoreThreads] = useState(true);
   const [feedError, setFeedError] = useState('');
 
   const [threadModalVisible, setThreadModalVisible] = useState(false);
@@ -206,6 +241,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [composeLoading, setComposeLoading] = useState(false);
 
   const [likeBusyId, setLikeBusyId] = useState('');
+  const [threadLikeBusyId, setThreadLikeBusyId] = useState('');
   const fabBottomOffset = insets.bottom + 92;
 
   const colors = useMemo(() => {
@@ -267,17 +303,38 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
   useEffect(() => {
     let isMounted = true;
+    const fetchMyProfile = async (user) => {
+      if (!user?.id) return;
+      try {
+        const { data } = await supabase
+          .from(SUPABASE_PROFILES_TABLE)
+          .select('display_name, avatar_url')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (isMounted) {
+          setMyAvatarUrl(normalizeAvatarUrl(data?.avatar_url));
+          if (data?.display_name) setMyDisplayName(data.display_name);
+        }
+      } catch (_err) {
+        // non-critical
+      }
+    };
+
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (isMounted) {
-        setSessionUser(data?.session?.user || null);
+        const user = data?.session?.user || null;
+        setSessionUser(user);
+        fetchMyProfile(user);
       }
     };
 
     loadSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (isMounted) {
-        setSessionUser(session?.user || null);
+        const user = session?.user || null;
+        setSessionUser(user);
+        fetchMyProfile(user);
       }
     });
 
@@ -287,105 +344,166 @@ const CommunityForumScreen = ({ onNavigate }) => {
     };
   }, []);
 
+  const fetchThreadsBatch = useCallback(async (offset, limit) => {
+    const toIndex = offset + limit - 1;
+    const threadResult = await supabase
+      .from('forum_threads')
+      .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .order('created_at', { ascending: false })
+      .range(offset, toIndex);
+
+    if (threadResult.error) throw threadResult.error;
+
+    const rawThreads = threadResult.data || [];
+    const userIds = Array.from(new Set(rawThreads.map((thread) => thread.user_id).filter(Boolean)));
+    const profilesResult = userIds.length
+      ? await supabase
+          .from(SUPABASE_PROFILES_TABLE)
+          .select('id, display_name, organization, avatar_url')
+          .in('id', userIds)
+      : { data: [] };
+
+    if (profilesResult.error) throw profilesResult.error;
+
+    const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
+
+    const hydratedThreads = rawThreads.map((thread) => {
+      const profile = profileMap.get(thread.user_id) || {};
+      const categoryLinks = thread.forum_thread_categories || [];
+      const mappedCategories = categoryLinks.map((link) => link.forum_categories).filter(Boolean);
+      return {
+        ...thread,
+        categories: mappedCategories,
+        authorName: profile.display_name || 'Community member',
+        authorOrg: profile.organization || '',
+        authorAvatar: normalizeAvatarUrl(profile.avatar_url),
+      };
+    });
+
+    const threadIds = hydratedThreads.map((thread) => thread.id);
+    let postsData = [];
+    if (threadIds.length) {
+      const postsResult = await supabase
+        .from('forum_posts')
+        .select('id, thread_id')
+        .in('thread_id', threadIds);
+      if (postsResult.error) throw postsResult.error;
+      postsData = postsResult.data || [];
+    }
+
+    const repliesCount = postsData.reduce((acc, post) => {
+      acc[post.thread_id] = (acc[post.thread_id] || 0) + 1;
+      return acc;
+    }, {});
+
+    let likesCount = {};
+    const userLikedThreadIds = new Set();
+    if (threadIds.length) {
+      const likesResult = await supabase
+        .from('forum_thread_likes')
+        .select('thread_id, user_id')
+        .in('thread_id', threadIds);
+
+      if (likesResult.error) throw likesResult.error;
+
+      (likesResult.data || []).forEach((row) => {
+        const threadId = row.thread_id;
+        if (!threadId) return;
+        likesCount[threadId] = (likesCount[threadId] || 0) + 1;
+        if (sessionUser?.id && row.user_id === sessionUser.id) {
+          userLikedThreadIds.add(threadId);
+        }
+      });
+    }
+
+    const stats = hydratedThreads.reduce((acc, thread) => {
+      acc[thread.id] = {
+        replies: repliesCount[thread.id] || 0,
+        likes: likesCount[thread.id] || 0,
+        userLiked: userLikedThreadIds.has(thread.id),
+      };
+      return acc;
+    }, {});
+
+    return { hydratedThreads, stats };
+  }, [sessionUser?.id]);
+
   const loadForumData = useCallback(async () => {
     setLoading(true);
     setFeedError('');
 
     try {
-      const [categoryResult, threadResult] = await Promise.all([
+      const [categoryResult, batchResult] = await Promise.all([
         supabase
           .from('forum_categories')
           .select('id, slug, label, is_active')
           .eq('is_active', true)
           .order('label', { ascending: true }),
-        supabase
-          .from('forum_threads')
-          .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
-          .order('created_at', { ascending: false }),
+        fetchThreadsBatch(0, THREADS_BATCH_SIZE),
       ]);
 
       if (categoryResult.error) throw categoryResult.error;
-      if (threadResult.error) throw threadResult.error;
 
       const activeCategories = categoryResult.data || [];
-      const rawThreads = threadResult.data || [];
-
-      const userIds = Array.from(new Set(rawThreads.map((thread) => thread.user_id).filter(Boolean)));
-      const profilesResult = userIds.length
-        ? await supabase
-            .from(SUPABASE_PROFILES_TABLE)
-            .select('id, display_name, organization, avatar_url')
-            .in('id', userIds)
-        : { data: [] };
-
-      if (profilesResult.error) throw profilesResult.error;
-
-      const profileMap = new Map((profilesResult.data || []).map((profile) => [profile.id, profile]));
-
-      const hydratedThreads = rawThreads.map((thread) => {
-        const profile = profileMap.get(thread.user_id) || {};
-        const categoryLinks = thread.forum_thread_categories || [];
-        const mappedCategories = categoryLinks.map((link) => link.forum_categories).filter(Boolean);
-        return {
-          ...thread,
-          categories: mappedCategories,
-          authorName: profile.display_name || 'Community member',
-          authorOrg: profile.organization || '',
-          authorAvatar: normalizeAvatarUrl(profile.avatar_url),
-        };
-      });
-
-      const threadIds = hydratedThreads.map((thread) => thread.id);
-      let postsData = [];
-      if (threadIds.length) {
-        const postsResult = await supabase
-          .from('forum_posts')
-          .select('id, thread_id')
-          .in('thread_id', threadIds);
-        postsData = postsResult.data || [];
-      }
-
-      const repliesCount = postsData.reduce((acc, post) => {
-        acc[post.thread_id] = (acc[post.thread_id] || 0) + 1;
-        return acc;
-      }, {});
-
-      let likesCount = {};
-      const postIds = postsData.map((post) => post.id);
-      if (postIds.length) {
-        const likesResult = await supabase
-          .from('forum_post_likes')
-          .select('post_id, forum_posts(thread_id)')
-          .in('post_id', postIds);
-
-        (likesResult.data || []).forEach((row) => {
-          const threadId = row.forum_posts?.thread_id;
-          if (!threadId) return;
-          likesCount[threadId] = (likesCount[threadId] || 0) + 1;
-        });
-      }
-
-      const stats = hydratedThreads.reduce((acc, thread) => {
-        acc[thread.id] = {
-          replies: repliesCount[thread.id] || 0,
-          likes: likesCount[thread.id] || 0,
-        };
-        return acc;
-      }, {});
 
       setCategories(activeCategories);
-      setThreads(hydratedThreads);
-      setThreadStats(stats);
+      setThreads(batchResult.hydratedThreads);
+      setThreadStats(batchResult.stats);
+      setHasMoreThreads(batchResult.hydratedThreads.length === THREADS_BATCH_SIZE);
     } catch (error) {
       console.warn('[Supabase] forum load failed:', error?.message || error);
       setFeedError('Unable to load forum right now.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchThreadsBatch]);
+
+  const loadMoreThreads = useCallback(async () => {
+    if (loading || loadingMore || !hasMoreThreads) return;
+
+    setLoadingMore(true);
+    setFeedError('');
+
+    try {
+      const batchResult = await fetchThreadsBatch(threads.length, THREADS_BATCH_SIZE);
+      if (!batchResult.hydratedThreads.length) {
+        setHasMoreThreads(false);
+        return;
+      }
+
+      setThreads((prev) => [...prev, ...batchResult.hydratedThreads]);
+      setThreadStats((prev) => ({
+        ...prev,
+        ...batchResult.stats,
+      }));
+      setHasMoreThreads(batchResult.hydratedThreads.length === THREADS_BATCH_SIZE);
+    } catch (error) {
+      console.warn('[Supabase] forum load more failed:', error?.message || error);
+      setFeedError('Unable to load more threads right now.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetchThreadsBatch, hasMoreThreads, loading, loadingMore, threads.length]);
 
   useEffect(() => {
     loadForumData();
+  }, [loadForumData]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('forum-thread-likes-feed')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'forum_thread_likes' },
+        () => {
+          loadForumData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadForumData]);
 
   const tagFilters = useMemo(() => {
@@ -396,6 +514,15 @@ const CommunityForumScreen = ({ onNavigate }) => {
     }));
     return [{ id: 'all', label: 'All' }, ...dynamic];
   }, [categories]);
+
+  const loggedInAs = useMemo(() => {
+    if (myDisplayName) return myDisplayName;
+    const metaName = sessionUser?.user_metadata?.display_name
+      || sessionUser?.user_metadata?.name
+      || sessionUser?.user_metadata?.username;
+    const emailName = sessionUser?.email ? sessionUser.email.split('@')[0] : '';
+    return metaName || emailName || 'user';
+  }, [myDisplayName, sessionUser]);
 
   const filteredThreads = useMemo(() => {
     if (selectedTag === 'all') return threads;
@@ -555,8 +682,19 @@ const CommunityForumScreen = ({ onNavigate }) => {
         };
       });
     } catch (error) {
-      console.warn('[Supabase] reply insert failed:', error?.message || error);
-      setReplyError('Unable to post reply right now.');
+      const debugReason = error?.message || error?.details || error?.hint || 'Unknown error';
+      console.warn('[Supabase] reply insert failed:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        debugReason,
+        threadId: activeThread?.id || null,
+        parentPostId: replyTarget?.id || null,
+        userId: sessionUser?.id || null,
+        replyLength: trimmed.length,
+      });
+      setReplyError(__DEV__ ? `Unable to post reply right now. (${debugReason})` : 'Unable to post reply right now.');
     } finally {
       setReplyLoading(false);
     }
@@ -614,6 +752,74 @@ const CommunityForumScreen = ({ onNavigate }) => {
       setLikeBusyId('');
     }
   }, [activeThread, likeBusyId, sessionUser]);
+
+  const syncThreadLikeState = useCallback(async (threadId) => {
+    if (!threadId) return;
+    const { data, error } = await supabase
+      .from('forum_thread_likes')
+      .select('user_id')
+      .eq('thread_id', threadId);
+
+    if (error) throw error;
+
+    const likes = (data || []).length;
+    const userLiked = !!sessionUser?.id && (data || []).some((row) => row.user_id === sessionUser.id);
+
+    setThreadStats((prev) => {
+      const current = prev[threadId] || { replies: 0, likes: 0, userLiked: false };
+      return {
+        ...prev,
+        [threadId]: {
+          ...current,
+          likes,
+          userLiked,
+        },
+      };
+    });
+  }, [sessionUser?.id]);
+
+  const toggleThreadLike = useCallback(async (thread) => {
+    if (!sessionUser) {
+      setFeedError('Please sign in to like a thread.');
+      return;
+    }
+    if (threadLikeBusyId === thread.id) return;
+
+    const currentStats = threadStats[thread.id] || { likes: 0, replies: 0, userLiked: false };
+    const currentlyLiked = !!currentStats.userLiked;
+
+    setThreadLikeBusyId(thread.id);
+    setFeedError('');
+    try {
+      if (currentlyLiked) {
+        const { error } = await supabase
+          .from('forum_thread_likes')
+          .delete()
+          .eq('thread_id', thread.id)
+          .eq('user_id', sessionUser.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('forum_thread_likes')
+          .upsert(
+            { thread_id: thread.id, user_id: sessionUser.id },
+            { onConflict: 'thread_id,user_id', ignoreDuplicates: true }
+          );
+        if (error) throw error;
+      }
+
+      await syncThreadLikeState(thread.id);
+    } catch (error) {
+      console.warn('[Supabase] thread like toggle failed:', error?.message || error);
+      try {
+        await syncThreadLikeState(thread.id);
+      } catch (_syncError) {
+        setFeedError('Unable to update thread like right now.');
+      }
+    } finally {
+      setThreadLikeBusyId('');
+    }
+  }, [sessionUser, syncThreadLikeState, threadLikeBusyId, threadStats]);
 
   const handleCreateThread = useCallback(async () => {
     const trimmedTitle = composeTitle.trim();
@@ -723,10 +929,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
       index={index}
       stats={threadStats[item.id]}
       onOpenThread={openThread}
+      onToggleLike={toggleThreadLike}
+      likeBusyId={threadLikeBusyId}
+      canLike={!!sessionUser}
       isDark={isDark}
       colors={colors}
     />
-  ), [colors, isDark, openThread, threadStats]);
+  ), [colors, isDark, openThread, sessionUser, threadLikeBusyId, threadStats, toggleThreadLike]);
 
   const listHeader = useMemo(() => (
     <View style={styles.headerWrap}>
@@ -742,24 +951,46 @@ const CommunityForumScreen = ({ onNavigate }) => {
           <Text style={[styles.iconButtonText, { color: isDark ? '#dbeafe' : '#334155' }]}>{'<'}</Text>
         </TouchableOpacity>
 
-        <View style={styles.centerTitleWrap}>
-          <Text style={styles.kicker}>Community</Text>
-          <Text style={[styles.screenTitle, { color: colors.title }]}>Forum Feed</Text>
-        </View>
+        <Text style={styles.kicker}>Community</Text>
 
-        <TouchableOpacity
-          style={[
-            styles.refreshButton,
-            {
-              borderColor: isDark ? 'rgba(16,185,129,0.55)' : '#86efac',
-              backgroundColor: isDark ? 'rgba(6,95,70,0.3)' : '#dcfce7',
-            },
-          ]}
-          activeOpacity={0.85}
-          onPress={loadForumData}
-        >
-          <Text style={[styles.refreshButtonText, { color: isDark ? '#a7f3d0' : '#166534' }]}>Refresh</Text>
-        </TouchableOpacity>
+        <View style={styles.iconButtonSpacer} />
+      </View>
+
+      <View style={[
+        styles.greetingRow,
+        {
+          borderColor: isDark ? 'rgba(12,74,110,0.55)' : '#e2e8f0',
+          backgroundColor: isDark ? 'rgba(2,6,23,0.55)' : '#ffffff',
+        }
+      ]}>
+        <View style={[
+          styles.greetingAvatar,
+          {
+            borderColor: isDark ? 'rgba(30,64,175,0.65)' : '#cbd5e1',
+            backgroundColor: isDark ? 'rgba(2,6,23,0.75)' : '#f1f5f9',
+          }
+        ]}>
+          {myAvatarUrl ? (
+            <Image source={{ uri: myAvatarUrl }} style={styles.greetingAvatarImage} />
+          ) : (
+            <Text style={[styles.greetingAvatarInitials, { color: isDark ? '#dbeafe' : '#1e293b' }]}>
+              {buildInitials(loggedInAs)}
+            </Text>
+          )}
+        </View>
+        <View style={styles.greetingTextWrap}>
+          <Text style={[styles.greetingHi, { color: isDark ? '#94a3b8' : '#64748b' }]}>Hi there 👋</Text>
+          <Text style={[styles.greetingName, { color: colors.title }]} numberOfLines={1}>{loggedInAs}</Text>
+        </View>
+        <View style={[
+          styles.greetingBadge,
+          {
+            borderColor: isDark ? 'rgba(14,165,233,0.4)' : '#7dd3fc',
+            backgroundColor: isDark ? 'rgba(14,165,233,0.1)' : '#e0f2fe',
+          }
+        ]}>
+          <Text style={[styles.greetingBadgeText, { color: isDark ? '#7dd3fc' : '#0369a1' }]}>Forum Feed</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -809,7 +1040,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </View>
       )}
     </View>
-  ), [colors, feedError, isDark, loadForumData, onNavigate, onSelectTag, selectedTag, tagFilters]);
+  ), [colors, feedError, isDark, loggedInAs, onNavigate, onSelectTag, selectedTag, tagFilters]);
 
   const emptyComponent = useMemo(() => {
     if (loading) {
@@ -852,8 +1083,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
         renderItem={renderFeedItem}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyComponent}
+        ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.feedFooterLoader} color="#5eead4" /> : null}
         contentContainerStyle={styles.feedContent}
         showsVerticalScrollIndicator={false}
+        refreshing={loading && !loadingMore}
+        onRefresh={loadForumData}
+        onEndReached={loadMoreThreads}
+        onEndReachedThreshold={0.35}
         initialNumToRender={5}
         maxToRenderPerBatch={6}
         windowSize={7}
@@ -1147,18 +1383,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  centerTitleWrap: { alignItems: 'center' },
   kicker: {
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 2.8,
     color: '#0ea5e9',
   },
-  screenTitle: {
-    marginTop: 2,
-    fontSize: 20,
-    fontWeight: '700',
+  greetingRow: {
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
+  greetingAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  greetingAvatarImage: { width: 46, height: 46 },
+  greetingAvatarInitials: { fontSize: 16, fontWeight: '700' },
+  greetingTextWrap: { flex: 1 },
+  greetingHi: { fontSize: 11, fontWeight: '500' },
+  greetingName: { fontSize: 16, fontWeight: '700', marginTop: 1 },
+  greetingBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  greetingBadgeText: { fontSize: 11, fontWeight: '700' },
   iconButton: {
     width: 40,
     height: 40,
@@ -1168,17 +1429,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconButtonText: { fontSize: 20, fontWeight: '600' },
-  refreshButton: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  refreshButtonText: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-  },
+  iconButtonSpacer: { width: 40, height: 40 },
   tagsScroll: { paddingLeft: 20 },
   tagsScrollContent: { paddingRight: 20, gap: 10 },
   tagFilter: {
@@ -1203,6 +1454,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 12 },
   feedContent: { paddingBottom: 128, gap: 16 },
   emptyWrap: { alignItems: 'center', paddingVertical: 28 },
+  feedFooterLoader: { paddingVertical: 18 },
   emptyCard: {
     marginHorizontal: 20,
     borderWidth: 1,

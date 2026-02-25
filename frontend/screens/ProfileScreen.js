@@ -21,6 +21,16 @@ import { useAppTheme } from '../utils/theme';
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 
+const getExtensionFromMimeType = (mimeType) => {
+  if (!mimeType || typeof mimeType !== 'string') return 'jpg';
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes('png')) return 'png';
+  if (normalized.includes('webp')) return 'webp';
+  if (normalized.includes('heic')) return 'heic';
+  if (normalized.includes('heif')) return 'heif';
+  return 'jpg';
+};
+
 const getAvatarPathFromUrl = (url) => {
   if (!url) return '';
   const marker = `/${SUPABASE_AVATAR_BUCKET}/`;
@@ -121,15 +131,14 @@ const ProfileScreen = ({ onNavigate }) => {
       }
 
       setLoading(true);
-      const filePath = `${user.id}.jpg`;
+      const previousPath = getAvatarPathFromUrl(profile.avatarUrl);
+      const extension = getExtensionFromMimeType(asset.mimeType);
+      const filePath = `${user.id}/${Date.now()}.${extension}`;
       const base64Data = await FileSystem.readAsStringAsync(asset.uri, {
         encoding: FileSystem.EncodingType?.Base64 || 'base64',
       });
       const fileBody = decode(base64Data);
       const contentType = asset.mimeType || 'image/jpeg';
-
-      // Remove existing file first to avoid upsert RLS conflicts
-      await supabase.storage.from(SUPABASE_AVATAR_BUCKET).remove([filePath]);
 
       const { error: uploadError } = await supabase.storage
         .from(SUPABASE_AVATAR_BUCKET)
@@ -155,6 +164,19 @@ const ProfileScreen = ({ onNavigate }) => {
         .from(SUPABASE_AVATAR_BUCKET)
         .getPublicUrl(filePath);
       const avatarUrl = publicData?.publicUrl || '';
+
+      if (previousPath && previousPath !== filePath) {
+        const { error: removeError } = await supabase.storage
+          .from(SUPABASE_AVATAR_BUCKET)
+          .remove([previousPath]);
+        if (removeError) {
+          console.warn('[Supabase] previous avatar remove failed:', {
+            message: removeError.message || removeError,
+            statusCode: removeError.statusCode,
+            path: previousPath,
+          });
+        }
+      }
 
       setProfile((prev) => ({ ...prev, avatarUrl }));
       setStatus('Photo updated. Tap Save changes to confirm.');

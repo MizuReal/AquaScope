@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const THEME_STORAGE_KEY = '@waterops:theme';
@@ -12,12 +12,6 @@ const ThemeContext = createContext({
 
 export const ThemeProvider = ({ children }) => {
   const [themeMode, setThemeModeState] = useState('dark');
-  const renderCount = useRef(0);
-
-  useEffect(() => {
-    renderCount.current += 1;
-    console.debug(`[Theme] Provider rendered (#${renderCount.current}), mode=${themeMode}`);
-  });
 
   useEffect(() => {
     let mounted = true;
@@ -26,7 +20,6 @@ export const ThemeProvider = ({ children }) => {
         const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
         if (!mounted) return;
         if (savedTheme === 'light' || savedTheme === 'dark') {
-          console.debug('[Theme] Loaded persisted theme:', savedTheme);
           setThemeModeState(savedTheme);
         }
       } catch (error) {
@@ -42,7 +35,6 @@ export const ThemeProvider = ({ children }) => {
 
   const setThemeMode = useCallback(async (nextMode) => {
     const normalized = nextMode === 'light' ? 'light' : 'dark';
-    console.debug('[Theme] setThemeMode →', normalized);
     setThemeModeState(normalized);
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, normalized);
@@ -52,7 +44,6 @@ export const ThemeProvider = ({ children }) => {
   }, []);
 
   const toggleTheme = useCallback(() => {
-    console.debug('[Theme] toggleTheme called');
     // Plain synchronous state update — do NOT use startTransition here.
     // startTransition creates a concurrent-like render that can expose
     // React Navigation's internal context before it has fully propagated,
@@ -62,7 +53,6 @@ export const ThemeProvider = ({ children }) => {
     // original performance concern is addressed without concurrent mode.
     setThemeModeState((prev) => {
       const next = prev === 'dark' ? 'light' : 'dark';
-      console.debug(`[Theme] transitioning ${prev} → ${next}`);
       AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch((e) =>
         console.warn('[Theme] Failed to persist theme mode:', e),
       );

@@ -11,6 +11,26 @@ import { useAppTheme } from '../utils/theme';
 
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const SUPABASE_SAMPLES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_SAMPLES_TABLE || 'field_samples';
+const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+
+const normalizeAvatarUrl = (value) => {
+	if (!value || typeof value !== 'string') return '';
+	const trimmed = value.trim();
+	if (!trimmed) return '';
+	if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/')) return trimmed;
+	if (trimmed.startsWith('//')) return `https:${trimmed}`;
+	if (!SUPABASE_URL) return trimmed;
+	if (trimmed.startsWith('/storage/')) return `${SUPABASE_URL}${trimmed}`;
+	if (trimmed.startsWith('storage/')) return `${SUPABASE_URL}/${trimmed}`;
+	if (trimmed.startsWith(`${SUPABASE_AVATAR_BUCKET}/`)) {
+		return `${SUPABASE_URL}/storage/v1/object/public/${trimmed}`;
+	}
+	if (!trimmed.includes('/')) {
+		return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_AVATAR_BUCKET}/${trimmed}`;
+	}
+	return trimmed;
+};
 
 const getInitials = (value) => {
 	if (!value) return 'NA';
@@ -520,7 +540,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 
 				if (isMounted) {
 					setProfileName(profileResult.data?.display_name || user.email || '');
-					setAvatarUrl(profileResult.data?.avatar_url || '');
+					setAvatarUrl(normalizeAvatarUrl(profileResult.data?.avatar_url));
 					setKeyMetrics(dynamicKeyMetrics);
 					setChemistryCards(dynamicChemistryCards);
 					setClusterRiskLabel(riskLabel);

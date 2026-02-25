@@ -61,11 +61,21 @@ create table if not exists public.forum_post_likes (
   primary key (post_id, user_id)
 );
 
+-- Likes (per thread)
+create table if not exists public.forum_thread_likes (
+  thread_id uuid not null references public.forum_threads(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (thread_id, user_id)
+);
+
 -- Indexes
 create index if not exists forum_threads_created_idx on public.forum_threads (created_at desc);
 create index if not exists forum_posts_thread_created_idx on public.forum_posts (thread_id, created_at asc);
 create index if not exists forum_posts_parent_idx on public.forum_posts (parent_post_id);
 create index if not exists forum_posts_user_created_idx on public.forum_posts (user_id, created_at desc);
+create index if not exists forum_thread_likes_thread_idx on public.forum_thread_likes (thread_id);
+create index if not exists forum_thread_likes_user_idx on public.forum_thread_likes (user_id);
 
 -- updated_at trigger helper
 create or replace function public.set_updated_at()
@@ -104,41 +114,10 @@ create trigger forum_thread_categories_limit
 before insert on public.forum_thread_categories
 for each row execute function public.forum_enforce_thread_categories_limit();
 
--- Bad-words safety net (DB-side)
-create table if not exists public.forum_bad_words (
-  word text primary key
-);
-
-create or replace function public.forum_reject_bad_words()
-returns trigger language plpgsql as $$
-declare
-  bad_match text;
-  target_text text;
-begin
-  target_text := lower(coalesce(new.title, '') || ' ' || coalesce(new.body, ''));
-
-  select word into bad_match
-  from public.forum_bad_words
-  where target_text ~ ('\\m' || regexp_replace(word, '([\\W])', '\\\\\1', 'g') || '\\M')
-  limit 1;
-
-  if bad_match is not null then
-    raise exception 'Content rejected by policy.';
-  end if;
-
-  return new;
-end;
-$$;
-
 drop trigger if exists forum_threads_reject_bad_words on public.forum_threads;
-create trigger forum_threads_reject_bad_words
-before insert or update of title, body on public.forum_threads
-for each row execute function public.forum_reject_bad_words();
-
 drop trigger if exists forum_posts_reject_bad_words on public.forum_posts;
-create trigger forum_posts_reject_bad_words
-before insert or update of body on public.forum_posts
-for each row execute function public.forum_reject_bad_words();
+drop function if exists public.forum_reject_bad_words();
+drop table if exists public.forum_bad_words;
 
 -- RLS
 alter table public.forum_categories enable row level security;
@@ -146,6 +125,7 @@ alter table public.forum_threads enable row level security;
 alter table public.forum_thread_categories enable row level security;
 alter table public.forum_posts enable row level security;
 alter table public.forum_post_likes enable row level security;
+alter table public.forum_thread_likes enable row level security;
 
 -- Categories: readable by all
 create policy "forum_categories_select"
@@ -214,4 +194,16 @@ with check (auth.uid() = user_id);
 
 create policy "forum_post_likes_delete_own"
 on public.forum_post_likes for delete
+using (auth.uid() = user_id);
+
+create policy "forum_thread_likes_select"
+on public.forum_thread_likes for select
+using (true);
+
+create policy "forum_thread_likes_insert"
+on public.forum_thread_likes for insert
+with check (auth.uid() = user_id);
+
+create policy "forum_thread_likes_delete_own"
+on public.forum_thread_likes for delete
 using (auth.uid() = user_id);

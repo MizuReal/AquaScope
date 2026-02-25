@@ -18,8 +18,3 @@ create index IF not exists forum_posts_thread_created_idx on public.forum_posts 
 create index IF not exists forum_posts_parent_idx on public.forum_posts using btree (parent_post_id) TABLESPACE pg_default;
 
 create index IF not exists forum_posts_user_created_idx on public.forum_posts using btree (user_id, created_at desc) TABLESPACE pg_default;
-
-create trigger forum_posts_reject_bad_words BEFORE INSERT
-or
-update OF body on forum_posts for EACH row
-execute FUNCTION forum_reject_bad_words ();

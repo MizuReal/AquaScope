@@ -12,12 +12,6 @@ create table public.forum_threads (
 
 create index IF not exists forum_threads_created_idx on public.forum_threads using btree (created_at desc) TABLESPACE pg_default;
 
-create trigger forum_threads_reject_bad_words BEFORE INSERT
-or
-update OF title,
-body on forum_threads for EACH row
-execute FUNCTION forum_reject_bad_words ();
-
 create trigger forum_threads_set_updated_at BEFORE
 update on forum_threads for EACH row
 execute FUNCTION set_updated_at ();
