@@ -1,0 +1,49 @@
+name: Sync Backend to HF Space
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/sync-hf-space.yml
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      HF_SPACE_REPO: MizuReal/ML-AAW
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Prepare deploy bundle
+        run: |
+          mkdir -p bundle
+          rsync -a backend/app/ bundle/app/
+          cp backend/requirements.txt bundle/requirements.txt
+          cp backend/Dockerfile.hf bundle/Dockerfile
+
+      - name: Clone HF Space repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO} hf-space
+
+      - name: Sync bundle into HF Space
+        run: |
+          rsync -a --delete --exclude ".git/" bundle/ hf-space/
+
+      - name: Commit and push if changed
+        run: |
+          cd hf-space
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to push."
+            exit 0
+          fi
+          git commit -m "sync backend from main repo"
+          git push
