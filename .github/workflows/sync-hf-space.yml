@@ -21,8 +21,10 @@ jobs:
       - name: Prepare deploy bundle
         run: |
           mkdir -p bundle
-          rsync -a backend/app/ bundle/app/
+          rsync -a --exclude '__pycache__/' --exclude '.env' --exclude 'debug_output/captures/' backend/app/ bundle/app/
           cp backend/requirements.txt bundle/requirements.txt
+          cp backend/Procfile bundle/Procfile
+          cp backend/runtime.txt bundle/runtime.txt
           cp backend/Dockerfile.hf bundle/Dockerfile
 
       - name: Clone HF Space repo
@@ -36,10 +38,13 @@ jobs:
           rsync -a --delete --exclude ".git/" bundle/ hf-space/
 
       - name: Commit and push if changed
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd hf-space
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to push."
