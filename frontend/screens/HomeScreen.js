@@ -33,6 +33,11 @@ const normalizeAvatarUrl = (value) => {
 	return trimmed;
 };
 
+const withAvatarVersion = (value) => {
+	if (!value) return '';
+	return `${value}${value.includes('?') ? '&' : '?'}v=${Date.now()}`;
+};
+
 const getInitials = (value) => {
 	if (!value) return 'NA';
 	const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -212,6 +217,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const [chatInput, setChatInput] = useState('');
 	const [profileName, setProfileName] = useState('');
 	const [avatarUrl, setAvatarUrl] = useState('');
+	const [sessionUserId, setSessionUserId] = useState('');
 	const [savedSamples, setSavedSamples] = useState([]);
 	const [chatLoading, setChatLoading] = useState(false);
 	const [keyMetrics, setKeyMetrics] = useState(FALLBACK_KEY_METRICS);
@@ -256,6 +262,40 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 			};
 		});
 	};
+
+	const refreshProfileOnly = useCallback(async (sessionUser = null) => {
+		try {
+			let user = sessionUser;
+			if (!user) {
+				const sessionResult = await supabase.auth.getSession();
+				user = sessionResult?.data?.session?.user || null;
+			}
+
+			if (!user?.id) {
+				setSessionUserId('');
+				setProfileName('');
+				setAvatarUrl('');
+				return;
+			}
+
+			setSessionUserId(user.id);
+			const profileResult = await supabase
+				.from(SUPABASE_PROFILES_TABLE)
+				.select('display_name, avatar_url')
+				.eq('id', user.id)
+				.maybeSingle();
+
+			if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+				console.warn('[Supabase] home profile refresh failed:', profileResult.error.message || profileResult.error);
+				return;
+			}
+
+			setProfileName(profileResult.data?.display_name || user.email || '');
+			setAvatarUrl(withAvatarVersion(normalizeAvatarUrl(profileResult.data?.avatar_url)));
+		} catch (error) {
+			console.warn('[Supabase] home profile refresh error:', error?.message || error);
+		}
+	}, []);
 
 	const handleSendChat = async () => {
 		const trimmed = chatInput.trim();
@@ -386,6 +426,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 				const user = sessionResult?.data?.session?.user || null;
 				if (!user) {
 					if (isMounted) {
+						setSessionUserId('');
 						setProfileName('');
 						setAvatarUrl('');
 						setKeyMetrics(FALLBACK_KEY_METRICS);
@@ -395,6 +436,10 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 						setClusterBarPercent(8);
 					}
 					return;
+				}
+
+				if (isMounted) {
+					setSessionUserId(user.id);
 				}
 
 				const [profileResult, samplesResult] = await Promise.all([
@@ -543,7 +588,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 
 				if (isMounted) {
 					setProfileName(profileResult.data?.display_name || user.email || '');
-					setAvatarUrl(normalizeAvatarUrl(profileResult.data?.avatar_url));
+					setAvatarUrl(withAvatarVersion(normalizeAvatarUrl(profileResult.data?.avatar_url)));
 					setKeyMetrics(dynamicKeyMetrics);
 					setChemistryCards(dynamicChemistryCards);
 					setClusterRiskLabel(riskLabel);
@@ -568,6 +613,46 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 			isMounted = false;
 		};
 	}, []);
+
+	useFocusEffect(
+		useCallback(() => {
+			refreshProfileOnly();
+		}, [refreshProfileOnly])
+	);
+
+	useEffect(() => {
+		const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+			refreshProfileOnly(session?.user || null);
+		});
+
+		return () => {
+			listener?.subscription?.unsubscribe();
+		};
+	}, [refreshProfileOnly]);
+
+	useEffect(() => {
+		if (!sessionUserId) return undefined;
+
+		const profileChannel = supabase
+			.channel(`home-profile-sync-${sessionUserId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: 'UPDATE',
+					schema: 'public',
+					table: SUPABASE_PROFILES_TABLE,
+					filter: `id=eq.${sessionUserId}`,
+				},
+				() => {
+					refreshProfileOnly();
+				}
+			)
+			.subscribe();
+
+		return () => {
+			supabase.removeChannel(profileChannel);
+		};
+	}, [refreshProfileOnly, sessionUserId]);
 
 	const currentThread = chatThreads[activeChatTab === 'quality' ? 'quality' : 'data'] || [];
 

@@ -104,12 +104,38 @@ const CAPTURE_GUIDE_WIDTH = Math.min(MAX_GUIDE_WIDTH, MAX_GUIDE_HEIGHT * WATER_C
 const CAPTURE_GUIDE_HEIGHT = CAPTURE_GUIDE_WIDTH / WATER_CARD_ASPECT;
 const SUPABASE_SAMPLES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_SAMPLES_TABLE || 'field_samples';
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
+const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
+const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const AUTO_CAPTURE_START_THRESHOLD = 0.55; // Lower threshold - fiducials are the main check
 const AUTO_CAPTURE_CANCEL_THRESHOLD = 0.35;
 const AUTO_CAPTURE_START_MS = 1200; // Faster capture once ready
 const MAX_ACCEL_DELTA = 0.35;
 const FIDUCIAL_CHECK_INTERVAL_MS = 450; // Check more frequently
 const MIN_FIDUCIALS_FOR_CAPTURE = 4; // Require all 4 corners
+
+const normalizeAvatarUrl = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/')) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  if (!SUPABASE_URL) return trimmed;
+  if (trimmed.startsWith('/storage/')) return `${SUPABASE_URL}${trimmed}`;
+  if (trimmed.startsWith('storage/')) return `${SUPABASE_URL}/${trimmed}`;
+  if (trimmed.startsWith(`${SUPABASE_AVATAR_BUCKET}/`)) {
+    return `${SUPABASE_URL}/storage/v1/object/public/${trimmed}`;
+  }
+  if (!trimmed.includes('/')) {
+    return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_AVATAR_BUCKET}/${trimmed}`;
+  }
+  if (trimmed.startsWith('/')) return `${SUPABASE_URL}${trimmed}`;
+  return trimmed;
+};
+
+const withAvatarVersion = (value) => {
+  if (!value) return '';
+  return `${value}${value.includes('?') ? '&' : '?'}v=${Date.now()}`;
+};
 
 const getInitials = (value) => {
   if (!value) return 'NA';
@@ -375,6 +401,7 @@ const DataInputScreen = ({ onNavigate }) => {
   const [submitError, setSubmitError] = useState('');
   const [profileName, setProfileName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [sessionUserId, setSessionUserId] = useState('');
   const [latestSampleLabel, setLatestSampleLabel] = useState('No sample yet');
   const [latestSampleMeta, setLatestSampleMeta] = useState('Capture your first water card');
   const [todaySamplesCount, setTodaySamplesCount] = useState(0);
@@ -395,6 +422,40 @@ const DataInputScreen = ({ onNavigate }) => {
   // Fiducial validation refs
   const fiducialCheckIntervalRef = useRef(null);
   const fiducialCheckInProgressRef = useRef(false);
+
+  const refreshProfileOnly = useCallback(async (sessionUser = null) => {
+    try {
+      let user = sessionUser;
+      if (!user) {
+        const sessionResult = await supabase.auth.getSession();
+        user = sessionResult?.data?.session?.user || null;
+      }
+
+      if (!user?.id) {
+        setSessionUserId('');
+        setProfileName('');
+        setAvatarUrl('');
+        return;
+      }
+
+      setSessionUserId(user.id);
+      const profileResult = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select('display_name, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+        console.warn('[Supabase] datainput profile refresh failed:', profileResult.error.message || profileResult.error);
+        return;
+      }
+
+      setProfileName(profileResult.data?.display_name || user.email || '');
+      setAvatarUrl(withAvatarVersion(normalizeAvatarUrl(profileResult.data?.avatar_url)));
+    } catch (error) {
+      console.warn('[Supabase] datainput profile refresh error:', error?.message || error);
+    }
+  }, []);
 
   const clearAutoCaptureTimer = useCallback(
     (preserveLock = false) => {
@@ -490,10 +551,15 @@ const DataInputScreen = ({ onNavigate }) => {
         const user = sessionResult?.data?.session?.user || null;
         if (!user) {
           if (isMounted) {
+            setSessionUserId('');
             setProfileName('');
             setAvatarUrl('');
           }
           return;
+        }
+
+        if (isMounted) {
+          setSessionUserId(user.id);
         }
 
         const { data, error } = await supabase
@@ -508,7 +574,7 @@ const DataInputScreen = ({ onNavigate }) => {
 
         if (isMounted) {
           setProfileName(data?.display_name || user.email || '');
-          setAvatarUrl(data?.avatar_url || '');
+          setAvatarUrl(withAvatarVersion(normalizeAvatarUrl(data?.avatar_url)));
         }
 
         const startOfDay = new Date();
@@ -555,6 +621,46 @@ const DataInputScreen = ({ onNavigate }) => {
       isMounted = false;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfileOnly();
+    }, [refreshProfileOnly])
+  );
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      refreshProfileOnly(session?.user || null);
+    });
+
+    return () => {
+      listener?.subscription?.unsubscribe();
+    };
+  }, [refreshProfileOnly]);
+
+  useEffect(() => {
+    if (!sessionUserId) return undefined;
+
+    const profileChannel = supabase
+      .channel(`datainput-profile-sync-${sessionUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: SUPABASE_PROFILES_TABLE,
+          filter: `id=eq.${sessionUserId}`,
+        },
+        () => {
+          refreshProfileOnly();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
+  }, [refreshProfileOnly, sessionUserId]);
 
   // Fiducial validation function - captures a frame and sends to backend for validation
   const checkFiducials = useCallback(async () => {

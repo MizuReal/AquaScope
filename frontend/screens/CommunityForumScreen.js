@@ -25,7 +25,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import Filter from 'bad-words';
 import LottieView from 'lottie-react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import forumAnim from '../assets/public/forumanim.json';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
@@ -81,6 +80,11 @@ const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET ||
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const MAX_CATEGORIES = 5;
 const THREADS_BATCH_SIZE = 5;
+const BOTTOM_TAB_BAR_HEIGHT = 56;
+const BOTTOM_TAB_BAR_MARGIN = 20;
+const FAB_HEIGHT_ESTIMATE = 48;
+const FAB_CLEARANCE = 12;
+const FAB_TAB_GAP = 12;
 
 const normalizeAvatarUrl = (value) => {
   if (!value || typeof value !== 'string') return '';
@@ -122,6 +126,18 @@ const formatRelativeTime = (value) => {
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
   return `${days}d`;
+};
+
+const dedupeById = (items) => {
+  if (!Array.isArray(items) || items.length <= 1) return Array.isArray(items) ? items : [];
+  const seen = new Set();
+  return items.filter((item) => {
+    const id = item?.id;
+    if (!id) return false;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 };
 
 const Avatar = memo(function Avatar({ avatarUrl, name, isDark, size = 44 }) {
@@ -287,7 +303,6 @@ const PostCard = memo(function PostCard({
 
 const CommunityForumScreen = ({ onNavigate }) => {
   const { isDark } = useAppTheme();
-  const insets = useSafeAreaInsets();
   const screenAnim = useRef(new Animated.Value(0)).current;
   const filter = useMemo(() => new Filter(), []);
 
@@ -327,7 +342,92 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [threadLikeBusyId, setThreadLikeBusyId] = useState('');
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [threadDeleteBusyId, setThreadDeleteBusyId] = useState('');
-  const fabBottomOffset = insets.bottom + 92;
+  const fabBottomOffset = BOTTOM_TAB_BAR_MARGIN + BOTTOM_TAB_BAR_HEIGHT + FAB_TAB_GAP;
+  const feedBottomPadding = fabBottomOffset + FAB_HEIGHT_ESTIMATE + FAB_CLEARANCE;
+
+  const applyProfileToForumState = useCallback((userId, profile) => {
+    if (!userId) return;
+    const nextAuthorName = profile?.display_name || 'Community member';
+    const nextAuthorOrg = profile?.organization || '';
+    const nextAuthorAvatar = normalizeAvatarUrl(profile?.avatar_url);
+
+    setThreads((prev) =>
+      prev.map((thread) =>
+        thread.user_id === userId
+          ? {
+              ...thread,
+              authorName: nextAuthorName,
+              authorOrg: nextAuthorOrg,
+              authorAvatar: nextAuthorAvatar,
+            }
+          : thread
+      )
+    );
+
+    setMyThreads((prev) =>
+      prev.map((thread) =>
+        thread.user_id === userId
+          ? {
+              ...thread,
+              authorName: nextAuthorName,
+              authorOrg: nextAuthorOrg,
+              authorAvatar: nextAuthorAvatar,
+            }
+          : thread
+      )
+    );
+
+    setActiveThread((prev) => {
+      if (!prev || prev.user_id !== userId) return prev;
+      return {
+        ...prev,
+        authorName: nextAuthorName,
+        authorOrg: nextAuthorOrg,
+        authorAvatar: nextAuthorAvatar,
+      };
+    });
+
+    setThreadPosts((prev) =>
+      prev.map((post) =>
+        post.user_id === userId
+          ? {
+              ...post,
+              authorName: nextAuthorName,
+              authorOrg: nextAuthorOrg,
+              authorAvatar: nextAuthorAvatar,
+            }
+          : post
+      )
+    );
+  }, []);
+
+  const fetchMyProfile = useCallback(async (user) => {
+    if (!user?.id) return;
+    try {
+      const { data } = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select('display_name, organization, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const normalizedAvatar = normalizeAvatarUrl(data?.avatar_url);
+      const profileVersion = data?.updated_at ? new Date(data.updated_at).getTime() : Date.now();
+      const avatarWithVersion = normalizedAvatar
+        ? `${normalizedAvatar}${normalizedAvatar.includes('?') ? '&' : '?'}v=${profileVersion}`
+        : '';
+
+      setMyAvatarUrl(avatarWithVersion);
+      setMyDisplayName(data?.display_name || '');
+
+      applyProfileToForumState(user.id, {
+        display_name: data?.display_name,
+        organization: data?.organization,
+        avatar_url: avatarWithVersion,
+      });
+    } catch (_err) {
+      // non-critical
+    }
+  }, [applyProfileToForumState]);
 
   const colors = useMemo(() => {
     if (isDark) {
@@ -388,29 +488,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
   useEffect(() => {
     let isMounted = true;
-    const fetchMyProfile = async (user) => {
-      if (!user?.id) return;
-      try {
-        const { data } = await supabase
-          .from(SUPABASE_PROFILES_TABLE)
-          .select('display_name, avatar_url')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (isMounted) {
-          setMyAvatarUrl(normalizeAvatarUrl(data?.avatar_url));
-          if (data?.display_name) setMyDisplayName(data.display_name);
-        }
-      } catch (_err) {
-        // non-critical
-      }
-    };
 
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (isMounted) {
         const user = data?.session?.user || null;
         setSessionUser(user);
-        fetchMyProfile(user);
+        await fetchMyProfile(user);
       }
     };
 
@@ -427,7 +511,53 @@ const CommunityForumScreen = ({ onNavigate }) => {
       isMounted = false;
       listener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [fetchMyProfile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (sessionUser?.id) {
+        fetchMyProfile(sessionUser);
+      }
+    }, [fetchMyProfile, sessionUser])
+  );
+
+  useEffect(() => {
+    if (!sessionUser?.id) return undefined;
+
+    const profileChannel = supabase
+      .channel(`forum-profile-sync-${sessionUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: SUPABASE_PROFILES_TABLE,
+          filter: `id=eq.${sessionUser.id}`,
+        },
+        (payload) => {
+          const next = payload?.new || {};
+          const normalizedAvatar = normalizeAvatarUrl(next.avatar_url);
+          const profileVersion = next.updated_at ? new Date(next.updated_at).getTime() : Date.now();
+          const avatarWithVersion = normalizedAvatar
+            ? `${normalizedAvatar}${normalizedAvatar.includes('?') ? '&' : '?'}v=${profileVersion}`
+            : '';
+
+          setMyAvatarUrl(avatarWithVersion);
+          setMyDisplayName(next.display_name || '');
+
+          applyProfileToForumState(sessionUser.id, {
+            display_name: next.display_name,
+            organization: next.organization,
+            avatar_url: avatarWithVersion,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+    };
+  }, [applyProfileToForumState, sessionUser?.id]);
 
   const fetchThreadsBatch = useCallback(async (offset, limit) => {
     const toIndex = offset + limit - 1;
@@ -455,7 +585,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
     const hydratedThreads = rawThreads.map((thread) => {
       const profile = profileMap.get(thread.user_id) || {};
       const categoryLinks = thread.forum_thread_categories || [];
-      const mappedCategories = categoryLinks.map((link) => link.forum_categories).filter(Boolean);
+      const mappedCategories = dedupeById(categoryLinks.map((link) => link.forum_categories).filter(Boolean));
       return {
         ...thread,
         categories: mappedCategories,
@@ -529,10 +659,10 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
       if (categoryResult.error) throw categoryResult.error;
 
-      const activeCategories = categoryResult.data || [];
+      const activeCategories = dedupeById(categoryResult.data || []);
 
       setCategories(activeCategories);
-      setThreads(batchResult.hydratedThreads);
+      setThreads(dedupeById(batchResult.hydratedThreads));
       setThreadStats(batchResult.stats);
       setHasMoreThreads(batchResult.hydratedThreads.length === THREADS_BATCH_SIZE);
     } catch (error) {
@@ -556,7 +686,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         return;
       }
 
-      setThreads((prev) => [...prev, ...batchResult.hydratedThreads]);
+      setThreads((prev) => dedupeById([...prev, ...batchResult.hydratedThreads]));
       setThreadStats((prev) => ({
         ...prev,
         ...batchResult.stats,
@@ -606,7 +736,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
       const hydratedThreads = rawThreads.map((thread) => {
         const profile = profileMap.get(thread.user_id) || {};
         const categoryLinks = thread.forum_thread_categories || [];
-        const mappedCategories = categoryLinks.map((link) => link.forum_categories).filter(Boolean);
+        const mappedCategories = dedupeById(categoryLinks.map((link) => link.forum_categories).filter(Boolean));
         return {
           ...thread,
           categories: mappedCategories,
@@ -661,7 +791,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         return acc;
       }, {});
 
-      setMyThreads(hydratedThreads);
+      setMyThreads(dedupeById(hydratedThreads));
       setThreadStats((prev) => ({
         ...prev,
         ...stats,
@@ -723,11 +853,11 @@ const CommunityForumScreen = ({ onNavigate }) => {
   }, [myDisplayName, sessionUser]);
 
   const filteredThreads = useMemo(() => {
-    if (selectedMode === 'mine') return myThreads;
-    if (selectedTopics.length === 0) return threads;
-    return threads.filter((thread) =>
+    if (selectedMode === 'mine') return dedupeById(myThreads);
+    if (selectedTopics.length === 0) return dedupeById(threads);
+    return dedupeById(threads.filter((thread) =>
       (thread.categories || []).some((cat) => selectedTopics.includes(cat.id))
-    );
+    ));
   }, [myThreads, selectedMode, selectedTopics, threads]);
 
   const containsBadWords = useCallback((text) => {
@@ -798,7 +928,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         };
       });
 
-      setThreadPosts(enrichedPosts);
+      setThreadPosts(dedupeById(enrichedPosts));
     } catch (error) {
       console.warn('[Supabase] thread load failed:', error?.message || error);
       setReplyError('Unable to load thread replies.');
@@ -869,7 +999,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         userLiked: false,
       };
 
-      setThreadPosts((prev) => [...prev, newPost]);
+      setThreadPosts((prev) => dedupeById([...prev, newPost]));
       setReplyText('');
       setReplyTarget(null);
       setThreadStats((prev) => {
@@ -933,26 +1063,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
           return { ...item, userLiked: nextLiked, likeCount: nextCount };
         })
       );
-
-      if (activeThread) {
-        setThreadStats((prev) => {
-          const current = prev[activeThread.id] || { replies: 0, likes: 0 };
-          return {
-            ...prev,
-            [activeThread.id]: {
-              ...current,
-              likes: Math.max(0, current.likes + (post.userLiked ? -1 : 1)),
-            },
-          };
-        });
-      }
     } catch (error) {
       console.warn('[Supabase] like toggle failed:', error?.message || error);
       setReplyError('Unable to update like right now.');
     } finally {
       setLikeBusyId('');
     }
-  }, [activeThread, likeBusyId, sessionUser]);
+  }, [likeBusyId, sessionUser]);
 
   const syncThreadLikeState = useCallback(async (threadId) => {
     if (!threadId) return;
@@ -1140,8 +1257,8 @@ const CommunityForumScreen = ({ onNavigate }) => {
         authorAvatar: normalizeAvatarUrl(profile.avatar_url),
       };
 
-      setThreads((prev) => [newThread, ...prev]);
-      setMyThreads((prev) => [newThread, ...prev]);
+      setThreads((prev) => dedupeById([newThread, ...prev]));
+      setMyThreads((prev) => dedupeById([newThread, ...prev]));
       setThreadStats((prev) => ({
         ...prev,
         [threadId]: { replies: 0, likes: 0 },
@@ -1434,7 +1551,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </View>
       )}
     </View>
-  ), [categoriesOpen, clearTopics, colors, feedError, isDark, loggedInAs, myThreadsError, onNavigate, selectMode, selectedMode, selectedTopics, tagFilters, toggleCategoriesSection, toggleTopic]);
+  ), [categoriesOpen, clearTopics, colors, feedError, isDark, loggedInAs, myAvatarUrl, myThreadsError, onNavigate, selectMode, selectedMode, selectedTopics, tagFilters, toggleCategoriesSection, toggleTopic]);
 
   const emptyComponent = useMemo(() => {
     if (loading || (selectedMode === 'mine' && myThreadsLoading)) {
@@ -1461,6 +1578,14 @@ const CommunityForumScreen = ({ onNavigate }) => {
     );
   }, [colors, loading, myThreadsLoading, selectedMode, selectedTopics.length]);
 
+  const feedContentStyle = useMemo(
+    () => ({
+      ...styles.feedContent,
+      paddingBottom: feedBottomPadding,
+    }),
+    [feedBottomPadding]
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.screen }}>
     <Animated.View
@@ -1486,7 +1611,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyComponent}
         ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.feedFooterLoader} color="#5eead4" /> : null}
-        contentContainerStyle={styles.feedContent}
+        contentContainerStyle={feedContentStyle}
         showsVerticalScrollIndicator={false}
         refreshing={(loading && !loadingMore) || (selectedMode === 'mine' && myThreadsLoading)}
         onRefresh={handleRefresh}
