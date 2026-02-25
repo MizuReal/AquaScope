@@ -7,9 +7,11 @@ Model: YOLOv8x-cls exported to TorchScript (224x224 input)
 from __future__ import annotations
 
 import logging
+import os
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List
+from urllib.request import urlopen
 
 import numpy as np
 from PIL import Image
@@ -25,11 +27,71 @@ ENTROPY_THRESHOLD    = 0.6    # max allowed Shannon entropy (uniform 4-class ≈
 MARGIN_THRESHOLD     = 0.25   # minimum gap between top-1 and top-2 probability
                               # catches random images where the model hedges between classes
 
-# Resolve model path relative to project root
-_MODEL_PATH = Path(__file__).resolve().parents[3] / "moss_model" / "best.torchscript"
+# Resolve model paths relative to project root
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_LOCAL_MODEL_TS = _PROJECT_ROOT / "moss_model" / "best.torchscript"
+_LOCAL_MODEL_PT = _PROJECT_ROOT / "moss_model" / "best.pt"
+
+# Environment variables (Render/Hugging Face mounting)
+_MODEL_URL_TS = os.getenv("MODEL_URL_TS")
+_MODEL_URL_PT = os.getenv("MODEL_URL_PT")
+_MODEL_PATH_TS_ENV = os.getenv("MODEL_PATH_TS")
+_MODEL_PATH_PT_ENV = os.getenv("MODEL_PATH_PT")
+
+# Default runtime storage path for ephemeral instances (Render free tier)
+_RUNTIME_MODEL_DIR = Path(os.getenv("MODEL_DIR", "/tmp/models"))
+
+# Resolved runtime paths
+_MODEL_TS_PATH: Path | None = None
+_MODEL_PT_PATH: Path | None = None
 
 # Singleton model handle
 _model = None
+
+
+def _download_file(url: str, destination: Path) -> Path:
+    """Download a remote model artifact to destination if needed."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Downloading model artifact: %s -> %s", url, destination)
+    with urlopen(url, timeout=180) as response, destination.open("wb") as output:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            output.write(chunk)
+
+    logger.info("Model artifact downloaded: %s", destination)
+    return destination
+
+
+def _resolve_artifact_paths() -> tuple[Path, Path]:
+    """Resolve and ensure availability of both TS and PT artifacts.
+
+    Priority order:
+      1) Explicit MODEL_PATH_* env vars
+      2) Runtime path under /tmp/models when MODEL_URL_* is set
+      3) Repository local fallback under moss_model/
+    """
+    global _MODEL_TS_PATH, _MODEL_PT_PATH
+    if _MODEL_TS_PATH is not None and _MODEL_PT_PATH is not None:
+        return _MODEL_TS_PATH, _MODEL_PT_PATH
+
+    ts_path = Path(_MODEL_PATH_TS_ENV) if _MODEL_PATH_TS_ENV else (
+        _RUNTIME_MODEL_DIR / "best.torchscript" if _MODEL_URL_TS else _LOCAL_MODEL_TS
+    )
+    pt_path = Path(_MODEL_PATH_PT_ENV) if _MODEL_PATH_PT_ENV else (
+        _RUNTIME_MODEL_DIR / "best.pt" if _MODEL_URL_PT else _LOCAL_MODEL_PT
+    )
+
+    if _MODEL_URL_TS and not ts_path.exists():
+        _download_file(_MODEL_URL_TS, ts_path)
+    if _MODEL_URL_PT and not pt_path.exists():
+        _download_file(_MODEL_URL_PT, pt_path)
+
+    _MODEL_TS_PATH = ts_path
+    _MODEL_PT_PATH = pt_path
+    return _MODEL_TS_PATH, _MODEL_PT_PATH
 
 
 def _load_model():
@@ -40,12 +102,17 @@ def _load_model():
 
     import torch
 
-    if not _MODEL_PATH.exists():
-        raise FileNotFoundError(f"Moss TorchScript model not found at {_MODEL_PATH}")
+    model_ts_path, _ = _resolve_artifact_paths()
+    if not model_ts_path.exists():
+        raise FileNotFoundError(
+            "Moss TorchScript model not found. "
+            f"Checked path: {model_ts_path}. "
+            "Set MODEL_URL_TS for remote download or provide local moss_model/best.torchscript."
+        )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info("Loading moss classifier from %s (device=%s)", _MODEL_PATH, device)
-    _model = torch.jit.load(str(_MODEL_PATH), map_location=device)
+    logger.info("Loading moss classifier from %s (device=%s)", model_ts_path, device)
+    _model = torch.jit.load(str(model_ts_path), map_location=device)
     _model.eval()
     logger.info("Moss classifier loaded successfully")
     return _model
