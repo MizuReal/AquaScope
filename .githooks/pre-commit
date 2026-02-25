@@ -10,4 +10,4 @@ else
   exit 1
 fi
 
-git add hugging-face
+# hugging-face/ is in .gitignore — deployment is handled by GitHub Actions
