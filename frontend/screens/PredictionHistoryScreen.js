@@ -23,6 +23,7 @@ const loadingAnim = require('../assets/public/loading.json');
 const PAGE_SIZE = 10;
 
 const SUPABASE_SAMPLES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_SAMPLES_TABLE || 'field_samples';
+const SUPABASE_CONTAINER_SCANS_TABLE = process.env.EXPO_PUBLIC_SUPABASE_CONTAINER_SCANS_TABLE || 'container_scans';
 const DEFAULT_DECISION_THRESHOLD = 0.58;
 const SAMPLE_SELECT_FIELDS =
   'id, created_at, source, sample_label, color, risk_level, prediction_probability, prediction_is_potable, model_version, anomaly_checks, microbial_risk, microbial_score, possible_bacteria, ph, hardness, solids, chloramines, sulfate, conductivity, organic_carbon, trihalomethanes, turbidity';
@@ -181,6 +182,93 @@ const formatRiskCategoryLabel = (value) => {
     .join(' ');
 };
 
+const formatContainerClassLabel = (value) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return 'Unknown';
+  return normalized
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
+const CONTAINER_CLASS_FILTER_ORDER = ['LightMoss', 'MediumMoss', 'HeavyMoss', 'NOT_RECOGNIZED'];
+
+const CONTAINER_CHIP_COLORS = {
+  LightMoss: {
+    icon: 'sun',
+    iconColorDeselected: '#ca8a04',
+    selectedBg: 'bg-yellow-400',
+    selectedBorder: 'border-transparent',
+    deselectedBgDark: 'bg-yellow-900/20',
+    deselectedBgLight: 'bg-yellow-50',
+    deselectedBorderDark: 'border-yellow-600/50',
+    deselectedBorderLight: 'border-yellow-300',
+    labelDark: 'text-yellow-300',
+    labelLight: 'text-yellow-700',
+    selectedLabel: 'text-slate-900',
+  },
+  MediumMoss: {
+    icon: 'alert-triangle',
+    iconColorDeselected: '#ea580c',
+    selectedBg: 'bg-orange-500',
+    selectedBorder: 'border-transparent',
+    deselectedBgDark: 'bg-orange-900/20',
+    deselectedBgLight: 'bg-orange-50',
+    deselectedBorderDark: 'border-orange-600/50',
+    deselectedBorderLight: 'border-orange-300',
+    labelDark: 'text-orange-300',
+    labelLight: 'text-orange-700',
+    selectedLabel: 'text-white',
+  },
+  HeavyMoss: {
+    icon: 'x-circle',
+    iconColorDeselected: '#dc2626',
+    selectedBg: 'bg-rose-600',
+    selectedBorder: 'border-transparent',
+    deselectedBgDark: 'bg-rose-900/20',
+    deselectedBgLight: 'bg-rose-50',
+    deselectedBorderDark: 'border-rose-600/50',
+    deselectedBorderLight: 'border-rose-300',
+    labelDark: 'text-rose-300',
+    labelLight: 'text-rose-700',
+    selectedLabel: 'text-white',
+  },
+  NOT_RECOGNIZED: {
+    icon: 'help-circle',
+    iconColorDeselected: '#64748b',
+    selectedBg: 'bg-slate-500',
+    selectedBorder: 'border-transparent',
+    deselectedBgDark: 'bg-slate-800/50',
+    deselectedBgLight: 'bg-slate-100',
+    deselectedBorderDark: 'border-slate-600/50',
+    deselectedBorderLight: 'border-slate-300',
+    labelDark: 'text-slate-400',
+    labelLight: 'text-slate-600',
+    selectedLabel: 'text-white',
+  },
+};
+
+const normalizeContainerClassKey = (predictedClass, isValid) => {
+  if (!isValid) return 'NOT_RECOGNIZED';
+  const normalized = String(predictedClass || '').trim();
+  if (!normalized) return null;
+  if (normalized === 'LightMoss' || normalized === 'MediumMoss' || normalized === 'HeavyMoss') {
+    return normalized;
+  }
+  if (/^unknown$/i.test(normalized) || /^not\s*recognized$/i.test(normalized) || /^notrecognized$/i.test(normalized)) {
+    return 'NOT_RECOGNIZED';
+  }
+  return null;
+};
+
+const containerClassLabelFromKey = (key) => {
+  if (key === 'NOT_RECOGNIZED') return 'Not Recognized';
+  return formatContainerClassLabel(key);
+};
+
 const formatDateYmd = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   const year = date.getFullYear();
@@ -218,6 +306,12 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
   const [selectedEndDate, setSelectedEndDate] = useState('');
   const [riskCategoryOptions, setRiskCategoryOptions] = useState([]);
   const [riskCategories, setRiskCategories] = useState([]);
+  const [containerStartDateInput, setContainerStartDateInput] = useState('');
+  const [containerEndDateInput, setContainerEndDateInput] = useState('');
+  const [selectedContainerStartDate, setSelectedContainerStartDate] = useState('');
+  const [selectedContainerEndDate, setSelectedContainerEndDate] = useState('');
+  const [containerClassOptions, setContainerClassOptions] = useState([]);
+  const [containerClasses, setContainerClasses] = useState([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState('start');
@@ -371,6 +465,60 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
     };
   }, [activeTab]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchContainerClassOptions = async () => {
+      if (activeTab !== 'container') return;
+
+      try {
+        const sessionResult = await supabase.auth.getSession();
+        const userId = sessionResult?.data?.session?.user?.id || null;
+        if (!userId) {
+          if (!cancelled) {
+            setContainerClassOptions([]);
+            setContainerClasses([]);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from(SUPABASE_CONTAINER_SCANS_TABLE)
+          .select('predicted_class, is_valid')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false });
+
+        if (error || cancelled) return;
+
+        const dynamicKeys = Array.from(
+          new Set(
+            (data || [])
+              .map((row) => normalizeContainerClassKey(row?.predicted_class, Boolean(row?.is_valid)))
+              .filter(Boolean)
+          )
+        );
+
+        const orderedKeys = [...CONTAINER_CLASS_FILTER_ORDER];
+
+        const options = orderedKeys.map((classKey) => ({
+          key: classKey,
+          label: containerClassLabelFromKey(classKey),
+        }));
+
+        setContainerClassOptions(options);
+        setContainerClasses((prev) => prev.filter((selected) => orderedKeys.includes(selected)));
+      } catch {
+        if (!cancelled) setContainerClassOptions([]);
+      }
+    };
+
+    fetchContainerClassOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
   const items = dataHistory;
 
   const handleScrollNearEnd = ({ nativeEvent }) => {
@@ -418,10 +566,20 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
     });
   };
 
-  const hasActiveFilters = Boolean(selectedStartDate) || Boolean(selectedEndDate) || riskCategories.length > 0;
+  const toggleContainerClass = (className) => {
+    setContainerClasses((prev) => {
+      if (prev.includes(className)) return prev.filter((value) => value !== className);
+      return [...prev, className];
+    });
+  };
 
-  const hasPendingDateChanges =
-    startDateInput.trim() !== selectedStartDate || endDateInput.trim() !== selectedEndDate;
+  const hasActiveFilters = activeTab === 'data'
+    ? Boolean(selectedStartDate) || Boolean(selectedEndDate) || riskCategories.length > 0
+    : Boolean(selectedContainerStartDate) || Boolean(selectedContainerEndDate) || containerClasses.length > 0;
+
+  const hasPendingDateChanges = activeTab === 'data'
+    ? startDateInput.trim() !== selectedStartDate || endDateInput.trim() !== selectedEndDate
+    : containerStartDateInput.trim() !== selectedContainerStartDate || containerEndDateInput.trim() !== selectedContainerEndDate;
 
   const openDatePicker = (target) => {
     setPickerTarget(target);
@@ -433,27 +591,57 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
     if (!pickedDate) return;
     const ymd = formatDateYmd(pickedDate);
     if (!ymd) return;
-    if (pickerTarget === 'start') setStartDateInput(ymd);
-    else setEndDateInput(ymd);
+    if (activeTab === 'data') {
+      if (pickerTarget === 'start') setStartDateInput(ymd);
+      else setEndDateInput(ymd);
+    } else {
+      if (pickerTarget === 'start') setContainerStartDateInput(ymd);
+      else setContainerEndDateInput(ymd);
+    }
   };
 
-  const activePickerValue =
-    parseYmdToDate(pickerTarget === 'start' ? startDateInput : endDateInput) || new Date();
+  const activePickerValue = parseYmdToDate(
+    pickerTarget === 'start'
+      ? (activeTab === 'data' ? startDateInput : containerStartDateInput)
+      : (activeTab === 'data' ? endDateInput : containerEndDateInput)
+  ) || new Date();
 
   const applyDateRange = () => {
-    const nextStart = startDateInput.trim();
-    const nextEnd = endDateInput.trim();
-    setSelectedStartDate(nextStart);
-    setSelectedEndDate(nextEnd);
+    if (activeTab === 'data') {
+      const nextStart = startDateInput.trim();
+      const nextEnd = endDateInput.trim();
+      setSelectedStartDate(nextStart);
+      setSelectedEndDate(nextEnd);
+    } else {
+      const nextStart = containerStartDateInput.trim();
+      const nextEnd = containerEndDateInput.trim();
+      setSelectedContainerStartDate(nextStart);
+      setSelectedContainerEndDate(nextEnd);
+    }
   };
 
   const resetFilters = () => {
-    setStartDateInput('');
-    setEndDateInput('');
-    setSelectedStartDate('');
-    setSelectedEndDate('');
-    setRiskCategories([]);
+    if (activeTab === 'data') {
+      setStartDateInput('');
+      setEndDateInput('');
+      setSelectedStartDate('');
+      setSelectedEndDate('');
+      setRiskCategories([]);
+    } else {
+      setContainerStartDateInput('');
+      setContainerEndDateInput('');
+      setSelectedContainerStartDate('');
+      setSelectedContainerEndDate('');
+      setContainerClasses([]);
+    }
   };
+
+  const activeStartDateInput = activeTab === 'data' ? startDateInput : containerStartDateInput;
+  const activeEndDateInput = activeTab === 'data' ? endDateInput : containerEndDateInput;
+  const activeSelectedStartDate = activeTab === 'data' ? selectedStartDate : selectedContainerStartDate;
+  const activeSelectedEndDate = activeTab === 'data' ? selectedEndDate : selectedContainerEndDate;
+  const activeCategoryOptions = activeTab === 'data' ? riskCategoryOptions : containerClassOptions;
+  const activeSelectedCategories = activeTab === 'data' ? riskCategories : containerClasses;
 
   const getConfidenceColor = (pct) => {
     if (pct >= 80) return { bar: 'bg-emerald-500', text: isDark ? 'text-emerald-300' : 'text-emerald-600' };
@@ -701,7 +889,7 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
           </TouchableOpacity>
         </View>
 
-        {activeTab === 'data' && (
+        {(activeTab === 'data' || activeTab === 'container') && (
           <View className={`mt-3 rounded-2xl border overflow-hidden ${isDark ? 'border-slate-800 bg-slate-950/70' : 'border-slate-200 bg-white'}`}>
 
             {/* ── Collapsible header ── */}
@@ -720,7 +908,7 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                 {hasActiveFilters ? (
                   <View className={`rounded-full min-w-[18px] px-1.5 py-0.5 items-center ${isDark ? 'bg-sky-500/30' : 'bg-sky-500'}`}>
                     <Text className="text-[10px] font-bold text-white">
-                      {(selectedStartDate || selectedEndDate ? 1 : 0) + riskCategories.length}
+                      {(activeSelectedStartDate || activeSelectedEndDate ? 1 : 0) + activeSelectedCategories.length}
                     </Text>
                   </View>
                 ) : null}
@@ -765,7 +953,7 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                     activeOpacity={0.85}
                     onPress={() => openDatePicker('start')}
                     className={`flex-1 rounded-2xl border px-3 py-2.5 ${
-                      startDateInput
+                      activeStartDateInput
                         ? (isDark ? 'border-sky-600/60 bg-sky-900/40' : 'border-sky-300 bg-sky-50')
                         : (isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50')
                     }`}
@@ -775,9 +963,9 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                       <Text className={`text-[9px] font-semibold uppercase ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>From</Text>
                     </View>
                     <Text className={`text-[13px] font-semibold ${
-                      startDateInput ? (isDark ? 'text-sky-200' : 'text-sky-700') : (isDark ? 'text-slate-500' : 'text-slate-400')
+                      activeStartDateInput ? (isDark ? 'text-sky-200' : 'text-sky-700') : (isDark ? 'text-slate-500' : 'text-slate-400')
                     }`}>
-                      {startDateInput || 'Start date'}
+                      {activeStartDateInput || 'Start date'}
                     </Text>
                   </TouchableOpacity>
 
@@ -791,7 +979,7 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                     activeOpacity={0.85}
                     onPress={() => openDatePicker('end')}
                     className={`flex-1 rounded-2xl border px-3 py-2.5 ${
-                      endDateInput
+                      activeEndDateInput
                         ? (isDark ? 'border-sky-600/60 bg-sky-900/40' : 'border-sky-300 bg-sky-50')
                         : (isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50')
                     }`}
@@ -801,9 +989,9 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                       <Text className={`text-[9px] font-semibold uppercase ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>To</Text>
                     </View>
                     <Text className={`text-[13px] font-semibold ${
-                      endDateInput ? (isDark ? 'text-sky-200' : 'text-sky-700') : (isDark ? 'text-slate-500' : 'text-slate-400')
+                      activeEndDateInput ? (isDark ? 'text-sky-200' : 'text-sky-700') : (isDark ? 'text-slate-500' : 'text-slate-400')
                     }`}>
-                      {endDateInput || 'End date'}
+                      {activeEndDateInput || 'End date'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -851,11 +1039,11 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                 <View className="flex-row items-center gap-1.5 mb-2.5">
                   <MaterialCommunityIcons name="tag-multiple-outline" size={13} color={isDark ? '#94a3b8' : '#64748b'} />
                   <Text className={`text-[11px] font-bold uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Risk Category
+                    {activeTab === 'data' ? 'Risk Category' : 'Container Class'}
                   </Text>
                 </View>
 
-                {riskCategoryOptions.length === 0 ? (
+                {activeCategoryOptions.length === 0 ? (
                   <View className={`rounded-2xl border border-dashed py-3 items-center ${isDark ? 'border-slate-700' : 'border-slate-200'}`}>
                     <MaterialCommunityIcons name="tag-off-outline" size={18} color={isDark ? '#475569' : '#cbd5e1'} />
                     <Text className={`mt-1 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -864,14 +1052,45 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
                   </View>
                 ) : (
                   <View className="flex-row flex-wrap gap-2">
-                    {riskCategoryOptions.map((option) => {
-                      const selected = riskCategories.includes(option.key);
+                    {activeCategoryOptions.map((option) => {
+                      const selected = activeSelectedCategories.includes(option.key);
                       const k = option.key.toLowerCase();
+
+                      /* ── Container tab: per-class colour grading ── */
+                      if (activeTab === 'container') {
+                        const cc = CONTAINER_CHIP_COLORS[option.key] || CONTAINER_CHIP_COLORS.NOT_RECOGNIZED;
+                        const chipBg = selected
+                          ? cc.selectedBg
+                          : (isDark ? cc.deselectedBgDark : cc.deselectedBgLight);
+                        const chipBorder = selected
+                          ? cc.selectedBorder
+                          : (isDark ? cc.deselectedBorderDark : cc.deselectedBorderLight);
+                        const iconColor = selected ? (cc.selectedLabel === 'text-slate-900' ? '#1e293b' : '#ffffff') : cc.iconColorDeselected;
+                        const labelColor = selected ? cc.selectedLabel : (isDark ? cc.labelDark : cc.labelLight);
+                        return (
+                          <TouchableOpacity
+                            key={option.key}
+                            activeOpacity={0.8}
+                            onPress={() => toggleContainerClass(option.key)}
+                            className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${chipBg} ${chipBorder}`}
+                          >
+                            <Feather name={cc.icon} size={11} color={iconColor} />
+                            <Text className={`text-[11px] font-semibold ${labelColor}`}>
+                              {option.label}
+                            </Text>
+                            {selected ? (
+                              <Feather name="check" size={10} color={iconColor} />
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      }
+
+                      /* ── Water samples tab: risk-category colour grading ── */
                       const iconName =
-                        k === 'safe'       ? 'check-circle'    :
-                        k === 'borderline' ? 'minus-circle'    :
-                        k === 'watch'      ? 'alert-circle'    :
-                        k === 'unsafe'     ? 'x-circle'        : 'circle';
+                        k === 'safe'       ? 'check-circle' :
+                        k === 'borderline' ? 'minus-circle' :
+                        k === 'watch'      ? 'alert-circle' :
+                        k === 'unsafe'     ? 'x-circle' : 'circle';
                       const iconColor = selected
                         ? '#ffffff'
                         : k === 'safe'       ? '#22c55e'
@@ -929,6 +1148,8 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
         className="px-5"
         contentContainerClassName="pb-28 pt-1"
         showsVerticalScrollIndicator={false}
+        onScroll={handleScrollNearEnd}
+        onScrollEndDrag={handleScrollNearEnd}
         onMomentumScrollEnd={handleScrollNearEnd}
         scrollEventThrottle={16}
       >
@@ -953,7 +1174,16 @@ const PredictionHistoryScreen = ({ onNavigate }) => {
               </Text>
             </View>
           ) : null}
-          {activeTab === 'data' ? items.map(renderCard) : <ContainerScanHistory ref={containerHistoryRef} isDark={isDark} active={activeTab === 'container'} />}
+          {activeTab === 'data' ? items.map(renderCard) : (
+            <ContainerScanHistory
+              ref={containerHistoryRef}
+              isDark={isDark}
+              active={activeTab === 'container'}
+              selectedStartDate={selectedContainerStartDate}
+              selectedEndDate={selectedContainerEndDate}
+              selectedClasses={containerClasses}
+            />
+          )}
           {activeTab === 'data' && loadingMore && (
             <View className="items-center py-6">
               <LottieView source={loadingAnim} autoPlay loop style={{ width: 64, height: 64 }} />

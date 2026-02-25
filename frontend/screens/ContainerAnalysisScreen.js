@@ -139,7 +139,13 @@ const ContainerChatCard = ({ result, isDark }) => {
   const chatScrollRef = useRef(null);
 
   useEffect(() => {
-    if (!result) return;
+    if (!result || !result?.is_valid) {
+      setSuggestion(null);
+      setSuggestionError('');
+      setSuggestionLoading(false);
+      setChatHistory([]);
+      return;
+    }
     let cancelled = false;
     setSuggestion(null);
     setSuggestionError('');
@@ -170,7 +176,7 @@ const ContainerChatCard = ({ result, isDark }) => {
 
   const handleSendChat = useCallback(async () => {
     const trimmed = chatInput.trim();
-    if (!trimmed || chatLoading || !result) return;
+    if (!trimmed || chatLoading || !result || !result?.is_valid) return;
 
     const nextHistory = [...chatHistory, { role: 'user', text: trimmed }];
     setChatHistory(nextHistory);
@@ -191,7 +197,7 @@ const ContainerChatCard = ({ result, isDark }) => {
     }
   }, [chatHistory, chatInput, chatLoading, result]);
 
-  const sendEnabled = !chatLoading && chatInput.trim().length > 0;
+  const sendEnabled = Boolean(result?.is_valid) && !chatLoading && chatInput.trim().length > 0;
   const classLabel = CLASS_META[result?.predicted_class || 'Unknown']?.label || result?.predicted_class || 'Unknown';
 
   return (
@@ -907,25 +913,48 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
 
                   {/* Rejection banner */}
                   {!isValid && (
-                    <View
-                      className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${
-                        isDark
-                          ? 'border-amber-700/40 bg-amber-900/20'
-                          : 'border-amber-200 bg-amber-50'
-                      }`}
-                    >
-                      <MaterialCommunityIcons
-                        name="alert-circle-outline"
-                        size={16}
-                        color={isDark ? '#fcd34d' : '#b45309'}
-                      />
-                      <Text
-                        className={`flex-1 text-[12px] leading-[18px] ${
-                          isDark ? 'text-amber-200' : 'text-amber-800'
+                    <View className="gap-2">
+                      <View
+                        className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${
+                          isDark
+                            ? 'border-amber-700/40 bg-amber-900/20'
+                            : 'border-amber-200 bg-amber-50'
                         }`}
                       >
-                        {rejectionReason || 'Image not recognized as a container'}
-                      </Text>
+                        <MaterialCommunityIcons
+                          name="alert-circle-outline"
+                          size={16}
+                          color={isDark ? '#fcd34d' : '#b45309'}
+                        />
+                        <Text
+                          className={`flex-1 text-[12px] leading-[18px] ${
+                            isDark ? 'text-amber-200' : 'text-amber-800'
+                          }`}
+                        >
+                          {rejectionReason || 'Image not recognized as a container'}
+                        </Text>
+                      </View>
+
+                      <View
+                        className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${
+                          isDark
+                            ? 'border-slate-700/50 bg-slate-900/40'
+                            : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <MaterialCommunityIcons
+                          name="robot-off-outline"
+                          size={16}
+                          color={isDark ? '#94a3b8' : '#64748b'}
+                        />
+                        <Text
+                          className={`flex-1 text-[12px] leading-[18px] ${
+                            isDark ? 'text-slate-300' : 'text-slate-700'
+                          }`}
+                        >
+                          AI advisor is unavailable until a valid container is recognized.
+                        </Text>
+                      </View>
                     </View>
                   )}
 
@@ -1008,7 +1037,7 @@ const ContainerAnalysisScreen = ({ onNavigate }) => {
                     </View>
                   )}
 
-                  <ContainerChatCard result={result} isDark={isDark} />
+                  {isValid ? <ContainerChatCard result={result} isDark={isDark} /> : null}
                 </View>
 
               ) : image && !result ? (

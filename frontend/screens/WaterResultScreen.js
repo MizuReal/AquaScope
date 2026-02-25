@@ -759,7 +759,7 @@ const FiltrationChatCard = ({ result, isDark = true }) => {
 							<View className="flex-row items-center justify-between">
 								<View>
 									<Text className={`text-[16px] font-semibold ${isDark ? 'text-sky-50' : 'text-sky-900'}`}>
-										WaterOps Copilot
+										AquaScope Copilot
 									</Text>
 									<Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
 										Filtration & treatment assistant

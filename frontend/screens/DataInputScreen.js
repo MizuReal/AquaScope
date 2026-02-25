@@ -25,6 +25,7 @@ import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { Camera, CameraView } from 'expo-camera';
 import { Accelerometer } from 'expo-sensors';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import InputField from '../components/InputField';
 import PredictButton from '../components/PredictButton';
@@ -112,6 +113,7 @@ const AUTO_CAPTURE_START_MS = 1200; // Faster capture once ready
 const MAX_ACCEL_DELTA = 0.35;
 const FIDUCIAL_CHECK_INTERVAL_MS = 450; // Check more frequently
 const MIN_FIDUCIALS_FOR_CAPTURE = 4; // Require all 4 corners
+const FLOATING_TAB_BAR_CLEARANCE = 120;
 
 const normalizeAvatarUrl = (value) => {
   if (!value || typeof value !== 'string') return '';
@@ -367,6 +369,7 @@ const CollapsibleSection = ({ title, icon, fieldCount, filledCount, isDark, chil
 
 const DataInputScreen = ({ onNavigate }) => {
   const { isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const [form, setForm] = useState({
     pH: '',
     hardness: '',
@@ -1227,6 +1230,7 @@ const DataInputScreen = ({ onNavigate }) => {
   const alignmentPercent = Math.round(alignmentScore * 100);
   const countdownSeconds = (autoCaptureCountdown / 1000).toFixed(1);
   const countdownLabel = autoCaptureEnabled && autoCaptureCountdown > 0 ? ` · auto capture in ${countdownSeconds}s` : '';
+  const scrollBottomPadding = Math.max(112, insets.bottom + FLOATING_TAB_BAR_CLEARANCE);
   const captureStatusText = cameraReady
     ? autoCaptureEnabled
       ? `${alignmentStatus || 'Hold steady for auto capture'} · alignment ${alignmentPercent}%${countdownLabel}`
@@ -1253,7 +1257,8 @@ const DataInputScreen = ({ onNavigate }) => {
       >
         <ScrollView
           className="px-5 pt-10"
-          contentContainerClassName="pb-28 gap-6"
+          contentContainerClassName="gap-6"
+          contentContainerStyle={{ paddingBottom: scrollBottomPadding }}
           showsVerticalScrollIndicator={false}
         >
           <Animated.View

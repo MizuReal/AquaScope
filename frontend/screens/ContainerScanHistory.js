@@ -43,6 +43,50 @@ const formatTimestamp = (timestamp) => {
   return date.toLocaleString();
 };
 
+const toDateBoundaryIso = (value, endOfDay = false) => {
+  const normalized = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return null;
+  const [yearRaw, monthRaw, dayRaw] = normalized.split('-');
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const date = endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date.toISOString();
+};
+
+const applyContainerFilters = (query, selectedStartDate, selectedEndDate, selectedClasses) => {
+  let filteredQuery = query;
+  const startIso = toDateBoundaryIso(selectedStartDate, false);
+  const endIso = toDateBoundaryIso(selectedEndDate, true);
+  if (startIso) filteredQuery = filteredQuery.gte('created_at', startIso);
+  if (endIso) filteredQuery = filteredQuery.lte('created_at', endIso);
+  if (Array.isArray(selectedClasses) && selectedClasses.length > 0) {
+    const hasNotRecognized = selectedClasses.includes('NOT_RECOGNIZED');
+    const classValues = selectedClasses.filter((value) => value !== 'NOT_RECOGNIZED');
+
+    if (hasNotRecognized && classValues.length > 0) {
+      const list = classValues.join(',');
+      filteredQuery = filteredQuery.or(`is_valid.eq.false,predicted_class.in.(${list})`);
+    } else if (hasNotRecognized) {
+      filteredQuery = filteredQuery.eq('is_valid', false);
+    } else {
+      filteredQuery = filteredQuery.in('predicted_class', classValues);
+    }
+  }
+  return filteredQuery;
+};
+
 const classifyImageUri = (uri) => {
   if (!uri) return 'none';
   if (uri.startsWith('file://')) return 'local-device';
@@ -167,7 +211,13 @@ const ConfidenceBar = ({ label, value, color, isDark }) => {
   );
 };
 
-const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
+const ContainerScanHistory = React.forwardRef(({
+  isDark,
+  active,
+  selectedStartDate = '',
+  selectedEndDate = '',
+  selectedClasses = [],
+}, ref) => {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -192,12 +242,15 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
         return;
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from(SUPABASE_CONTAINER_SCANS_TABLE)
         .select('id, created_at, predicted_class, confidence, is_valid, rejection_reason, entropy, margin, probabilities, image_uri')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .range(from, to);
+        .order('created_at', { ascending: false });
+
+      query = applyContainerFilters(query, selectedStartDate, selectedEndDate, selectedClasses);
+
+      const { data, error } = await query.range(from, to);
 
       if (error) {
         console.warn('[Supabase] failed to load container history:', error.message || error);
@@ -219,6 +272,8 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
     }
   };
 
+  const containerFilterKey = `${selectedStartDate}|${selectedEndDate}|${selectedClasses.slice().sort().join(',')}`;
+
   useEffect(() => {
     isMountedRef.current = true;
     if (!active) return;
@@ -233,7 +288,7 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
     return () => {
       isMountedRef.current = false;
     };
-  }, [active]);
+  }, [active, containerFilterKey]);
 
   useImperativeHandle(ref, () => ({
     loadMore: () => {
@@ -266,6 +321,13 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
 
   useEffect(() => {
     if (!detailOpen || !selectedScan) {
+      return;
+    }
+
+    if (!selectedScan?.is_valid) {
+      setAdvisorText('');
+      setAdvisorError('');
+      setAdvisorLoading(false);
       return;
     }
 
@@ -549,15 +611,28 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
                             </View>
 
                             {!isValid && (
-                              <View className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${isDark ? 'border-amber-700/40 bg-amber-900/20' : 'border-amber-200 bg-amber-50'}`}>
-                                <MaterialCommunityIcons
-                                  name="alert-circle-outline"
-                                  size={16}
-                                  color={isDark ? '#fcd34d' : '#b45309'}
-                                />
-                                <Text className={`flex-1 text-[12px] leading-[18px] ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-                                  {rejectionReason || 'Image not recognized as a container'}
-                                </Text>
+                              <View className="gap-2">
+                                <View className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${isDark ? 'border-amber-700/40 bg-amber-900/20' : 'border-amber-200 bg-amber-50'}`}>
+                                  <MaterialCommunityIcons
+                                    name="alert-circle-outline"
+                                    size={16}
+                                    color={isDark ? '#fcd34d' : '#b45309'}
+                                  />
+                                  <Text className={`flex-1 text-[12px] leading-[18px] ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+                                    {rejectionReason || 'Image not recognized as a container'}
+                                  </Text>
+                                </View>
+
+                                <View className={`flex-row items-start gap-2.5 rounded-2xl border px-4 py-3 ${isDark ? 'border-slate-700/50 bg-slate-900/40' : 'border-slate-200 bg-slate-50'}`}>
+                                  <MaterialCommunityIcons
+                                    name="robot-off-outline"
+                                    size={16}
+                                    color={isDark ? '#94a3b8' : '#64748b'}
+                                  />
+                                  <Text className={`flex-1 text-[12px] leading-[18px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                    AI advisor is unavailable until a valid container is recognized.
+                                  </Text>
+                                </View>
                               </View>
                             )}
 
@@ -575,66 +650,70 @@ const ContainerScanHistory = React.forwardRef(({ isDark, active }, ref) => {
                     </View>
                   </View>
 
-                  <View className={`rounded-[24px] border p-4 ${isDark ? 'border-sky-900/50 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
-                    <View className="mb-3 flex-row items-center gap-2">
-                      <MaterialCommunityIcons name="chart-bar" size={13} color={isDark ? '#38bdf8' : '#0284c7'} />
-                      <Text className={`text-[11px] font-semibold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                        Confidence Breakdown
-                      </Text>
+                  {Boolean(selectedScan?.is_valid) ? (
+                    <View className={`rounded-[24px] border p-4 ${isDark ? 'border-sky-900/50 bg-slate-900/50' : 'border-slate-200 bg-slate-50'}`}>
+                      <View className="mb-3 flex-row items-center gap-2">
+                        <MaterialCommunityIcons name="chart-bar" size={13} color={isDark ? '#38bdf8' : '#0284c7'} />
+                        <Text className={`text-[11px] font-semibold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
+                          Confidence Breakdown
+                        </Text>
+                      </View>
+                      {Object.entries(CLASS_META)
+                        .filter(([cls]) => cls !== 'Unknown')
+                        .map(([cls, { color, label }]) => (
+                          <ConfidenceBar
+                            key={cls}
+                            label={label}
+                            value={Number(selectedScan?.probabilities?.[cls]) || 0}
+                            color={color}
+                            isDark={isDark}
+                          />
+                        ))}
                     </View>
-                    {Object.entries(CLASS_META)
-                      .filter(([cls]) => cls !== 'Unknown')
-                      .map(([cls, { color, label }]) => (
-                        <ConfidenceBar
-                          key={cls}
-                          label={label}
-                          value={Number(selectedScan?.probabilities?.[cls]) || 0}
-                          color={color}
-                          isDark={isDark}
-                        />
-                      ))}
-                  </View>
+                  ) : null}
 
-                  <View className={`rounded-[24px] border p-5 ${isDark ? 'border-sky-900/60 bg-slate-950/50' : 'border-slate-200 bg-white'}`}>
-                    <View className="mb-2 flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-2">
-                        <MaterialCommunityIcons
-                          name="robot-outline"
-                          size={16}
-                          color={isDark ? '#7dd3fc' : '#0284c7'}
-                        />
-                        <Text className={`text-[11px] font-semibold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
-                          Container Advisor
-                        </Text>
+                  {Boolean(selectedScan?.is_valid) ? (
+                    <View className={`rounded-[24px] border p-5 ${isDark ? 'border-sky-900/60 bg-slate-950/50' : 'border-slate-200 bg-white'}`}>
+                      <View className="mb-2 flex-row items-center justify-between">
+                        <View className="flex-row items-center gap-2">
+                          <MaterialCommunityIcons
+                            name="robot-outline"
+                            size={16}
+                            color={isDark ? '#7dd3fc' : '#0284c7'}
+                          />
+                          <Text className={`text-[11px] font-semibold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
+                            Container Advisor
+                          </Text>
+                        </View>
+                        <View className={`rounded-full border px-2 py-0.5 ${isDark ? 'border-sky-800/60' : 'border-sky-200'}`}>
+                          <Text className={`text-[9px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
+                            AI
+                          </Text>
+                        </View>
                       </View>
-                      <View className={`rounded-full border px-2 py-0.5 ${isDark ? 'border-sky-800/60' : 'border-sky-200'}`}>
-                        <Text className={`text-[9px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
-                          AI
+
+                      <Text className={`mb-3 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
+                        Based on class: {CLASS_META[selectedScan?.predicted_class || 'Unknown']?.label || selectedScan?.predicted_class || 'Unknown'}
+                      </Text>
+
+                      {advisorLoading ? (
+                        <View className="items-center py-3">
+                          <ActivityIndicator size="small" color={isDark ? '#38bdf8' : '#0284c7'} />
+                          <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                            Generating cleaning guidance...
+                          </Text>
+                        </View>
+                      ) : advisorError ? (
+                        <Text className={`text-[11px] ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                          {advisorError}
                         </Text>
-                      </View>
+                      ) : (
+                        <Text className={`text-[12px] leading-[18px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                          {formatAdvisorText(advisorText)}
+                        </Text>
+                      )}
                     </View>
-
-                    <Text className={`mb-3 text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-600'}`}>
-                      Based on class: {CLASS_META[selectedScan?.predicted_class || 'Unknown']?.label || selectedScan?.predicted_class || 'Unknown'}
-                    </Text>
-
-                    {advisorLoading ? (
-                      <View className="items-center py-3">
-                        <ActivityIndicator size="small" color={isDark ? '#38bdf8' : '#0284c7'} />
-                        <Text className={`mt-2 text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                          Generating cleaning guidance...
-                        </Text>
-                      </View>
-                    ) : advisorError ? (
-                      <Text className={`text-[11px] ${isDark ? 'text-red-300' : 'text-red-700'}`}>
-                        {advisorError}
-                      </Text>
-                    ) : (
-                      <Text className={`text-[12px] leading-[18px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                        {formatAdvisorText(advisorText)}
-                      </Text>
-                    )}
-                  </View>
+                  ) : null}
             </ScrollView>
           )}
         </SafeAreaView>

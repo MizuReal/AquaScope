@@ -358,7 +358,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
               <View className={`mt-3 flex-row items-center gap-1.5 rounded-full px-3 py-0.5 ${isDark ? 'bg-sky-900/30 border border-sky-800/40' : 'bg-sky-100 border border-sky-200'}`}>
                 <View className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 <Text className={`text-[10.5px] font-semibold tracking-wide ${isDark ? 'text-sky-300' : 'text-sky-700'}`}>
-                  AI WATER ANALYSIS
+                  AquaScope
                 </Text>
               </View>
 
