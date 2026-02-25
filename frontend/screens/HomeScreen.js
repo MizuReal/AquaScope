@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Animated, Modal, TextInput, I
 import LottieView from 'lottie-react-native';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabaseClient';
 import { chatWithGemini } from '../utils/api';
 import homeWaterAnim from '../assets/public/HomeWater.json';
@@ -202,6 +203,8 @@ const isAllowedQualityPrompt = (text = '') => {
 
 const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const { isDark } = useAppTheme();
+	const insets = useSafeAreaInsets();
+	const tabBarClearance = Math.max(148, insets.bottom + 128);
   const heroAnim = useRef(new Animated.Value(0)).current;
   const cardsAnim = useRef(new Animated.Value(0)).current;
 	const [chatOpen, setChatOpen] = useState(false);
@@ -578,7 +581,8 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 		<View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}>
 			<ScrollView
 				className="px-5 pt-10"
-				contentContainerClassName="pb-28 gap-6"
+				contentContainerClassName="gap-6"
+				contentContainerStyle={{ paddingBottom: tabBarClearance }}
 				showsVerticalScrollIndicator={false}
 			>
 				<Animated.View

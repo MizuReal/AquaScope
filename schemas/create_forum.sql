@@ -146,6 +146,10 @@ on public.forum_threads for update
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+create policy "forum_threads_delete_own"
+on public.forum_threads for delete
+using (auth.uid() = user_id);
+
 -- Thread categories: only thread owner can add/remove
 create policy "forum_thread_categories_select"
 on public.forum_thread_categories for select
