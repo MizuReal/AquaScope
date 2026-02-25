@@ -1,0 +1,26 @@
+# ===== Non-frontend directories (not needed for APK build) =====
+backend/
+web/
+docs/
+schemas/
+moss_model/
+moss_dataset/
+csv files/
+
+# ===== Frontend build artifacts & caches =====
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+frontend/web-build/
+
+# ===== Environment files (EAS injects its own) =====
+frontend/.env
+frontend/.env*.local
+
+# ===== OS / editor junk =====
+.DS_Store
+Thumbs.db
+*.log
+
+# ===== Git metadata =====
+.git/
