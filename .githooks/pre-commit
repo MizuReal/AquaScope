@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ ! -d "hugging-face" ]; then
+  exit 0
+fi
+
 if command -v python >/dev/null 2>&1; then
   python tools/sync_backend_to_hf.py
 elif command -v py >/dev/null 2>&1; then
