@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prepare deploy bundle
+        if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
         run: |
           mkdir -p bundle
           rsync -a --exclude '__pycache__/' --exclude '.env' --exclude 'debug_output/captures/' backend/app/ bundle/app/
@@ -27,17 +28,25 @@ jobs:
           cp backend/runtime.txt bundle/runtime.txt
           cp backend/Dockerfile.hf bundle/Dockerfile
 
+      - name: HF sync disabled
+        if: ${{ vars.ENABLE_HF_SYNC != 'true' }}
+        run: |
+          echo "HF sync is disabled. Set repository variable ENABLE_HF_SYNC=true to enable it."
+
       - name: Clone HF Space repo
+        if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           git clone https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO} hf-space
 
       - name: Sync bundle into HF Space
+        if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
         run: |
           rsync -a --delete --exclude ".git/" bundle/ hf-space/
 
       - name: Commit and push if changed
+        if: ${{ vars.ENABLE_HF_SYNC == 'true' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
