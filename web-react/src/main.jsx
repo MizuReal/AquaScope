@@ -10,6 +10,7 @@ import ScansPage from './pages/ScansPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import SettingsPage from './pages/SettingsPage'
 import CommunityPage from './pages/CommunityPage'
+import ProfilePage from './pages/ProfilePage'
 import AdminLayout from './layouts/AdminLayout'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import AdminUsersPage from './pages/AdminUsersPage'
@@ -27,6 +28,7 @@ createRoot(document.getElementById('root')).render(
             <Route index element={<DashboardPage />} />
             <Route path="scans" element={<ScansPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="community" element={<CommunityPage />} />
           </Route>
