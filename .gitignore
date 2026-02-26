@@ -72,3 +72,6 @@ cs
 
 # Legacy Next.js web app (old folder)
 web/
+
+# Debug artifacts
+debug_output/

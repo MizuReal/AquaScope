@@ -1,2 +1,24 @@
-#backend
+# Environment variables
 .env
+
+# Virtual environments (contains installed modules)
+.venv/
+venv/
+env/
+
+# Python cache/compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local/debug artifacts
+debug_output/
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
