@@ -292,11 +292,13 @@ export default function AdminLayout() {
             ))}
           </nav>
 
-          <div className="mt-auto space-y-3 rounded-2xl border border-slate-700 bg-slate-800/50 p-4 text-xs text-slate-400">
-            <p>Mode: Administrator</p>
-            <p>Access level: role = 1</p>
-            <p>Scope: global admin panel</p>
-          </div>
+          {!collapsed && (
+            <div className="mt-auto space-y-3 rounded-2xl border border-slate-700 bg-slate-800/50 p-4 text-xs text-slate-400">
+              <p>Mode: Administrator</p>
+              <p>Access level: role = 1</p>
+              <p>Scope: global admin panel</p>
+            </div>
+          )}
 
           {!collapsed && (
             <Link to="/" className="mt-3 text-xs uppercase tracking-[0.4em] text-sky-400">

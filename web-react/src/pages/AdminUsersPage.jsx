@@ -9,8 +9,30 @@ import { createPortal } from "react-dom";
 
 import { ADMIN_ROLE_VALUE, isAdminRole } from "@/lib/profileRole";
 import { supabase } from "@/lib/supabaseClient";
+import { sendUserDeactivationEmail } from "@/lib/api";
 
 const configMissing = !supabase;
+const SESSION_TIMEOUT_MS = 10000;
+const PROFILES_TIMEOUT_MS = 15000;
+const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
+
+async function withTimeout(promise, timeoutMs, timeoutMessage) {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 /* ── Toast notification system ────────────────────────────── */
 function useToast() {
@@ -105,56 +127,144 @@ export default function AdminUsersPage() {
   const [busyRowId, setBusyRowId] = useState(null);
   const [sorting, setSorting] = useState([{ id: "created_at", desc: true }]);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
+  const [pendingDeactivateUser, setPendingDeactivateUser] = useState(null);
+  const [deactivationReason, setDeactivationReason] = useState("");
+  const [deactivationSubmitting, setDeactivationSubmitting] = useState(false);
+  const mountedRef = useRef(true);
+  const latestLoadRequestIdRef = useRef(0);
   const { toasts, addToast, dismissToast } = useToast();
 
-  const loadProfiles = async () => {
+  const loadProfiles = useCallback(async ({ silent = false, showToastOnError = true } = {}) => {
     if (!supabase) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    setCurrentUserId(session?.user?.id ?? null);
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name, organization, role, status, created_at")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      addToast(error.message || "Unable to load profiles.", "error");
-      setProfiles([]);
-      setLoading(false);
-      return;
+    if (!silent) {
+      setLoading(true);
     }
 
-    setProfiles((data || []).map((profile) => ({
-      ...profile,
-      role: Number(profile.role) || 0,
-      status: profile.status || "active",
-    })));
-    setLoading(false);
-  };
+    const requestId = latestLoadRequestIdRef.current + 1;
+    latestLoadRequestIdRef.current = requestId;
+
+    try {
+      const isCurrentRequest = () => latestLoadRequestIdRef.current === requestId;
+
+      const sessionResult = await withTimeout(
+        supabase.auth.getSession(),
+        SESSION_TIMEOUT_MS,
+        "Session check timed out. Please retry.",
+      );
+
+      if (!mountedRef.current || !isCurrentRequest()) {
+        return;
+      }
+
+      const session = sessionResult?.data?.session || null;
+      setCurrentUserId(session?.user?.id ?? null);
+
+      const profilesResult = await withTimeout(
+        supabase
+          .from(SUPABASE_PROFILES_TABLE)
+          .select("id, display_name, organization, role, status, created_at")
+          .order("created_at", { ascending: false }),
+        PROFILES_TIMEOUT_MS,
+        "Loading profiles timed out. Please retry.",
+      );
+
+      if (!mountedRef.current || !isCurrentRequest()) {
+        return;
+      }
+
+      const { data, error } = profilesResult;
+      if (error) {
+        throw error;
+      }
+
+      setProfiles((data || []).map((profile) => ({
+        ...profile,
+        role: Number(profile.role) || 0,
+        status: profile.status || "active",
+      })));
+    } catch (err) {
+      if (!mountedRef.current || latestLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setProfiles([]);
+      if (showToastOnError) {
+        addToast(err?.message || "Unable to load profiles.", "error");
+      }
+    } finally {
+      if (mountedRef.current && !silent && latestLoadRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
+    }
+  }, [addToast]);
 
   useEffect(() => {
-    loadProfiles();
-  }, []);
+    mountedRef.current = true;
+    loadProfiles({ silent: false, showToastOnError: true });
 
-  const updateProfile = async (userId, payload, successMessage) => {
     if (!supabase) {
-      return;
+      return () => {
+        mountedRef.current = false;
+      };
+    }
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        loadProfiles({ silent: true, showToastOnError: false });
+      }
+
+      if (event === "SIGNED_OUT" && mountedRef.current) {
+        setProfiles([]);
+        setCurrentUserId(null);
+      }
+    });
+
+    const profilesChannel = supabase
+      .channel("admin-users-profiles")
+      .on("postgres_changes", { event: "*", schema: "public", table: SUPABASE_PROFILES_TABLE }, () => {
+        loadProfiles({ silent: true, showToastOnError: false });
+      })
+      .subscribe();
+
+    const handleWindowFocus = () => {
+      loadProfiles({ silent: true, showToastOnError: false });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadProfiles({ silent: true, showToastOnError: false });
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      mountedRef.current = false;
+      authListener.subscription.unsubscribe();
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      supabase.removeChannel(profilesChannel);
+    };
+  }, [loadProfiles]);
+
+  const updateProfile = async (userId, payload, successMessage, options = {}) => {
+    const { showSuccessToast = true } = options;
+
+    if (!supabase) {
+      return false;
     }
 
     setBusyRowId(userId);
 
     try {
       const { data: updated, error } = await supabase
-        .from("profiles")
+        .from(SUPABASE_PROFILES_TABLE)
         .update({
           ...payload,
           updated_at: new Date().toISOString(),
@@ -165,13 +275,13 @@ export default function AdminUsersPage() {
       if (error) {
         addToast(error.message || "Unable to update profile.", "error");
         setBusyRowId(null);
-        return;
+        return false;
       }
 
       if (!updated || updated.length === 0) {
         addToast("Update had no effect — check RLS policies or verify the user exists.", "error");
         setBusyRowId(null);
-        return;
+        return false;
       }
 
       const freshRow = {
@@ -184,10 +294,100 @@ export default function AdminUsersPage() {
         prev.map((profile) => (profile.id === userId ? freshRow : profile)),
       );
       setBusyRowId(null);
-      addToast(successMessage, "success");
+      if (showSuccessToast) {
+        addToast(successMessage, "success");
+      }
+      return true;
     } catch (err) {
       addToast(err?.message || "Unexpected error while updating profile.", "error");
       setBusyRowId(null);
+      return false;
+    }
+  };
+
+  const openDeactivateModal = (profile) => {
+    setPendingDeactivateUser(profile);
+    setDeactivationReason("");
+    setDeactivateModalOpen(true);
+  };
+
+  const closeDeactivateModal = () => {
+    if (deactivationSubmitting) {
+      return;
+    }
+
+    setDeactivateModalOpen(false);
+    setPendingDeactivateUser(null);
+    setDeactivationReason("");
+  };
+
+  const confirmDeactivateAccount = async () => {
+    const reason = deactivationReason.trim();
+    if (!pendingDeactivateUser?.id) {
+      addToast("No user selected for deactivation.", "error");
+      return;
+    }
+
+    if (reason.length < 5) {
+      addToast("Please provide a clear deactivation reason (at least 5 characters).", "error");
+      return;
+    }
+
+    setDeactivationSubmitting(true);
+    try {
+      const deactivated = await updateProfile(
+        pendingDeactivateUser.id,
+        { status: "deactivated" },
+        `Account deactivated for ${pendingDeactivateUser.display_name || "user"}.`,
+        { showSuccessToast: false },
+      );
+
+      if (!deactivated) {
+        return;
+      }
+
+      let accessToken = "";
+      let adminUserId = "";
+
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        accessToken = session?.access_token || "";
+        adminUserId = session?.user?.id || "";
+      } catch {
+      }
+
+      if (!accessToken || !adminUserId) {
+        addToast(
+          `Account deactivated for ${pendingDeactivateUser.display_name || "user"}, but notification email was not sent because the admin session could not be verified.`,
+          "info",
+        );
+      } else {
+        try {
+          await sendUserDeactivationEmail({
+            targetUserId: pendingDeactivateUser.id,
+            adminUserId,
+            reason,
+            accessToken,
+          });
+          addToast(
+            `Account deactivated and email sent to ${pendingDeactivateUser.display_name || "user"}.`,
+            "success",
+          );
+        } catch (emailError) {
+          addToast(
+            `Account deactivated, but email delivery failed: ${emailError?.message || "Unknown email error."}`,
+            "info",
+          );
+        }
+      }
+
+      setDeactivateModalOpen(false);
+      setPendingDeactivateUser(null);
+      setDeactivationReason("");
+    } finally {
+      setDeactivationSubmitting(false);
     }
   };
 
@@ -250,11 +450,13 @@ export default function AdminUsersPage() {
               } disabled:opacity-50`}
               disabled={busyRowId === row.original.id || isSelf}
               onClick={() =>
-                updateProfile(
-                  row.original.id,
-                  { status: nextStatus },
-                  `Account ${nextStatus} for ${row.original.display_name || "user"}.`,
-                )
+                currentStatus === "active"
+                  ? openDeactivateModal(row.original)
+                  : updateProfile(
+                      row.original.id,
+                      { status: nextStatus },
+                      `Account ${nextStatus} for ${row.original.display_name || "user"}.`,
+                    )
               }
             >
               {currentStatus}
@@ -376,6 +578,46 @@ export default function AdminUsersPage() {
           </div>
         )}
       </article>
+
+      {deactivateModalOpen ? (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs uppercase tracking-[0.3em] text-sky-600">Account Deactivation</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">Provide deactivation reason</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              This reason will be emailed to {pendingDeactivateUser?.display_name || "the user"}.
+            </p>
+
+            <textarea
+              value={deactivationReason}
+              onChange={(event) => setDeactivationReason(event.target.value)}
+              rows={5}
+              className="mt-4 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              placeholder="Enter clear reason for account deactivation..."
+              disabled={deactivationSubmitting}
+            />
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                onClick={closeDeactivateModal}
+                disabled={deactivationSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-rose-300 bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+                onClick={confirmDeactivateAccount}
+                disabled={deactivationSubmitting}
+              >
+                {deactivationSubmitting ? "Processing..." : "Deactivate & Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

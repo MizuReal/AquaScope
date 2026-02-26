@@ -172,4 +172,27 @@ export async function exportAnalyticsPdf(payload) {
   return response.blob();
 }
 
+export async function sendUserDeactivationEmail({ targetUserId, adminUserId, reason, accessToken }) {
+  const response = await fetch(`${API_BASE_URL}/admin/notify-user-deactivated`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({
+      target_user_id: targetUserId,
+      admin_user_id: adminUserId,
+      reason,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.detail || payload?.message || "Unable to send deactivation email.");
+  }
+
+  return payload;
+}
+
 export { API_BASE_URL };

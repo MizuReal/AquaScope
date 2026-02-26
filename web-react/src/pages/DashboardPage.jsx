@@ -35,6 +35,41 @@ const pipelineSteps = [
 const configMissing = !supabase || !isSupabaseConfigured;
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+const CONTAINER_SCANS_TABLE_CANDIDATES = [
+  import.meta.env.VITE_PUBLIC_SUPABASE_CONTAINER_SCANS_TABLE,
+  import.meta.env.VITE_PUBLIC_CONTAINER_SAMPLES_TABLE,
+  "container_scans",
+  "container_samples",
+].filter((value, index, arr) => Boolean(value) && arr.indexOf(value) === index);
+
+const MISSING_RELATION_ERROR_CODE = "42P01";
+const MISSING_SCHEMA_ERROR_CODE = "3F000";
+
+const isMissingRelationError = (error) =>
+  error?.code === MISSING_RELATION_ERROR_CODE || error?.code === MISSING_SCHEMA_ERROR_CODE;
+
+const countRowsForUser = async (table, userId) => {
+  const { count, error } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+  return { count: count || 0, error };
+};
+
+const resolveContainerScansTableForUser = async (userId) => {
+  for (const table of CONTAINER_SCANS_TABLE_CANDIDATES) {
+    const result = await countRowsForUser(table, userId);
+    if (!result.error) {
+      return result.count;
+    }
+
+    if (isMissingRelationError(result.error)) {
+      continue;
+    }
+  }
+
+  return 0;
+};
 
 const resolveAvatarUrl = async (rawUrlOrPath) => {
   if (!rawUrlOrPath) return "";
@@ -241,8 +276,11 @@ export default function DashboardPage() {
 
         try {
           const uid = data.session.user.id;
-          const { count: fc } = await supabase.from("field_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
-          const { count: cc } = await supabase.from("container_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
+          const { count: fc } = await supabase
+            .from("field_samples")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", uid);
+          const cc = await resolveContainerScansTableForUser(uid);
           if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
 
           const { data: sampleData } = await supabase

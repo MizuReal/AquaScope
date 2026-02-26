@@ -18,6 +18,7 @@ from app.routes.microbial_risk import router as microbial_router
 from app.routes.chat import router as chat_router
 from app.routes.container import router as container_router
 from app.routes.export import router as export_router
+from app.routes.admin_notifications import router as admin_notifications_router
 
 # Enable debug logging for fiducial detection
 logging.basicConfig(level=logging.DEBUG)
@@ -87,6 +88,7 @@ app.include_router(microbial_router, prefix="/predict", tags=["microbial-risk"])
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(container_router, prefix="/container", tags=["container"])
 app.include_router(export_router, prefix="/export", tags=["export"])
+app.include_router(admin_notifications_router, prefix="/admin", tags=["admin"])
 
 # ── Startup diagnostics ──────────────────────────────────────────────
 logger = logging.getLogger(__name__)

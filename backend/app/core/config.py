@@ -29,6 +29,14 @@ class Settings:
 		self.app_host: str = os.getenv("APP_HOST", "127.0.0.1")
 		self.app_port: int = int(os.getenv("APP_PORT", "8000"))
 
+		# SMTP
+		self.smtp_host: str = os.getenv("SMTP_HOST", "")
+		self.smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+		self.smtp_secure: bool = os.getenv("SMTP_SECURE", "false").lower() in {"1", "true", "yes"}
+		self.smtp_user: str = os.getenv("SMTP_USER", "")
+		self.smtp_pass: str = os.getenv("SMTP_PASS", "")
+		self.smtp_from: str = os.getenv("SMTP_FROM", "")
+
 	@property
 	def database_url(self) -> str:
 		"""Construct the SQLAlchemy-compatible Postgres URL from env pieces."""
