@@ -58,12 +58,12 @@ except FileNotFoundError:
 	CONFIRMED_HTML = """<!DOCTYPE html><html><body><p>Email confirmed. You can close this page.</p></body></html>"""
 
 
-@app.get("/health", tags=["health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
 def health_check() -> dict:
 	return {"status": "ok"}
 
 
-@app.get("/", tags=["health"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["health"])
 def root() -> dict:
 	return {"status": "ok", "service": "ml-aaw-backend"}
 
