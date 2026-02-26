@@ -24,3 +24,7 @@ Thumbs.db
 
 # ===== Git metadata =====
 .git/
+
+# =====FOLDER ====
+deploy/
+deploy
