@@ -274,6 +274,7 @@ export default function CommunityForumPage() {
   const [composeError, setComposeError] = useState("");
   const [composeLoading, setComposeLoading] = useState(false);
   const [likeBusyId, setLikeBusyId] = useState("");
+  const [categoriesOpen, setCategoriesOpen] = useState(true);
 
   const syncSessionProfile = useCallback(async (user) => {
     if (!user?.id) return;
@@ -453,15 +454,33 @@ export default function CommunityForumPage() {
       label: category.label,
       slug: category.slug,
     }));
-    return [{ id: "all", label: "All" }, ...dynamic];
-  }, [categories]);
+    const base = [{ id: "all", label: "All" }];
+    if (sessionUser?.id) {
+      base.push({ id: "mine", label: "My Threads" });
+    }
+    return [...base, ...dynamic];
+  }, [categories, sessionUser?.id]);
 
   const filteredThreads = useMemo(() => {
     if (selectedTag === "all") return threads;
+    if (selectedTag === "mine") {
+      if (!sessionUser?.id) return [];
+      return threads.filter((thread) => thread.user_id === sessionUser.id);
+    }
     return threads.filter((thread) =>
       (thread.categories || []).some((category) => category.id === selectedTag),
     );
-  }, [threads, selectedTag]);
+  }, [threads, selectedTag, sessionUser?.id]);
+
+  const loggedInAs = useMemo(() => {
+    const metaName = sessionUser?.user_metadata?.display_name
+      || sessionUser?.user_metadata?.full_name
+      || sessionUser?.user_metadata?.name;
+    const emailName = sessionUser?.email ? sessionUser.email.split("@")[0] : "";
+    return metaName || emailName || "user";
+  }, [sessionUser]);
+
+  const topicFilters = useMemo(() => tagFilters.filter((tag) => tag.id !== "all" && tag.id !== "mine"), [tagFilters]);
 
   const openThread = async (thread) => {
     setActiveThread(thread);
@@ -812,7 +831,7 @@ export default function CommunityForumPage() {
   }
 
   return (
-    <section className="px-6 py-10 text-slate-900 lg:px-12">
+    <section className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900 lg:px-12">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-3 flex justify-center">
@@ -828,6 +847,20 @@ export default function CommunityForumPage() {
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
             Share field signals, lab wins, and policy drafts in one workflow.
           </p>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-xs font-bold text-slate-700">
+                {buildInitials(loggedInAs)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-slate-500">Hi there 👋</p>
+                <p className="truncate text-sm font-semibold text-slate-900">{loggedInAs}</p>
+              </div>
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+                Forum Feed
+              </span>
+            </div>
+          </div>
           <div className="mt-4 grid gap-2 md:grid-cols-3">
             {HIGHLIGHTS.map((item) => (
               <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
@@ -839,7 +872,7 @@ export default function CommunityForumPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            {tagFilters.map((tag) => {
+            {tagFilters.filter((tag) => tag.id === "all" || tag.id === "mine").map((tag) => {
               const active = selectedTag === tag.id;
               return (
                 <button
@@ -879,6 +912,62 @@ export default function CommunityForumPage() {
             </button>
           </div>
         </div>
+
+        {topicFilters.length > 0 ? (
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setCategoriesOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between px-4 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Browse Topics</p>
+                {selectedTag !== "all" && selectedTag !== "mine" ? (
+                  <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                    1 active
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedTag !== "all" && selectedTag !== "mine" ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedTag("all");
+                    }}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+                <span className="text-slate-500">{categoriesOpen ? "˄" : "˅"}</span>
+              </div>
+            </button>
+
+            {categoriesOpen ? (
+              <div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 pb-4 pt-3">
+                {topicFilters.map((tag) => {
+                  const active = selectedTag === tag.id;
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => setSelectedTag(tag.id)}
+                      className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                        active
+                          ? "border-sky-200 bg-sky-50 text-sky-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      {tag.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {feedError ? (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{feedError}</div>

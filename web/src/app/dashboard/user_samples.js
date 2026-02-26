@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { getContainerCleaningSuggestion } from "@/lib/api";
 
 import noAnim from "../../../public/not.json";
 import warnAnim from "../../../public/warning.json";
@@ -11,8 +12,51 @@ import yesAnim from "../../../public/yes.json";
 
 const WATER_SAMPLES_TABLE =
 	process.env.NEXT_PUBLIC_SUPABASE_SAMPLES_TABLE || "field_samples";
-const CONTAINER_SAMPLES_TABLE =
-	process.env.NEXT_PUBLIC_CONTAINER_SAMPLES_TABLE || "container_samples";
+const CONTAINER_SCANS_TABLE =
+	process.env.NEXT_PUBLIC_SUPABASE_CONTAINER_SCANS_TABLE ||
+	process.env.NEXT_PUBLIC_CONTAINER_SAMPLES_TABLE ||
+	"container_scans";
+
+const formatContainerClassLabel = (value) => {
+	const normalized = String(value || "").trim();
+	if (!normalized) return "Unknown";
+	return normalized
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/[_-]+/g, " ")
+		.split(" ")
+		.filter(Boolean)
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+		.join(" ");
+};
+
+const CONTAINER_CLASS_META = {
+	Clean: { label: "Clean", color: "text-emerald-700", chip: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+	LightMoss: { label: "Light Moss", color: "text-yellow-700", chip: "border-yellow-200 bg-yellow-50 text-yellow-700" },
+	MediumMoss: { label: "Medium Moss", color: "text-orange-700", chip: "border-orange-200 bg-orange-50 text-orange-700" },
+	HeavyMoss: { label: "Heavy Moss", color: "text-rose-700", chip: "border-rose-200 bg-rose-50 text-rose-700" },
+	Unknown: { label: "Not Recognized", color: "text-slate-600", chip: "border-slate-200 bg-slate-50 text-slate-600" },
+};
+
+const CONTAINER_CLASS_ORDER = ["Clean", "LightMoss", "MediumMoss", "HeavyMoss"];
+
+const getContainerSeverityNote = (predictedClass, isValid) => {
+	if (!isValid) {
+		return "The image could not be confidently classified. Ensure the full container is clearly visible and try again.";
+	}
+	if (predictedClass === "Clean") {
+		return "Container surface appears clean with no visible biological growth.";
+	}
+	if (predictedClass === "LightMoss") {
+		return "Minor moss growth detected. Routine cleaning is recommended.";
+	}
+	if (predictedClass === "MediumMoss") {
+		return "Moderate moss growth detected. Clean before next use.";
+	}
+	if (predictedClass === "HeavyMoss") {
+		return "Heavy contamination detected. Immediate cleaning or replacement is advised.";
+	}
+	return "Container class captured. Review confidence breakdown for detail.";
+};
 
 const formatTimestamp = (value) => {
 	if (!value) return "timestamp unavailable";
@@ -40,17 +84,33 @@ const buildPredictedClass = (row) => {
 	return row?.risk_level ? `Non-potable (${row.risk_level})` : "Non-potable";
 };
 
+const buildContainerPredictedClass = (row) => {
+	if (!row?.is_valid) return "Not Recognized";
+	return formatContainerClassLabel(row?.predicted_class);
+};
+
+const deriveContainerStatus = (row) => {
+	if (!row?.is_valid) return "Review";
+	const predictedClass = String(row?.predicted_class || "").trim();
+	if (predictedClass === "Clean") return "Cleared";
+	if (predictedClass === "LightMoss") return "Review";
+	if (predictedClass === "MediumMoss" || predictedClass === "HeavyMoss") return "Alert";
+	return "Review";
+};
+
 const buildDisplayRow = (row, type) => {
-	const confidence = Number.isFinite(row?.prediction_probability)
-		? Number(row.prediction_probability)
+	const confidence = Number.isFinite(
+		type === "container" ? row?.confidence : row?.prediction_probability,
+	)
+		? Number(type === "container" ? row.confidence : row.prediction_probability)
 		: 0;
 	return {
 		id: row?.id || "unknown",
 		timestamp: formatTimestamp(row?.created_at),
 		location: row?.sample_label || row?.source || (type === "container" ? "Container" : "Sample"),
-		predictedClass: buildPredictedClass(row),
+		predictedClass: type === "container" ? buildContainerPredictedClass(row) : buildPredictedClass(row),
 		confidence,
-		status: deriveStatus(row?.risk_level),
+		status: type === "container" ? deriveContainerStatus(row) : deriveStatus(row?.risk_level),
 		raw: row,
 		type,
 	};
@@ -155,6 +215,17 @@ const formatValue = (value, suffix = "") => {
 	return `${value}${suffix}`;
 };
 
+const formatAdvisorText = (text = "") =>
+	String(text)
+		.replace(/\r\n/g, "\n")
+		.replace(/^\s*#{1,6}\s+/gm, "")
+		.replace(/^\s*[-*]\s+/gm, "• ")
+		.replace(/\*\*(.*?)\*\*/g, "$1")
+		.replace(/__(.*?)__/g, "$1")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+
 export default function UserSamples() {
 	const [activeTab, setActiveTab] = useState("water");
 	const [loading, setLoading] = useState(false);
@@ -166,6 +237,9 @@ export default function UserSamples() {
 	const [pageSize, setPageSize] = useState(10);
 	const [detailItem, setDetailItem] = useState(null);
 	const [detailOpen, setDetailOpen] = useState(false);
+	const [containerAdvisorText, setContainerAdvisorText] = useState("");
+	const [containerAdvisorLoading, setContainerAdvisorLoading] = useState(false);
+	const [containerAdvisorError, setContainerAdvisorError] = useState("");
 
 	const items = useMemo(
 		() => (activeTab === "water" ? waterItems : containerItems),
@@ -223,8 +297,11 @@ export default function UserSamples() {
 					}
 				} else {
 					const { data, error: samplesError, count } = await supabase
-						.from(CONTAINER_SAMPLES_TABLE)
-						.select("*", { count: "exact" })
+						.from(CONTAINER_SCANS_TABLE)
+						.select(
+							"id, created_at, predicted_class, confidence, is_valid, rejection_reason, entropy, margin, probabilities, image_uri",
+							{ count: "exact" },
+						)
 						.eq("user_id", userId)
 						.order("created_at", { ascending: false })
 						.range(start, end);
@@ -258,6 +335,61 @@ export default function UserSamples() {
 			isMounted = false;
 		};
 	}, [activeTab, page, pageSize]);
+
+	useEffect(() => {
+		if (!detailOpen || !detailItem || detailItem.type !== "container") {
+			setContainerAdvisorText("");
+			setContainerAdvisorError("");
+			setContainerAdvisorLoading(false);
+			return;
+		}
+
+		if (!detailItem.raw?.is_valid) {
+			setContainerAdvisorText("");
+			setContainerAdvisorError("");
+			setContainerAdvisorLoading(false);
+			return;
+		}
+
+		let cancelled = false;
+		setContainerAdvisorText("");
+		setContainerAdvisorError("");
+		setContainerAdvisorLoading(true);
+
+		const analysisPayload = {
+			predicted_class: detailItem.raw?.predicted_class || "Unknown",
+			confidence: Number.isFinite(detailItem.raw?.confidence) ? Number(detailItem.raw.confidence) : 0,
+			is_valid: Boolean(detailItem.raw?.is_valid),
+			rejection_reason: detailItem.raw?.rejection_reason || null,
+			entropy: detailItem.raw?.entropy,
+			margin: detailItem.raw?.margin,
+			probabilities:
+				detailItem.raw?.probabilities && typeof detailItem.raw.probabilities === "object"
+					? detailItem.raw.probabilities
+					: {},
+		};
+
+		getContainerCleaningSuggestion(analysisPayload)
+			.then((response) => {
+				if (!cancelled) {
+					setContainerAdvisorText(response?.suggestion || "No suggestion available.");
+				}
+			})
+			.catch((error) => {
+				if (!cancelled) {
+					setContainerAdvisorError(error?.message || "Failed to get cleaning guidance.");
+				}
+			})
+			.finally(() => {
+				if (!cancelled) {
+					setContainerAdvisorLoading(false);
+				}
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [detailOpen, detailItem]);
 
 	const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 	const startIndex = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -368,8 +500,8 @@ export default function UserSamples() {
 							<th scope="col" className="px-4 py-3 text-left">Prediction</th>
 							<th scope="col" className="px-4 py-3 text-left">Confidence</th>
 							<th scope="col" className="px-4 py-3 text-left">Status</th>
-							<th scope="col" className="px-4 py-3 text-left">Timestamp</th>
 							<th scope="col" className="px-4 py-3 text-right">Actions</th>
+							<th scope="col" className="px-4 py-3 text-left">Timestamp</th>
 						</tr>
 					</thead>
 					<tbody className="divide-y divide-slate-100 bg-white">
@@ -402,7 +534,6 @@ export default function UserSamples() {
 											{item.status}
 										</span>
 									</td>
-									<td className="px-4 py-3 text-xs text-slate-500">{item.timestamp}</td>
 									<td className="px-4 py-3 text-right">
 										<button
 											type="button"
@@ -415,6 +546,7 @@ export default function UserSamples() {
 											View details
 										</button>
 									</td>
+									<td className="px-4 py-3 text-xs text-slate-500">{item.timestamp}</td>
 								</tr>
 							);
 						})}
@@ -452,6 +584,142 @@ export default function UserSamples() {
 						{(() => {
 							const confidenceValue = Number.isFinite(detailItem.confidence) ? detailItem.confidence : 0;
 							const confidencePct = Math.round(confidenceValue * 100);
+							if (detailItem.type === "container") {
+								const isValid = Boolean(detailItem.raw?.is_valid);
+								const predictedClass = String(detailItem.raw?.predicted_class || "").trim();
+								const containerMeta = isValid
+									? CONTAINER_CLASS_META[predictedClass] || CONTAINER_CLASS_META.Unknown
+									: CONTAINER_CLASS_META.Unknown;
+								const rejectionReason = detailItem.raw?.rejection_reason;
+								const entropyValue = Number.isFinite(Number(detailItem.raw?.entropy))
+									? Number(detailItem.raw.entropy)
+									: null;
+								const marginValue = Number.isFinite(Number(detailItem.raw?.margin))
+									? Number(detailItem.raw.margin)
+									: null;
+								const probabilities =
+									detailItem.raw?.probabilities && typeof detailItem.raw.probabilities === "object"
+										? detailItem.raw.probabilities
+										: {};
+
+								return (
+									<div className="mt-6 space-y-6">
+										<div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-white p-6">
+											<div className="flex flex-wrap items-start justify-between gap-4">
+												<div className="flex items-start gap-4">
+													<div className="h-24 w-24 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+														{detailItem.raw?.image_uri ? (
+															<img
+																src={detailItem.raw.image_uri}
+																alt="Container scan"
+																className="h-full w-full object-cover"
+															/>
+														) : (
+															<div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
+																No image
+															</div>
+														)}
+													</div>
+													<div>
+														<p className="text-xs uppercase tracking-[0.3em] text-slate-500">Container class</p>
+														<h3 className={`mt-2 text-3xl font-semibold ${containerMeta.color}`}>
+															{containerMeta.label}
+														</h3>
+														<p className="mt-2 text-sm text-slate-500">
+															{getContainerSeverityNote(predictedClass, isValid)}
+														</p>
+													</div>
+												</div>
+												<span className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.3em] ${containerMeta.chip}`}>
+													{isValid ? "Container recognized" : "Not recognized"}
+												</span>
+											</div>
+
+											<div className="mt-6 grid gap-4 lg:grid-cols-2">
+												<div className="rounded-2xl border border-slate-200 bg-white p-4">
+													<p className="text-xs uppercase tracking-[0.3em] text-slate-500">Detection confidence</p>
+													<div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+														<div
+															className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600"
+															style={{ width: `${Math.min(100, Math.max(0, confidenceValue * 100))}%` }}
+														/>
+													</div>
+													<p className="mt-3 text-3xl font-semibold text-slate-900">{confidencePct}%</p>
+													<p className="mt-1 text-xs text-slate-500">
+														Entropy {entropyValue != null ? entropyValue.toFixed(3) : "--"} · Margin {marginValue != null ? `${Math.round(marginValue * 100)}%` : "--"}
+													</p>
+												</div>
+
+												<div className="rounded-2xl border border-slate-200 bg-white p-4">
+													<p className="text-xs uppercase tracking-[0.3em] text-slate-500">Scan status</p>
+													{isValid ? (
+														<p className="mt-3 text-sm text-slate-700">
+															Container image passed validation and classification.
+														</p>
+													) : (
+														<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+															{rejectionReason || "Image not recognized as a valid container capture."}
+														</div>
+													)}
+												</div>
+											</div>
+
+											{isValid ? (
+												<div className="rounded-3xl border border-slate-200 bg-white p-6">
+													<p className="text-xs uppercase tracking-[0.3em] text-slate-500">Confidence breakdown</p>
+													<div className="mt-4 space-y-3">
+														{CONTAINER_CLASS_ORDER.map((classKey) => {
+															const value = Number(probabilities?.[classKey]) || 0;
+															return (
+																<div key={classKey}>
+																	<div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+																		<span>{formatContainerClassLabel(classKey)}</span>
+																		<span>{Math.round(value * 100)}%</span>
+																	</div>
+																	<div className="h-2 overflow-hidden rounded-full bg-slate-100">
+																		<div
+																			className="h-full rounded-full bg-gradient-to-r from-sky-300 to-sky-600"
+																			style={{ width: `${Math.min(100, Math.max(0, value * 100))}%` }}
+																		/>
+																	</div>
+																</div>
+															);
+														})}
+													</div>
+												</div>
+											) : null}
+
+											{isValid ? (
+												<div className="rounded-3xl border border-slate-200 bg-white p-6">
+													<div className="mb-2 flex items-center justify-between">
+														<p className="text-xs uppercase tracking-[0.3em] text-slate-500">Container advisor</p>
+														<span className="rounded-full border border-sky-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-sky-700">
+															AI
+														</span>
+													</div>
+													<p className="mb-3 text-xs text-slate-500">
+														Based on class: {containerMeta.label}
+													</p>
+													{containerAdvisorLoading ? (
+														<p className="text-sm text-slate-500">Generating cleaning guidance...</p>
+													) : containerAdvisorError ? (
+														<p className="text-sm text-rose-700">{containerAdvisorError}</p>
+													) : (
+														<p className="text-sm leading-6 text-slate-700">{formatAdvisorText(containerAdvisorText)}</p>
+													)}
+												</div>
+											) : null}
+
+											<div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
+												<span>
+													{detailItem.timestamp}
+													{detailItem.id ? ` · #${String(detailItem.id).slice(0, 8)}` : ""}
+												</span>
+											</div>
+										</div>
+									</div>
+								);
+							}
 							const decisionThreshold = 0.5;
 							const isPotable = detailItem.raw?.prediction_is_potable;
 							const verdictLabel =

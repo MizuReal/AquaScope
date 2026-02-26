@@ -960,7 +960,10 @@ const DataInputScreen = ({ onNavigate }) => {
               Fill the tall frame, keep all four fiducial squares visible, and avoid glare.
             </Text>
           </View>
-          <View className="absolute inset-x-0 bottom-36 items-center px-10">
+          <View
+            className="absolute inset-x-0 items-center px-10"
+            style={{ bottom: Math.max(220, insets.bottom + 190) }}
+          >
             <View className="w-full max-w-[360px]">
               {/* Fiducial detection indicator */}
               <View className="mb-3 flex-row items-center justify-between">
@@ -985,21 +988,6 @@ const DataInputScreen = ({ onNavigate }) => {
                   </Text>
                 </View>
               </View>
-              <View className="flex-row items-center justify-between">
-                <Text className="text-[12px] font-semibold uppercase tracking-wide text-emerald-100/90">
-                  Stability
-                </Text>
-                <Text className="text-[12px] font-semibold text-emerald-50">{alignmentPercent}%</Text>
-              </View>
-              <View className="mt-2 h-2 rounded-full bg-white/15">
-                <View
-                  className="h-full rounded-full bg-emerald-300"
-                  style={{ width: `${Math.min(100, Math.max(0, alignmentPercent))}%` }}
-                />
-              </View>
-              <Text className="mt-1 text-[11px] text-emerald-100/80">
-                {alignmentStatus || 'Center the sheet and hold steady'}
-              </Text>
             </View>
           </View>
         </View>
