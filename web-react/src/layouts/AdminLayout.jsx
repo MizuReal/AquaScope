@@ -247,17 +247,17 @@ export default function AdminLayout() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex">
         <aside
-          className={`${sidebarWidth} sticky top-0 flex h-screen flex-col border-r border-slate-200 bg-white px-4 py-6 transition-all duration-300 ease-out`}
+          className={`${sidebarWidth} sticky top-0 flex h-screen flex-col border-r border-slate-700 bg-slate-900 px-4 py-6 transition-all duration-300 ease-out`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold tracking-[0.4em] text-sky-600">AQ</span>
-              {!collapsed && <p className="text-sm text-slate-500">Admin</p>}
+              <span className="text-xs font-semibold tracking-[0.4em] text-sky-400">AQ</span>
+              {!collapsed && <p className="text-sm text-slate-400">Admin</p>}
             </div>
             <button
               type="button"
               aria-label="Toggle sidebar"
-              className="rounded-full border border-slate-200 bg-slate-50 p-2 text-slate-500 hover:bg-slate-100"
+              className="rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:bg-slate-700"
               onClick={() => setCollapsed((prev) => !prev)}
             >
               <svg
@@ -279,8 +279,8 @@ export default function AdminLayout() {
                 key={item.label}
                 className={`flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-left text-sm uppercase tracking-[0.35em] transition ${
                   activeItem === item.label
-                    ? "border-sky-200 bg-sky-50 text-sky-700"
-                    : "text-slate-500 hover:border-slate-200 hover:bg-slate-50"
+                    ? "border-sky-500/30 bg-sky-500/15 text-sky-400"
+                    : "text-slate-400 hover:border-slate-600 hover:bg-slate-800"
                 }`}
                 onClick={() => handleNavItemClick(item)}
               >
@@ -292,14 +292,14 @@ export default function AdminLayout() {
             ))}
           </nav>
 
-          <div className="mt-auto space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+          <div className="mt-auto space-y-3 rounded-2xl border border-slate-700 bg-slate-800/50 p-4 text-xs text-slate-400">
             <p>Mode: Administrator</p>
             <p>Access level: role = 1</p>
             <p>Scope: global admin panel</p>
           </div>
 
           {!collapsed && (
-            <Link to="/" className="mt-3 text-xs uppercase tracking-[0.4em] text-sky-600">
+            <Link to="/" className="mt-3 text-xs uppercase tracking-[0.4em] text-sky-400">
               Back to site
             </Link>
           )}

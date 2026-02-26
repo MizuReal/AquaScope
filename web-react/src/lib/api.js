@@ -154,4 +154,22 @@ export async function getContainerCleaningSuggestion(analysis) {
   return response.json();
 }
 
+export async function exportAnalyticsPdf(payload) {
+  const response = await fetch(`${API_BASE_URL}/export/analytics-pdf`, {
+    method: "POST",
+    headers: {
+      Accept: "application/pdf",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const maybeJson = await response.json().catch(() => ({}));
+    throw new Error(maybeJson?.detail || "Unable to export analytics PDF.");
+  }
+
+  return response.blob();
+}
+
 export { API_BASE_URL };

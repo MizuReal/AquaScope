@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
@@ -21,13 +21,6 @@ const waterParameters = [
   { name: "Turbidity", range: "1.5 – 6.7", unit: "NTU", desc: "Water clarity" },
 ];
 
-const quickActions = [
-  { title: "Scan a lab form", description: "Use OCR to capture water quality data from a printed or handwritten form", endpoint: "/ocr/data-card", icon: "📷" },
-  { title: "Predict potability", description: "Run the gradient-boosted model to check if a water sample is safe to drink", endpoint: "/predict/potability", icon: "🔬" },
-  { title: "Assess microbial risk", description: "Grade bacteria colony counts against WHO thresholds and risk categories", endpoint: "/predict/microbial-risk", icon: "🦠" },
-  { title: "Ask the AI assistant", description: "Get filtration suggestions and plain-language explanations from Llama 3.3", endpoint: "/chat/message", icon: "💬" },
-];
-
 const pipelineSteps = [
   { stage: "Data ingestion", detail: "REST API, OCR, or manual entry" },
   { stage: "Fiducial detection", detail: "Auto-align scanned forms with marker recognition" },
@@ -39,6 +32,31 @@ const pipelineSteps = [
 
 const configMissing = !supabase || !isSupabaseConfigured;
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
+const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+
+const resolveAvatarUrl = async (rawUrlOrPath) => {
+  if (!rawUrlOrPath) return "";
+  // If it's already a fully-qualified URL, return as-is
+  console.debug('[avatar] resolveAvatarUrl input:', rawUrlOrPath);
+  if (/^https?:\/\//i.test(rawUrlOrPath)) {
+    console.debug('[avatar] input is full URL, returning as-is');
+    return rawUrlOrPath;
+  }
+  // If it contains the bucket segment, extract path
+  const marker = `/${SUPABASE_AVATAR_BUCKET}/`;
+  let path = rawUrlOrPath;
+  const idx = rawUrlOrPath.indexOf(marker);
+  if (idx !== -1) path = rawUrlOrPath.slice(idx + marker.length);
+
+  try {
+    const { data } = supabase.storage.from(SUPABASE_AVATAR_BUCKET).getPublicUrl(path);
+    console.debug('[avatar] getPublicUrl result:', data);
+    return data?.publicUrl || "";
+  } catch (e) {
+    console.error('[avatar] resolveAvatarUrl error:', e);
+    return "";
+  }
+};
 const CHAT_TABS = { WATER: "water_quality", DATA: "my_data" };
 
 const pickDisplayName = (user) => {
@@ -125,10 +143,52 @@ export default function DashboardPage() {
   const [chatHistory, setChatHistory] = useState([]);
   const [chatTab, setChatTab] = useState(CHAT_TABS.WATER);
   const [chatModalActive, setChatModalActive] = useState(false);
+  const [lastSample, setLastSample] = useState(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialModalActive, setTutorialModalActive] = useState(false);
   const [forumSpotlight, setForumSpotlight] = useState(null);
-  const [openSections, setOpenSections] = useState({ quickActions: false, waterParameters: false });
+  const [spotlightAvatarFailed, setSpotlightAvatarFailed] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+
+  const hydrateIdentity = useCallback(async (user, isActive = () => true) => {
+    if (!user) return;
+
+    const metadataName = pickDisplayName(user);
+    const metadataAvatar = pickAvatarUrl(user);
+    if (isActive()) {
+      setDisplayName(metadataName);
+      setAvatarFailed(false);
+    }
+
+    const resolvedMetaAvatar = await resolveAvatarUrl(metadataAvatar);
+    if (isActive()) {
+      setAvatarUrl(resolvedMetaAvatar || metadataAvatar || "");
+    }
+
+    try {
+      const profileResult = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select("avatar_url, display_name")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!isActive() || profileResult.error || !profileResult.data) {
+        return;
+      }
+
+      if (profileResult.data.display_name) {
+        setDisplayName(profileResult.data.display_name);
+      }
+
+      if (profileResult.data.avatar_url) {
+        const resolved = await resolveAvatarUrl(profileResult.data.avatar_url);
+        if (isActive()) {
+          setAvatarUrl(resolved || profileResult.data.avatar_url);
+        }
+      }
+    } catch {
+    }
+  }, []);
 
   /* ── Auth bootstrap ─────────────────────────────────────── */
   useEffect(() => {
@@ -136,47 +196,97 @@ export default function DashboardPage() {
     let alive = true;
 
     const bootstrap = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!alive) return;
-      if (error) { setAuthError("Unable to verify your session. Please try logging in again."); setChecking(false); return; }
-      if (!data?.session) { setRedirecting(true); navigate("/", { replace: true }); return; }
-
-      setDisplayName(pickDisplayName(data.session.user));
-      setAvatarUrl(pickAvatarUrl(data.session.user));
-      setAvatarFailed(false);
-      setAuthReady(true);
-      setChecking(false);
-
       try {
-        const uid = data.session.user.id;
-        const { count: fc } = await supabase.from("field_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
-        const { count: cc } = await supabase.from("container_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
-        if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
-      } catch { /* non-critical */ }
+        const { data, error } = await supabase.auth.getSession();
+        if (!alive) return;
+        if (error) {
+          setAuthError("Unable to verify your session. Please try logging in again.");
+          setChecking(false);
+          return;
+        }
+        if (!data?.session) {
+          setChecking(false);
+          setRedirecting(true);
+          navigate("/", { replace: true });
+          return;
+        }
 
-      try {
-        const tr = await supabase.from("forum_threads").select("id, user_id, title, body, created_at, forum_thread_categories(category_id, forum_categories(id, slug, label))").order("created_at", { ascending: false }).limit(50);
-        if (!tr.error && (tr.data || []).length > 0) {
-          const sel = tr.data[Math.floor(Math.random() * tr.data.length)];
-          let profile = null;
-          if (sel?.user_id) { const pr = await supabase.from(SUPABASE_PROFILES_TABLE).select("id, display_name, organization").eq("id", sel.user_id).maybeSingle(); profile = pr.data || null; }
-          const md = data.session.user?.user_metadata || {};
-          const authorName = profile?.display_name || (sel.user_id === data.session.user.id ? md.display_name || md.full_name || md.name || data.session.user.email?.split("@")[0] : null) || "Community member";
-          const cats = (sel.forum_thread_categories || []).map((i) => i.forum_categories).filter(Boolean);
-          if (alive) setForumSpotlight({ id: sel.id, title: sel.title, body: sel.body, created_at: sel.created_at, authorName, authorOrg: profile?.organization || "", categories: cats });
-        } else if (alive) { setForumSpotlight(null); }
-      } catch { if (alive) setForumSpotlight(null); }
+        setAuthReady(true);
+        setChecking(false);
+        hydrateIdentity(data.session.user, () => alive);
+
+        try {
+          const uid = data.session.user.id;
+          const { count: fc } = await supabase.from("field_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
+          const { count: cc } = await supabase.from("container_samples").select("*", { count: "exact", head: true }).eq("user_id", uid);
+          if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
+
+          const { data: sampleData } = await supabase
+            .from("field_samples")
+            .select("id, sample_label, ph, turbidity, risk_level, prediction_is_potable, prediction_probability, hardness, chloramines, created_at")
+            .eq("user_id", uid)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (alive && sampleData) setLastSample(sampleData);
+        } catch {
+        }
+
+        try {
+          const tr = await supabase.from("forum_threads").select("id, user_id, title, body, created_at, forum_thread_categories(category_id, forum_categories(id, slug, label))").order("created_at", { ascending: false }).limit(50);
+          if (!tr.error && (tr.data || []).length > 0) {
+            const sel = tr.data[Math.floor(Math.random() * tr.data.length)];
+            let profile = null;
+            if (sel?.user_id) { const pr = await supabase.from(SUPABASE_PROFILES_TABLE).select("id, display_name, organization, avatar_url").eq("id", sel.user_id).maybeSingle(); profile = pr.data || null; }
+            const md = data.session.user?.user_metadata || {};
+            const authorName = profile?.display_name || (sel.user_id === data.session.user.id ? md.display_name || md.full_name || md.name || data.session.user.email?.split("@")[0] : null) || "Community member";
+            const sessionAuthorAvatar = sel.user_id === data.session.user.id ? (pickAvatarUrl(data.session.user) || "") : "";
+            const rawAuthorAvatar = profile?.avatar_url || sessionAuthorAvatar;
+            const authorAvatar = rawAuthorAvatar ? ((await resolveAvatarUrl(rawAuthorAvatar)) || rawAuthorAvatar) : "";
+            const cats = (sel.forum_thread_categories || []).map((i) => i.forum_categories).filter(Boolean);
+            if (alive) {
+              setSpotlightAvatarFailed(false);
+              setForumSpotlight({ id: sel.id, title: sel.title, body: sel.body, created_at: sel.created_at, authorName, authorOrg: profile?.organization || "", authorAvatar, categories: cats });
+            }
+          } else if (alive) {
+            setForumSpotlight(null);
+            setSpotlightAvatarFailed(false);
+          }
+        } catch {
+          if (alive) {
+            setForumSpotlight(null);
+            setSpotlightAvatarFailed(false);
+          }
+        }
+      } catch {
+        if (!alive) return;
+        setAuthError("Unable to verify your session. Please try logging in again.");
+        setChecking(false);
+      }
     };
 
     bootstrap();
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) { if (event === "SIGNED_OUT") { setAuthReady(false); setRedirecting(true); navigate("/", { replace: true }); } }
-      else { setAuthReady(true); setDisplayName(pickDisplayName(session.user)); setAvatarUrl(pickAvatarUrl(session.user)); setAvatarFailed(false); }
+      if (!session) {
+        if (event === "SIGNED_OUT") {
+          setChecking(false);
+          setAuthReady(false);
+          setRedirecting(true);
+          navigate("/", { replace: true });
+        }
+        return;
+      }
+
+      (async () => {
+        setAuthReady(true);
+        setChecking(false);
+        hydrateIdentity(session.user, () => alive);
+      })();
     });
 
     return () => { alive = false; listener.subscription.unsubscribe(); };
-  }, [navigate]);
+  }, [hydrateIdentity, navigate]);
 
   /* ── Early returns ──────────────────────────────────────── */
   if (configMissing) {
@@ -196,8 +306,8 @@ export default function DashboardPage() {
     const next = [...chatHistory, { role: "user", text: msg }];
     setChatHistory(next); setChatInput(""); setChatLoading(true); setChatError("");
     const ctx = chatTab === CHAT_TABS.WATER
-      ? { focus: "water_quality", guidance: "Focus on water quality interpretation, filtration suggestions, risk-level explanation, and safe follow-up actions.", water_parameters: waterParameters }
-      : { focus: "my_data", guidance: "Focus on the user's activity and trends, summarize what their dashboard metrics imply, and suggest next steps based on personal data.", dashboard_metrics: userStats, user_name: displayName };
+      ? { focus: "water_quality", guidance: "Focus on water quality interpretation, filtration suggestions, risk-level explanation, and safe follow-up actions. The user's most recent sample data is provided — reference it directly when relevant.", water_parameters: waterParameters, ...(lastSample ? { last_sample: { label: lastSample.sample_label || "last sample", ph: lastSample.ph, turbidity: lastSample.turbidity, hardness: lastSample.hardness, chloramines: lastSample.chloramines, risk_level: lastSample.risk_level, is_potable: lastSample.prediction_is_potable, confidence: lastSample.prediction_probability, recorded_at: lastSample.created_at } } : {}) }
+      : { focus: "my_data", guidance: "Focus on the user's activity and trends, summarize what their dashboard metrics imply, and suggest next steps based on personal data.", dashboard_metrics: userStats, user_name: displayName, ...(lastSample ? { last_sample: { risk_level: lastSample.risk_level, is_potable: lastSample.prediction_is_potable, recorded_at: lastSample.created_at } } : {}) };
     try {
       const p = await chatWithCopilot({ source: "web-dashboard", user_stats: userStats, context: ctx }, next, msg);
       setChatHistory((prev) => [...prev, { role: "assistant", text: p.reply || "No response received." }]);
@@ -210,6 +320,27 @@ export default function DashboardPage() {
   const openTutorialModal = () => { setTutorialOpen(true); setTimeout(() => setTutorialModalActive(true), 10); };
   const closeTutorialModal = () => { setTutorialModalActive(false); setTimeout(() => setTutorialOpen(false), 220); };
   const handleChatTabChange = (t) => { if (t === chatTab) return; setChatTab(t); setChatHistory([]); setChatInput(""); setChatError(""); };
+
+  /* ── Last-sample contextual summary for chatbot card ───── */
+  const buildSampleGreeting = () => {
+    if (!lastSample) return null;
+    const label = lastSample.sample_label ? `"${lastSample.sample_label}"` : "your last sample";
+    const potable = lastSample.prediction_is_potable;
+    const risk = lastSample.risk_level || (potable ? "low" : "high");
+    const pct = lastSample.prediction_probability != null ? `${Math.round(lastSample.prediction_probability * 100)}%` : null;
+    const ph = lastSample.ph != null ? lastSample.ph.toFixed(2) : null;
+    const turb = lastSample.turbidity != null ? lastSample.turbidity.toFixed(2) : null;
+    const date = lastSample.created_at ? new Date(lastSample.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null;
+
+    const riskColor = risk.toLowerCase().includes("unsafe") || risk.toLowerCase().includes("high")
+      ? "text-rose-600"
+      : risk.toLowerCase().includes("watch") || risk.toLowerCase().includes("medium")
+      ? "text-amber-600"
+      : "text-emerald-600";
+
+    return { label, potable, risk, pct, ph, turb, date, riskColor };
+  };
+  const sampleGreeting = buildSampleGreeting();
 
   const promptSuggestions = chatTab === CHAT_TABS.WATER
     ? ["Explain safe pH and turbidity ranges in simple terms.", "What filtration setup is best for microbial risk?", "How should I interpret watch vs unsafe risk levels?"]
@@ -229,17 +360,26 @@ export default function DashboardPage() {
             <button type="button" onClick={openTutorialModal} className="inline-flex items-center gap-2 rounded-lg border border-sky-500 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700">
               <IconSpark className="h-3.5 w-3.5" />Tutorial
             </button>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
-              {avatarUrl && !avatarFailed ? (
-                <img src={avatarUrl} alt={`${displayName} profile picture`} className="h-7 w-7 rounded-full border border-sky-200 object-cover" referrerPolicy="no-referrer" onError={() => setAvatarFailed(true)} />
-              ) : (
-                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-[10px] font-semibold text-sky-700">{buildInitials(displayName)}</span>
-              )}
-              <div className="leading-tight">
-                <p className="text-[9px] uppercase tracking-wider text-slate-400">Signed in</p>
-                <p className="text-xs font-semibold text-slate-700">{displayName}</p>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
+                {avatarUrl && !avatarFailed ? (
+                  <img
+                    src={avatarUrl}
+                    alt={`${displayName} profile picture`}
+                    className="h-7 w-7 rounded-full border border-sky-200 object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      console.error('[avatar] image load failed:', avatarUrl, e?.nativeEvent || e);
+                      setAvatarFailed(true);
+                    }}
+                  />
+                ) : (
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-[10px] font-semibold text-sky-700">{buildInitials(displayName)}</span>
+                )}
+                <div className="leading-tight">
+                  <p className="text-[9px] uppercase tracking-wider text-slate-400">Signed in</p>
+                  <p className="text-xs font-semibold text-slate-700">{displayName}</p>
+                </div>
               </div>
-            </div>
             <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 shadow-sm">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-emerald-600 text-white"><IconData className="h-3.5 w-3.5" /></span>
               <div className="leading-tight"><p className="text-[9px] uppercase tracking-wider text-emerald-700">Scans</p><p className="text-sm font-bold text-emerald-700">{userStats.scans}</p></div>
@@ -253,21 +393,110 @@ export default function DashboardPage() {
       </header>
 
       {/* AI Chatbot Launcher */}
-      <div className="mt-6 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[180px_1fr]">
-        <div className="rounded-lg border border-sky-200 bg-sky-50/70 p-2">
-          <Lottie animationData={cuteRobotAnim} loop autoplay className="h-32 w-full" />
-        </div>
-        <div className="flex flex-col justify-center gap-3">
+      <div className="mt-6 overflow-hidden rounded-2xl border-2 border-sky-200 bg-white shadow-md">
+        {/* Card header bar */}
+        <div className="flex items-center gap-3 border-b border-sky-100 bg-gradient-to-r from-sky-600 to-cyan-500 px-5 py-3">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white"><IconBot className="h-4 w-4" /></span>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-sky-600">AI Assistant</p>
-            <h2 className="mt-0.5 text-base font-semibold text-slate-800">Chat with AquaScope Copilot</h2>
-            <p className="mt-1 text-xs text-slate-500">Personalized support for your water analysis workflow — ask questions, interpret results, and get next-step guidance.</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-white/80">AI Assistant</p>
+            <p className="text-sm font-semibold text-white">AquaScope Copilot</p>
           </div>
-          <div>
-            <button type="button" className="group flex w-full max-w-xl items-center gap-2.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left shadow-sm transition hover:border-sky-300 hover:bg-sky-50" onClick={openChatModal}>
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-100 text-sky-700"><IconBot className="h-3.5 w-3.5" /></span>
-              <span className="flex-1 truncate text-xs text-slate-500">Start a conversation with AquaScope Copilot...</span>
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-sky-600 text-white transition group-hover:bg-sky-700"><IconSend className="h-3.5 w-3.5" /></span>
+          {sampleGreeting && (
+            <span className={`ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide shadow-sm ${sampleGreeting.potable ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-white/80" />
+              {sampleGreeting.potable ? "Potable" : "Not Potable"}
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-0 lg:grid-cols-[160px_1fr]">
+          {/* Robot animation */}
+          <div className="flex items-center justify-center border-b border-sky-100 bg-sky-50/60 p-4 lg:border-b-0 lg:border-r lg:border-sky-100">
+            <Lottie animationData={cuteRobotAnim} loop autoplay className="h-28 w-28" />
+          </div>
+
+          {/* Main content */}
+          <div className="flex flex-col gap-4 p-5">
+            {sampleGreeting ? (
+              <>
+                {/* Last reading header */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Last Sample Reading</p>
+                    <p className="mt-0.5 text-sm font-bold text-slate-800">{sampleGreeting.label}{sampleGreeting.date ? <span className="ml-2 text-xs font-normal text-slate-400">— {sampleGreeting.date}</span> : null}</p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1 text-xs font-semibold capitalize shadow-sm ${
+                    sampleGreeting.risk.toLowerCase().includes("unsafe") || sampleGreeting.risk.toLowerCase().includes("high")
+                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                      : sampleGreeting.risk.toLowerCase().includes("watch") || sampleGreeting.risk.toLowerCase().includes("medium")
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }`}>
+                    <span className={`h-2 w-2 rounded-full ${
+                      sampleGreeting.risk.toLowerCase().includes("unsafe") || sampleGreeting.risk.toLowerCase().includes("high")
+                        ? "bg-rose-500"
+                        : sampleGreeting.risk.toLowerCase().includes("watch") || sampleGreeting.risk.toLowerCase().includes("medium")
+                        ? "bg-amber-500"
+                        : "bg-emerald-500"
+                    }`} />
+                    {sampleGreeting.risk} risk
+                  </span>
+                </div>
+
+                {/* Metrics grid */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {sampleGreeting.pct && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Confidence</p>
+                      <p className="mt-1 text-lg font-bold text-slate-800">{sampleGreeting.pct}</p>
+                    </div>
+                  )}
+                  {sampleGreeting.ph && (
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-500">pH Level</p>
+                      <p className="mt-1 text-lg font-bold text-sky-700">{sampleGreeting.ph}</p>
+                      <p className="text-[10px] text-slate-400">Target: 6.5–8.5</p>
+                    </div>
+                  )}
+                  {sampleGreeting.turb && (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-500">Turbidity</p>
+                      <p className="mt-1 text-lg font-bold text-violet-700">{sampleGreeting.turb}</p>
+                      <p className="text-[10px] text-slate-400">NTU</p>
+                    </div>
+                  )}
+                  <div className={`rounded-xl border px-3 py-2.5 ${sampleGreeting.potable ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}>
+                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${sampleGreeting.potable ? "text-emerald-500" : "text-rose-500"}`}>Status</p>
+                    <p className={`mt-1 text-sm font-bold ${sampleGreeting.potable ? "text-emerald-700" : "text-rose-700"}`}>{sampleGreeting.potable ? "✓ Safe" : "✗ Unsafe"}</p>
+                    <p className="text-[10px] text-slate-400">for drinking</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Your AI water analysis assistant</p>
+                <p className="mt-1 text-xs text-slate-500">Ask questions, interpret results, and get next-step guidance — personalized to your workflow.</p>
+              </div>
+            )}
+
+            {/* Chat button */}
+            <button
+              type="button"
+              className="group flex w-full items-center gap-3 rounded-xl border-2 border-sky-200 bg-sky-50 px-4 py-3 text-left transition hover:border-sky-400 hover:bg-sky-100"
+              onClick={openChatModal}
+            >
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-sm"><IconBot className="h-4 w-4" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-sky-700">
+                  {sampleGreeting ? "Ask about your last reading" : "Start a conversation"}
+                </p>
+                <p className="truncate text-[11px] text-slate-400">
+                  {sampleGreeting
+                    ? `${sampleGreeting.potable ? "Potable" : "Not potable"} · ${sampleGreeting.risk} risk${sampleGreeting.ph ? ` · pH ${sampleGreeting.ph}` : ""} — tap to discuss`
+                    : "How can I help you today?"}
+                </p>
+              </div>
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-sm transition group-hover:bg-sky-700"><IconSend className="h-3.5 w-3.5" /></span>
             </button>
           </div>
         </div>
@@ -282,7 +511,11 @@ export default function DashboardPage() {
                 <div className="h-10 w-10 rounded-xl border border-sky-200 bg-sky-50 p-1"><Lottie animationData={aiAnim} loop autoplay className="h-full w-full" /></div>
                 <div>
                   <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><IconBot className="h-4 w-4" />AquaScope Copilot</p>
-                  <p className="text-xs text-slate-500">Hi {displayName}, I can help with your water results and dashboard activity.</p>
+                  <p className="text-xs text-slate-500">
+                    {sampleGreeting
+                      ? `Hi ${displayName}! I can see your last reading. How can I help you today?`
+                      : `Hi ${displayName}! How can I help you today?`}
+                  </p>
                 </div>
               </div>
               <button type="button" className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={closeChatModal}><IconClose className="h-3.5 w-3.5" />Close</button>
@@ -299,7 +532,30 @@ export default function DashboardPage() {
 
             <div className="mt-4 h-[min(20rem,38dvh)] space-y-2 overflow-y-auto rounded-2xl border border-sky-100 bg-white/90 p-4">
               {chatHistory.length === 0 ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">{chatTab === CHAT_TABS.WATER ? "Ask about risk levels, threshold meaning, filtration options, and interpretation of water parameters." : "Ask for summaries and recommendations based on your dashboard activity and prediction history."}</div>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-700"><IconBot className="h-3.5 w-3.5" /></span>
+                    <div className="rounded-2xl rounded-tl-none border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm space-y-1.5">
+                      <p className="font-medium">How can I help you today?</p>
+                      {sampleGreeting ? (
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          I can see {sampleGreeting.label}{sampleGreeting.date ? ` from ${sampleGreeting.date}` : ""}.
+                          It was marked as{" "}
+                          <span className={`font-semibold ${sampleGreeting.potable ? "text-emerald-600" : "text-rose-600"}`}>
+                            {sampleGreeting.potable ? "potable" : "not potable"}
+                          </span>
+                          {sampleGreeting.pct && <> ({sampleGreeting.pct} confidence)</>}
+                          {" "}with a <span className={`font-semibold capitalize ${sampleGreeting.riskColor}`}>{sampleGreeting.risk}</span> risk level
+                          {sampleGreeting.ph && <>, pH {sampleGreeting.ph}</>}
+                          {sampleGreeting.turb && <>, turbidity {sampleGreeting.turb} NTU</>}.
+                          {" "}Want me to break down what these numbers mean, or suggest next steps?
+                        </p>
+                      ) : (
+                        <p className="text-xs text-slate-500">{chatTab === CHAT_TABS.WATER ? "Ask about risk levels, threshold meaning, filtration options, and interpretation of water parameters." : "Ask for summaries and recommendations based on your dashboard activity and prediction history."}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
               ) : chatHistory.map((m, i) => (
                 <div key={`${m.role}-${i}`} className={`max-w-[85%] rounded-2xl border px-4 py-3 text-sm shadow-sm ${m.role === "user" ? "ml-auto border-sky-300 bg-sky-100 text-slate-800" : "border-slate-200 bg-white text-slate-700"}`}>
                   <div className="mb-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">{m.role === "user" ? <IconData className="h-3 w-3" /> : <IconBot className="h-3 w-3" />}{m.role === "user" ? "You" : "Copilot"}</div>
@@ -395,7 +651,7 @@ export default function DashboardPage() {
 
       {/* Community spotlight */}
       <div className="mt-6">
-        <article className="overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-5 shadow-sm">
+        <article className="overflow-hidden rounded-xl border-2 border-violet-300 bg-gradient-to-br from-violet-50 via-white to-sky-50 p-5 shadow-md">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12"><Lottie animationData={forumAnim} loop autoplay className="h-full w-full" /></div>
@@ -407,7 +663,19 @@ export default function DashboardPage() {
             <div className="mt-4 rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-violet-200 bg-violet-100 text-xs font-semibold text-violet-700">{buildInitials(forumSpotlight.authorName)}</div>
+                  <div className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-violet-200 bg-violet-100 text-xs font-semibold text-violet-700">
+                    {forumSpotlight.authorAvatar && !spotlightAvatarFailed ? (
+                      <img
+                        src={forumSpotlight.authorAvatar}
+                        alt={`${forumSpotlight.authorName} profile picture`}
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={() => setSpotlightAvatarFailed(true)}
+                      />
+                    ) : (
+                      buildInitials(forumSpotlight.authorName)
+                    )}
+                  </div>
                   <div><p className="text-sm font-semibold text-slate-900">{forumSpotlight.authorName}</p><p className="text-xs text-slate-500">{forumSpotlight.authorOrg || "Community"}</p></div>
                 </div>
                 <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500"><IconClock className="h-3 w-3" />{formatRelativeTime(forumSpotlight.created_at)}</span>
@@ -426,54 +694,38 @@ export default function DashboardPage() {
         </article>
       </div>
 
-      {/* Quick Actions + Water Parameters */}
-      <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
-        <article className="flex h-fit w-full flex-col gap-4 self-start rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <button type="button" onClick={() => setOpenSections((p) => ({ ...p, quickActions: !p.quickActions }))} aria-expanded={openSections.quickActions} className="flex items-center justify-between text-left">
-            <div className="flex items-center gap-2.5"><span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700"><IconData className="h-4 w-4" /></span><div><p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">Quick actions</p><p className="text-xs text-slate-500">Core system capabilities</p></div></div>
-            <IconChevron className={`h-5 w-5 text-slate-500 transition-transform ${openSections.quickActions ? "rotate-180" : ""}`} />
-          </button>
-          {openSections.quickActions && (
-            <div className="space-y-2.5">
-              {quickActions.map((a, i) => (
-                <div key={a.title} className={`rounded-lg border px-4 py-3 shadow-sm transition hover:-translate-y-0.5 ${i === 1 ? "border-emerald-200 bg-emerald-50" : i === 2 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-start gap-3"><span className="mt-0.5 text-xl">{a.icon}</span><div className="flex-1"><p className="text-sm font-semibold text-slate-900">{a.title}</p><p className="mt-0.5 text-xs text-slate-500">{a.description}</p><p className="mt-1.5 rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] text-slate-500">{a.endpoint}</p></div></div>
-                </div>
-              ))}
-            </div>
-          )}
-        </article>
-
-        <article className="flex h-fit w-full flex-col gap-4 self-start rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm">
-          <button type="button" onClick={() => setOpenSections((p) => ({ ...p, waterParameters: !p.waterParameters }))} aria-expanded={openSections.waterParameters} className="flex items-center justify-between text-left">
-            <div className="flex items-center gap-2.5"><span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700"><IconWater className="h-4 w-4" /></span><div><p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">Water parameters</p><p className="text-xs text-slate-500">9 features analyzed</p></div></div>
-            <IconChevron className={`h-5 w-5 text-slate-500 transition-transform ${openSections.waterParameters ? "rotate-180" : ""}`} />
-          </button>
-          {openSections.waterParameters && (
-            <div className="space-y-2">
-              {waterParameters.map((p) => (
-                <div key={p.name} className="flex items-center justify-between rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs shadow-sm">
-                  <div><p className="font-semibold text-slate-900">{p.name}</p><p className="text-[10px] text-slate-500">{p.desc}</p></div>
-                  <div className="text-right"><p className="font-mono text-[10px] font-semibold text-slate-700">{p.range}</p>{p.unit && <p className="text-[9px] text-slate-500">{p.unit}</p>}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </article>
-      </div>
-
       {/* ML Pipeline */}
       <div className="mt-6">
-        <article className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div><p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">ML pipeline</p><p className="text-xs text-slate-500">End-to-end processing stages</p></div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {pipelineSteps.map((s, i) => (
-              <div key={s.stage} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-600 text-xs font-bold text-white">{i + 1}</span>
-                <div><p className="text-sm font-semibold text-slate-900">{s.stage}</p><p className="mt-0.5 text-xs text-slate-500">{s.detail}</p></div>
+        <article className="rounded-xl border-2 border-sky-300 bg-white shadow-md">
+          <button
+            type="button"
+            onClick={() => setPipelineOpen((v) => !v)}
+            aria-expanded={pipelineOpen}
+            className="flex w-full items-center justify-between px-5 py-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700">
+                <IconData className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600">ML Pipeline</p>
+                <p className="text-xs text-slate-500">End-to-end processing stages</p>
               </div>
-            ))}
-          </div>
+            </div>
+            <IconChevron className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${pipelineOpen ? "rotate-180" : ""}`} />
+          </button>
+          {pipelineOpen && (
+            <div className="border-t border-slate-100 px-5 pb-5 pt-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {pipelineSteps.map((s, i) => (
+                  <div key={s.stage} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 transition hover:border-sky-300 hover:bg-sky-50">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sky-600 text-xs font-bold text-white">{i + 1}</span>
+                    <div><p className="text-sm font-semibold text-slate-900">{s.stage}</p><p className="mt-0.5 text-xs text-slate-500">{s.detail}</p></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </article>
       </div>
     </section>

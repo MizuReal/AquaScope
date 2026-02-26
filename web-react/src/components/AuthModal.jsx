@@ -24,7 +24,7 @@ const defaultFormState = () => ({
   register: { name: "", organization: "", email: "", password: "" },
 });
 
-export default function AuthModal({ open, mode = "login", onClose, onModeChange }) {
+export default function AuthModal({ open, mode = "login", onClose, onModeChange, noticeMessage = "" }) {
   const navigate = useNavigate();
   const [formState, setFormState] = useState(defaultFormState);
   const [loading, setLoading] = useState(false);
@@ -190,6 +190,12 @@ export default function AuthModal({ open, mode = "login", onClose, onModeChange 
             Register
           </button>
         </div>
+
+        {noticeMessage ? (
+          <p className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-700" role="status" aria-live="polite">
+            {noticeMessage}
+          </p>
+        ) : null}
 
         {feedback && (
           <p

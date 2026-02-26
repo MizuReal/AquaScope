@@ -1,17 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import AuthModal from "@/components/AuthModal";
 import { getUserRole, isAdminRole } from "@/lib/profileRole";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
+const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
+const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+
+const resolveAvatarUrl = async (rawUrlOrPath) => {
+  if (!rawUrlOrPath) return "";
+  if (/^https?:\/\//i.test(rawUrlOrPath)) return rawUrlOrPath;
+
+  const marker = `/${SUPABASE_AVATAR_BUCKET}/`;
+  let path = rawUrlOrPath;
+  const idx = rawUrlOrPath.indexOf(marker);
+  if (idx !== -1) {
+    path = rawUrlOrPath.slice(idx + marker.length);
+  }
+
+  try {
+    const { data } = supabase.storage.from(SUPABASE_AVATAR_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || "";
+  } catch {
+    return "";
+  }
+};
+
 export default function Navigation() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState("login");
   const [sessionUser, setSessionUser] = useState(null);
+  const [displayName, setDisplayName] = useState("User");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const [authNotice, setAuthNotice] = useState("");
 
   const getDisplayName = (user) => {
     const metadata = user?.user_metadata || {};
@@ -42,6 +69,71 @@ export default function Navigation() {
   const closeModal = () => setModalOpen(false);
 
   useEffect(() => {
+    if (location.pathname !== "/") return;
+
+    const params = new URLSearchParams(location.search);
+    const auth = params.get("auth");
+    if (auth !== "required") return;
+
+    setMode("login");
+    setAuthNotice("Sign in required");
+    setModalOpen(true);
+
+    params.delete("auth");
+    params.delete("reason");
+    const nextSearch = params.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash || ""}`, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
+
+  const hydrateIdentity = useCallback(async (user, activeRef) => {
+    if (!user) {
+      if (activeRef()) {
+        setDisplayName("User");
+        setAvatarUrl("");
+        setAvatarFailed(false);
+      }
+      return;
+    }
+
+    const metadataName = getDisplayName(user);
+    const metadataAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || "";
+
+    if (activeRef()) {
+      setDisplayName(metadataName);
+      setAvatarFailed(false);
+    }
+
+    const resolvedMetaAvatar = await resolveAvatarUrl(metadataAvatar);
+    if (activeRef()) {
+      setAvatarUrl(resolvedMetaAvatar || metadataAvatar || "");
+    }
+
+    try {
+      const profileResult = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select("display_name, avatar_url")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!activeRef() || profileResult.error || !profileResult.data) {
+        return;
+      }
+
+      if (profileResult.data.display_name) {
+        setDisplayName(profileResult.data.display_name);
+      }
+
+      if (profileResult.data.avatar_url) {
+        const resolvedProfileAvatar = await resolveAvatarUrl(profileResult.data.avatar_url);
+        if (activeRef()) {
+          setAvatarUrl(resolvedProfileAvatar || profileResult.data.avatar_url);
+        }
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
     if (!supabase || !isSupabaseConfigured) {
       return;
     }
@@ -53,7 +145,9 @@ export default function Navigation() {
       if (!isMounted) {
         return;
       }
-      setSessionUser(data?.session?.user || null);
+      const user = data?.session?.user || null;
+      setSessionUser(user);
+      await hydrateIdentity(user, () => isMounted);
     };
 
     syncSession();
@@ -64,11 +158,16 @@ export default function Navigation() {
       }
       if (session?.user) {
         setSessionUser(session.user);
+        setAuthNotice("");
+        hydrateIdentity(session.user, () => isMounted);
         return;
       }
 
       if (event === "SIGNED_OUT") {
         setSessionUser(null);
+        setDisplayName("User");
+        setAvatarUrl("");
+        setAvatarFailed(false);
       }
     });
 
@@ -136,7 +235,6 @@ export default function Navigation() {
     navigate(0);
   };
 
-  const displayName = getDisplayName(sessionUser);
   const initials = getInitials(displayName);
 
   return (
@@ -166,7 +264,17 @@ export default function Navigation() {
                   aria-label="Open profile"
                   title={displayName}
                 >
-                  {initials}
+                  {avatarUrl && !avatarFailed ? (
+                    <img
+                      src={avatarUrl}
+                      alt={`${displayName} profile picture`}
+                      className="h-full w-full rounded-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={() => setAvatarFailed(true)}
+                    />
+                  ) : (
+                    initials
+                  )}
                 </button>
                 <button
                   className="rounded-full border border-slate-300 px-4 py-2 text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
@@ -197,7 +305,7 @@ export default function Navigation() {
           </div>
         </nav>
       </header>
-      <AuthModal open={modalOpen} mode={mode} onClose={closeModal} onModeChange={setMode} />
+      <AuthModal open={modalOpen} mode={mode} onClose={closeModal} onModeChange={setMode} noticeMessage={authNotice} />
     </>
   );
 }

@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
     "@tanstack/react-table": "^8.21.3",
+    "bad-words": "^4.0.0",
     "lottie-react": "^2.4.1",
     "plotly.js-dist-min": "^3.4.0",
     "react": "^19.2.0",

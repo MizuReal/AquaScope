@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { supabase } from "@/lib/supabaseClient";
 
@@ -95,6 +95,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const activeItem = useMemo(() => {
     const match = navItems.find((item) => item.href === pathname);
@@ -102,6 +103,32 @@ export default function DashboardLayout() {
   }, [pathname]);
 
   const sidebarWidth = collapsed ? "w-20" : "w-64";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const guardAccess = async () => {
+      if (!supabase) {
+        navigate("/?auth=required&reason=signin_required", { replace: true });
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getSession();
+      if (!isMounted) return;
+
+      if (error || !data?.session?.user?.id) {
+        navigate("/?auth=required&reason=signin_required", { replace: true });
+        return;
+      }
+
+      setAuthChecked(true);
+    };
+
+    guardAccess();
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
 
   const handleNavItemClick = async (item) => {
     if (item.label === "Logout") {
@@ -116,21 +143,32 @@ export default function DashboardLayout() {
     }
   };
 
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
+        <div className="space-y-3">
+          <p className="text-xl font-semibold">Verifying your session...</p>
+          <p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex">
         <aside
-          className={`${sidebarWidth} sticky top-0 flex h-screen flex-col border-r border-slate-200 bg-white px-4 py-6 transition-all duration-300 ease-out`}
+          className={`${sidebarWidth} sticky top-0 flex h-screen flex-col border-r border-slate-700 bg-slate-900 px-4 py-6 transition-all duration-300 ease-out`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold tracking-[0.4em] text-sky-600">AQ</span>
-              {!collapsed && <p className="text-sm text-slate-500">Console</p>}
+              <span className="text-xs font-semibold tracking-[0.4em] text-sky-400">AQ</span>
+              {!collapsed && <p className="text-sm text-slate-400">Console</p>}
             </div>
             <button
               type="button"
               aria-label="Toggle sidebar"
-              className="rounded-full border border-slate-200 bg-slate-50 p-2 text-slate-500 hover:bg-slate-100"
+              className="rounded-full border border-slate-700 bg-slate-800 p-2 text-slate-400 hover:bg-slate-700"
               onClick={() => setCollapsed((prev) => !prev)}
             >
               <svg
@@ -151,8 +189,8 @@ export default function DashboardLayout() {
                 key={item.label}
                 className={`flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-left text-sm uppercase tracking-[0.35em] transition ${
                   activeItem === item.label
-                    ? "border-sky-200 bg-sky-50 text-sky-700"
-                    : "text-slate-500 hover:border-slate-200 hover:bg-slate-50"
+                    ? "border-sky-500/30 bg-sky-500/15 text-sky-400"
+                    : "text-slate-400 hover:border-slate-600 hover:bg-slate-800"
                 }`}
                 onClick={() => handleNavItemClick(item)}
               >
@@ -164,7 +202,7 @@ export default function DashboardLayout() {
             ))}
           </nav>
           <div
-            className={`mt-auto rounded-2xl border border-slate-200 bg-slate-50 text-xs text-slate-500 ${
+            className={`mt-auto rounded-2xl border border-slate-700 bg-slate-800/50 text-xs text-slate-400 ${
               collapsed ? "p-3" : "space-y-3 p-4"
             }`}
           >
@@ -176,7 +214,7 @@ export default function DashboardLayout() {
               </div>
             ) : (
               <>
-                <p className="text-[10px] uppercase tracking-[0.32em] text-slate-400">System status</p>
+                <p className="text-[10px] uppercase tracking-[0.32em] text-slate-500">System status</p>
                 <p>OCR extraction: Active</p>
                 <p>Risk assessment model: Ready</p>
                 <p>Water quality analysis: Live</p>
@@ -184,7 +222,7 @@ export default function DashboardLayout() {
             )}
           </div>
           {!collapsed && (
-            <Link to="/" className="mt-3 text-xs uppercase tracking-[0.4em] text-sky-600">
+            <Link to="/" className="mt-3 text-xs uppercase tracking-[0.4em] text-sky-400">
               Back to site
             </Link>
           )}
