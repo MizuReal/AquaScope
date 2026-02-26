@@ -86,6 +86,86 @@ const IconBot = ({ className = "h-4 w-4" }) => (
   </svg>
 );
 
+const IconDatabase = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v4c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+    <path d="M3 9v4c0 1.66 4.03 3 9 3s9-1.34 9-3V9" />
+    <path d="M3 13v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4" />
+  </svg>
+);
+
+const IconShieldCheck = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M12 2l8 4v5c0 5-3.5 9.3-8 11-4.5-1.7-8-6-8-11V6z" />
+    <polyline points="9 12 11 14 15 10" />
+  </svg>
+);
+
+const IconAlertTriangle = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const IconActivity = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+);
+
+const IconLayers = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <polygon points="12 2 2 7 12 12 22 7 12 2" />
+    <polyline points="2 17 12 22 22 17" />
+    <polyline points="2 12 12 17 22 12" />
+  </svg>
+);
+
+const IconDroplets = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z" />
+    <path d="M12.56 6.6A10.97 10.97 0 0014 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 01-11.91 4.97" />
+  </svg>
+);
+
+const IconCheckCircle = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </svg>
+);
+
+const IconAlertOctagon = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+const IconLightbulb = ({ className = "h-5 w-5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M9 21h6" />
+    <path d="M9 18h6" />
+    <path d="M12 2a7 7 0 017 7c0 2.6-1.4 4.9-3.5 6.2V18H8.5v-2.8A7 7 0 0112 2z" />
+  </svg>
+);
+
+const IconChevronDown = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className} aria-hidden="true">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
+const IconSpark = ({ className = "h-3.5 w-3.5" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className} aria-hidden="true">
+    <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+  </svg>
+);
+
 const buildConfidenceInsight = (trend = [], avgProbability = null) => {
   if (!trend.length) return "No confidence trend is available yet. Add more samples so the assistant can detect reliability patterns.";
   const last = trend[trend.length - 1]?.value ?? 0;
@@ -148,6 +228,7 @@ export default function AnalyticsPage() {
   const [samples, setSamples] = useState([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const authResolvedRef = useRef(false);
   const analyticsInFlightRef = useRef(false);
   const lastLoadedUserIdRef = useRef("");
@@ -585,9 +666,15 @@ export default function AnalyticsPage() {
             </button>
           </div>
           <div className="flex flex-wrap gap-3">
-            <span className="rounded-full border border-sky-200 bg-sky-50 px-4 py-1.5 text-xs font-medium text-sky-700">Unified records: {analytics.total}</span>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-medium text-emerald-700">Potable outcomes: {analytics.potableCount}</span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">At-risk samples: {analytics.watchOrUnsafe}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400 bg-sky-50 px-4 py-1.5 text-xs font-medium text-sky-700">
+              <IconLayers className="h-3.5 w-3.5" />Unified records: {analytics.total}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400 bg-emerald-50 px-4 py-1.5 text-xs font-medium text-emerald-700">
+              <IconCheckCircle className="h-3.5 w-3.5" />Potable outcomes: {analytics.potableCount}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-400 bg-rose-50 px-4 py-1.5 text-xs font-medium text-rose-600">
+              <IconAlertOctagon className="h-3.5 w-3.5" />At-risk samples: {analytics.watchOrUnsafe}
+            </span>
           </div>
           {exportError && (
             <article className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-2 text-sm text-rose-700">
@@ -603,82 +690,208 @@ export default function AnalyticsPage() {
             {error && <article className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-700">{error}</article>}
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <article className="rounded-2xl border border-sky-200 bg-white p-5"><p className="text-xs uppercase tracking-[0.3em] text-sky-700">Saved samples</p><p className="mt-2 text-3xl font-semibold text-sky-950">{analytics.total}</p></article>
-              <article className="rounded-2xl border border-sky-200 bg-white p-5"><p className="text-xs uppercase tracking-[0.3em] text-sky-700">Potable rate</p><p className="mt-2 text-3xl font-semibold text-sky-900">{formatPercent(analytics.total ? analytics.potableCount / analytics.total : 0)}</p></article>
-              <article className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><p className="text-xs uppercase tracking-[0.3em] text-amber-700">Watch + unsafe</p><p className="mt-2 text-3xl font-semibold text-amber-700">{analytics.watchOrUnsafe}</p></article>
-              <article className="rounded-2xl border border-sky-200 bg-sky-50 p-5"><p className="text-xs uppercase tracking-[0.3em] text-sky-700">Avg confidence</p><p className="mt-2 text-3xl font-semibold text-sky-700">{formatPercent(analytics.avgProbability || 0)}</p></article>
+              <article className="relative overflow-hidden rounded-2xl border border-indigo-400 bg-gradient-to-br from-indigo-50 to-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.32em] text-indigo-500">Saved samples</p>
+                    <p className="mt-2 text-3xl font-semibold text-indigo-950">{analytics.total}</p>
+                    <p className="mt-1 text-[11px] text-indigo-400">All records loaded</p>
+                  </div>
+                  <span className="rounded-xl bg-indigo-100 p-2.5 text-indigo-600"><IconDatabase className="h-5 w-5" /></span>
+                </div>
+              </article>
+              <article className="relative overflow-hidden rounded-2xl border border-emerald-400 bg-gradient-to-br from-emerald-50 to-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.32em] text-emerald-600">Potable rate</p>
+                    <p className="mt-2 text-3xl font-semibold text-emerald-800">{formatPercent(analytics.total ? analytics.potableCount / analytics.total : 0)}</p>
+                    <p className="mt-1 text-[11px] text-emerald-500">{analytics.potableCount} of {analytics.total} samples</p>
+                  </div>
+                  <span className="rounded-xl bg-emerald-100 p-2.5 text-emerald-600"><IconShieldCheck className="h-5 w-5" /></span>
+                </div>
+              </article>
+              <article className="relative overflow-hidden rounded-2xl border border-rose-400 bg-gradient-to-br from-rose-50 to-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.32em] text-rose-500">Watch + unsafe</p>
+                    <p className="mt-2 text-3xl font-semibold text-rose-700">{analytics.watchOrUnsafe}</p>
+                    <p className="mt-1 text-[11px] text-rose-400">Require follow-up</p>
+                  </div>
+                  <span className="rounded-xl bg-rose-100 p-2.5 text-rose-500"><IconAlertTriangle className="h-5 w-5" /></span>
+                </div>
+              </article>
+              <article className="relative overflow-hidden rounded-2xl border border-violet-400 bg-gradient-to-br from-violet-50 to-white p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.32em] text-violet-500">Avg confidence</p>
+                    <p className="mt-2 text-3xl font-semibold text-violet-800">{formatPercent(analytics.avgProbability || 0)}</p>
+                    <p className="mt-1 text-[11px] text-violet-400">Model certainty score</p>
+                  </div>
+                  <span className="rounded-xl bg-violet-100 p-2.5 text-violet-600"><IconActivity className="h-5 w-5" /></span>
+                </div>
+              </article>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <article className="rounded-2xl border border-sky-200 bg-white p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Confidence trend</p>
-                <p className="mt-1 text-sm text-slate-500">Latest prediction confidence sequence from recent samples.</p>
+            {/* ── Collapsible Automated Insights ── */}
+            <div className="overflow-hidden rounded-2xl border border-amber-400 bg-gradient-to-br from-amber-50 via-yellow-50 to-white shadow-sm">
+              <button
+                type="button"
+                onClick={() => setInsightsOpen((o) => !o)}
+                className="flex w-full items-center justify-between px-6 py-4 text-left transition hover:bg-amber-50/60"
+                aria-expanded={insightsOpen}
+              >
+                <div className="flex items-center gap-3.5">
+                  <span className="rounded-xl bg-amber-100 p-2.5 text-amber-600">
+                    <IconLightbulb className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">Automated insights</p>
+                    <p className="text-[11px] text-amber-500">
+                      {analytics.insights.length} observation{analytics.insights.length !== 1 ? "s" : ""} generated from your sample history
+                    </p>
+                  </div>
+                </div>
+                <span className={`rounded-lg border border-amber-400 bg-white p-1.5 text-amber-500 transition-transform duration-200 ${insightsOpen ? "rotate-180" : ""}`}>
+                  <IconChevronDown className="h-4 w-4" />
+                </span>
+              </button>
+
+              {insightsOpen && (
+                <div className="border-t border-amber-300 px-6 pb-5 pt-4">
+                  {analytics.insights.length === 0 ? (
+                    <p className="text-sm text-amber-700/70">No insights yet — submit samples to unlock pattern-based observations.</p>
+                  ) : (
+                    <ul className="space-y-2.5">
+                      {analytics.insights.map((insight, i) => {
+                        const palettes = [
+                          { border: "border-indigo-300", bg: "bg-indigo-50", dot: "bg-indigo-400", text: "text-indigo-700" },
+                          { border: "border-rose-300",   bg: "bg-rose-50",   dot: "bg-rose-400",   text: "text-rose-700" },
+                          { border: "border-violet-300", bg: "bg-violet-50", dot: "bg-violet-400", text: "text-violet-700" },
+                          { border: "border-sky-300",    bg: "bg-sky-50",    dot: "bg-sky-400",    text: "text-sky-700" },
+                          { border: "border-teal-300",   bg: "bg-teal-50",   dot: "bg-teal-400",   text: "text-teal-700" },
+                        ];
+                        const p = palettes[i % palettes.length];
+                        return (
+                          <li key={i} className={`flex items-start gap-3 rounded-xl border ${p.border} ${p.bg} px-4 py-3`}>
+                            <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${p.dot}`} aria-hidden="true" />
+                            <div className="flex-1">
+                              <p className={`text-xs font-semibold uppercase tracking-[0.2em] ${p.text} mb-1`}>Insight {i + 1}</p>
+                              <p className="text-sm leading-relaxed text-slate-700">{insight}</p>
+                            </div>
+                            <IconSpark className={`mt-1 h-3.5 w-3.5 flex-shrink-0 ${p.text} opacity-60`} />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-2">
+              {/* Confidence trend */}
+              <div className="rounded-xl border border-sky-300 bg-sky-50/40 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-sky-900">Confidence trend</p>
+                  <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">Recent 12</span>
+                </div>
+                <p className="mb-3 text-[11px] text-slate-500">Latest prediction confidence sequence from recent samples.</p>
                 {hasChartData ? (
-                  <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50/30 p-2">
+                  <>
                     <Plot data={[
                       { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Observed confidence", line: { color: "#0284c7", width: 2 }, marker: { color: "#0284c7", size: 6 }, hovertemplate: "%{x}<br>Confidence: %{y:.3f}<extra></extra>" },
                       { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.5), type: "scatter", mode: "lines", name: "Reference floor (0.50)", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
                       { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.7), type: "scatter", mode: "lines", name: "High-confidence mark (0.70)", line: { color: "#16a34a", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                    ]} layout={plotLayout({ height: 290, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Confidence", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "290px" }} />
-                  </div>
-                ) : <p className="mt-4 text-sm text-slate-500">No chart data yet.</p>}
-                <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
-                  <p className="mt-1 leading-relaxed">{buildConfidenceInsight(analytics.confidenceTrend, analytics.avgProbability)}</p>
-                </div>
-              </article>
+                    ]} layout={plotLayout({ height: 270, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Confidence", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Avg confidence</p><p className="mt-1 font-semibold text-slate-700">{formatPercent(analytics.avgProbability || 0)}</p></div>
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Latest reading</p><p className="mt-1 font-semibold text-slate-700">{analytics.confidenceTrend.length ? formatPercent(analytics.confidenceTrend[analytics.confidenceTrend.length - 1].value) : "--"}</p></div>
+                    </div>
+                    <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="mt-1 leading-relaxed">{buildConfidenceInsight(analytics.confidenceTrend, analytics.avgProbability)}</p>
+                    </div>
+                  </>
+                ) : <p className="mt-3 text-sm text-slate-500">No chart data yet.</p>}
+              </div>
 
-              <article className="rounded-2xl border border-sky-200 bg-white p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Risk index trajectory</p>
-                <p className="mt-1 text-sm text-slate-500">Safe → unsafe mapped to a 0.15 → 0.88 risk proxy.</p>
+              {/* Risk index trajectory */}
+              <div className="rounded-xl border border-rose-300 bg-rose-50/40 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-rose-900">Risk index trajectory</p>
+                  <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">Recent 12</span>
+                </div>
+                <p className="mb-3 text-[11px] text-slate-500">Safe → unsafe mapped to a 0.15 → 0.88 risk proxy.</p>
                 {hasChartData ? (
-                  <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50/30 p-2">
+                  <>
                     <Plot data={[
                       { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Observed risk index", line: { color: "#e11d48", width: 2 }, marker: { color: "#e11d48", size: 6 }, hovertemplate: "%{x}<br>Risk index: %{y:.3f}<extra></extra>" },
-                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.35), type: "scatter", mode: "lines", name: "Borderline marker (0.35)", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.65), type: "scatter", mode: "lines", name: "Watch marker (0.65)", line: { color: "#fb923c", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.88), type: "scatter", mode: "lines", name: "Unsafe marker (0.88)", line: { color: "#7f1d1d", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                    ]} layout={plotLayout({ height: 290, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Risk index", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.2, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "290px" }} />
-                  </div>
-                ) : <p className="mt-4 text-sm text-slate-500">No risk trend data yet.</p>}
-                <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
-                  <p className="mt-1 leading-relaxed">{buildRiskInsight(analytics.riskTrend)}</p>
-                </div>
-              </article>
-            </div>
+                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.35), type: "scatter", mode: "lines", name: "Borderline (0.35)", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
+                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.65), type: "scatter", mode: "lines", name: "Watch (0.65)", line: { color: "#fb923c", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
+                      { x: analytics.riskTrend.map((p) => p.label), y: analytics.riskTrend.map(() => 0.88), type: "scatter", mode: "lines", name: "Unsafe (0.88)", line: { color: "#7f1d1d", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
+                    ]} layout={plotLayout({ height: 270, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Risk index", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.2, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Current index</p><p className="mt-1 font-semibold text-slate-700">{analytics.riskTrend.length ? analytics.riskTrend[analytics.riskTrend.length - 1].value.toFixed(2) : "--"}</p></div>
+                      <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-rose-600">Peak risk</p><p className="mt-1 font-semibold text-rose-700">{analytics.riskTrend.length ? Math.max(...analytics.riskTrend.map((p) => p.value)).toFixed(2) : "--"}</p></div>
+                    </div>
+                    <div className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="mt-1 leading-relaxed">{buildRiskInsight(analytics.riskTrend)}</p>
+                    </div>
+                  </>
+                ) : <p className="mt-3 text-sm text-slate-500">No risk trend data yet.</p>}
+              </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <article className="rounded-2xl border border-slate-300 bg-white p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Daily sample volume (7 days)</p>
-                <p className="mt-1 text-sm text-slate-600">Operational throughput from your records.</p>
+              {/* Daily sample volume */}
+              <div className="rounded-xl border border-slate-400 bg-slate-50/60 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-800">Daily sample volume</p>
+                  <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">7 days</span>
+                </div>
+                <p className="mb-3 text-[11px] text-slate-500">Operational throughput from your records.</p>
                 {hasChartData ? (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                    <Plot data={[{ x: analytics.dayBuckets.map((b) => compactDateLabel(b.date)), y: analytics.dayBuckets.map((b) => b.count), type: "bar", name: "Daily samples", marker: { color: "#0ea5e9" }, text: analytics.dayBuckets.map((b) => String(b.count)), textposition: "outside", hovertemplate: "%{x}<br>Samples: %{y}<extra></extra>" }]} layout={plotLayout({ height: 300, xaxis: { title: "Day", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Sample count", rangemode: "tozero", dtick: 1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, showlegend: false })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "300px" }} />
-                  </div>
-                ) : <p className="mt-4 text-sm text-slate-500">No volume data yet.</p>}
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
-                  <p className="mt-1 leading-relaxed">{buildVolumeInsight(analytics.dayBuckets)}</p>
-                </div>
-              </article>
+                  <>
+                    <Plot data={[{ x: analytics.dayBuckets.map((b) => compactDateLabel(b.date)), y: analytics.dayBuckets.map((b) => b.count), type: "bar", name: "Daily samples", marker: { color: "#0ea5e9" }, text: analytics.dayBuckets.map((b) => String(b.count)), textposition: "outside", hovertemplate: "%{x}<br>Samples: %{y}<extra></extra>" }]} layout={plotLayout({ height: 270, xaxis: { title: "Day", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Sample count", rangemode: "tozero", dtick: 1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, showlegend: false })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">7-day total</p><p className="mt-1 font-semibold text-slate-700">{analytics.dayBuckets.reduce((s, b) => s + b.count, 0)}</p></div>
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Busiest day</p><p className="mt-1 font-semibold text-slate-700">{(() => { const b = [...analytics.dayBuckets].sort((a, c) => c.count - a.count)[0]; return b ? `${compactDateLabel(b.date)} (${b.count})` : "--"; })()}</p></div>
+                    </div>
+                    <div className="mt-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs text-slate-700">
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="mt-1 leading-relaxed">{buildVolumeInsight(analytics.dayBuckets)}</p>
+                    </div>
+                  </>
+                ) : <p className="mt-3 text-sm text-slate-500">No volume data yet.</p>}
+              </div>
 
-              <article className="rounded-2xl border border-sky-200 bg-white p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Outcome mix</p>
-                <p className="mt-1 text-sm text-slate-500">Cleared, review, and alert distribution.</p>
-                {analytics.statusDistribution.length > 0 ? (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                    <Plot data={[{ labels: analytics.statusDistribution.map((r) => r.name), values: analytics.statusDistribution.map((r) => r.population), type: "pie", hole: 0.44, sort: false, direction: "clockwise", marker: { colors: analytics.statusDistribution.map((r) => r.name === "Cleared" ? "#0ea5e9" : r.name === "Review" ? "#f59e0b" : "#f43f5e") }, textinfo: "percent+label", hovertemplate: "%{label}<br>Count: %{value}<br>Share: %{percent}<extra></extra>" }]} layout={{ autosize: true, height: 300, margin: { l: 16, r: 16, t: 10, b: 10 }, paper_bgcolor: "rgba(255,255,255,0)", showlegend: true, legend: { orientation: "h", y: -0.12, x: 0.1, font: { size: 11, color: "#475569" } } }} config={plotConfig} useResizeHandler style={{ width: "100%", height: "300px" }} />
-                  </div>
-                ) : <p className="mt-4 text-sm text-slate-500">No distribution data yet.</p>}
-                <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
-                  <p className="mt-1 leading-relaxed">{buildOutcomeInsight(analytics.statusDistribution)}</p>
+              {/* Outcome mix */}
+              <div className="rounded-xl border border-sky-300 bg-sky-50/40 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-sky-900">Outcome mix</p>
+                  <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">Distribution</span>
                 </div>
-              </article>
+                <p className="mb-3 text-[11px] text-slate-500">Cleared, review, and alert distribution across all records.</p>
+                {analytics.statusDistribution.length > 0 ? (
+                  <>
+                    <Plot data={[{ labels: analytics.statusDistribution.map((r) => r.name), values: analytics.statusDistribution.map((r) => r.population), type: "pie", hole: 0.44, sort: false, direction: "clockwise", marker: { colors: analytics.statusDistribution.map((r) => r.name === "Cleared" ? "#0ea5e9" : r.name === "Review" ? "#f59e0b" : "#f43f5e") }, textinfo: "percent+label", hovertemplate: "%{label}<br>Count: %{value}<br>Share: %{percent}<extra></extra>" }]} layout={{ autosize: true, height: 270, margin: { l: 16, r: 16, t: 10, b: 10 }, paper_bgcolor: "rgba(255,255,255,0)", showlegend: true, legend: { orientation: "h", y: -0.12, x: 0.1, font: { size: 11, color: "#475569" } } }} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                      {analytics.statusDistribution.map((r) => (
+                        <div key={r.name} className={`rounded-lg border px-3 py-2 ${r.name === "Cleared" ? "border-sky-200 bg-sky-50" : r.name === "Review" ? "border-amber-200 bg-amber-50" : "border-rose-200 bg-rose-50"}`}>
+                          <p className={`text-[10px] uppercase tracking-[0.22em] ${r.name === "Cleared" ? "text-sky-600" : r.name === "Review" ? "text-amber-600" : "text-rose-600"}`}>{r.name}</p>
+                          <p className={`mt-1 font-semibold ${r.name === "Cleared" ? "text-sky-700" : r.name === "Review" ? "text-amber-700" : "text-rose-700"}`}>{r.population}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="mt-1 leading-relaxed">{buildOutcomeInsight(analytics.statusDistribution)}</p>
+                    </div>
+                  </>
+                ) : <p className="mt-3 text-sm text-slate-500">No distribution data yet.</p>}
+              </div>
             </div>
 
-            <article className="rounded-2xl border border-sky-200 bg-white p-6">
+            <article className="rounded-2xl border border-sky-400 bg-white p-6">
               <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Parameter intelligence</p>
               <p className="mt-1 text-sm text-slate-500">Plotly scatter trend charts using observed sample values with explicit reference thresholds for each model feature.</p>
               <div className="mt-4 grid gap-5 xl:grid-cols-2">
@@ -690,16 +903,16 @@ export default function AnalyticsPage() {
                   if (has && plot.referenceType === "max") { refTraces.push({ x: [minX, maxX], y: [plot.threshold, plot.threshold], type: "scatter", mode: "lines", name: `${plot.label} max ref`, line: { color: "#0f172a", dash: "dot", width: 1.5 }, hovertemplate: `Reference max: %{y:.2f} ${plot.unit}<extra></extra>` }); }
                   const refDesc = plot.referenceType === "range" ? `Reference band: ${plot.lower}-${plot.upper} ${plot.unit}` : `Reference max: ≤ ${plot.threshold} ${plot.unit}`;
                   return (
-                    <div key={plot.key} className="rounded-xl border border-sky-100 bg-sky-50/40 p-4">
+                    <div key={plot.key} className="rounded-xl border border-sky-300 bg-sky-50/40 p-4">
                       <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold text-sky-900">{plot.label}</p><span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">Points: {plot.count}</span></div>
                       {has ? (<>
                         <Plot data={[{ x: xS, y: yS, type: "scatter", mode: "lines+markers", name: `${plot.label} observed`, line: { color: plot.color, width: 2 }, marker: { color: plot.color, size: 6, opacity: 0.85 }, customdata: plot.points.map((p) => [p.source, p.riskLevel]), hovertemplate: "%{x|%b %d, %Y %H:%M}<br>Value: %{y:.3f} " + plot.unit + "<br>Source: %{customdata[0]}<br>Risk: %{customdata[1]}<extra></extra>" }, ...refTraces]} layout={plotLayout({ height: 280, margin: { l: 48, r: 20, t: 10, b: 38 }, xaxis: { title: "Sample timestamp", type: "date", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" }, titlefont: { size: 11, color: "#334155" } }, yaxis: { title: `${plot.label} (${plot.unit})`, gridcolor: "#e2e8f0", zeroline: false, tickfont: { size: 10, color: "#475569" }, titlefont: { size: 11, color: "#334155" } }, legend: { orientation: "h", y: 1.14, x: 0, font: { size: 10, color: "#475569" } }, hoverlabel: { bgcolor: "#0f172a", font: { color: "#f8fafc" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "280px" }} />
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Average</p><p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.avg)} {plot.unit}</p></div>
-                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Median</p><p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.median)} {plot.unit}</p></div>
-                          <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-amber-700">Reference</p><p className="mt-1 font-medium text-amber-700">{refDesc}</p><p className="mt-1 text-[11px] text-amber-700">Out-of-reference points: {plot.outOfReference} / {plot.count}</p></div>
+                          <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Average</p><p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.avg)} {plot.unit}</p></div>
+                          <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Median</p><p className="mt-1 font-semibold text-slate-700">{formatMetric(plot.median)} {plot.unit}</p></div>
+                          <div className="col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-amber-700">Reference</p><p className="mt-1 font-medium text-amber-700">{refDesc}</p><p className="mt-1 text-[11px] text-amber-700">Out-of-reference points: {plot.outOfReference} / {plot.count}</p></div>
                         </div>
-                        <div className="mt-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs text-sky-800">
+                        <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
                           <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
                           <p className="mt-1 leading-relaxed">{buildParameterInsight(plot)}</p>
                         </div>
@@ -710,8 +923,7 @@ export default function AnalyticsPage() {
               </div>
             </article>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <article className="rounded-2xl border border-sky-200 bg-white p-6">
+            <article className="rounded-2xl border border-sky-400 bg-white p-6">
                 <p className="text-xs uppercase tracking-[0.35em] text-sky-700">Anomaly checks</p>
                 <p className="mt-1 text-sm text-slate-500">Distribution of anomaly-check outcomes and recent flagged-check intensity.</p>
                 {(analytics.totalAnomalyChecks > 0 || analytics.anomalyStatusCounts.missing > 0) ? (
@@ -723,24 +935,16 @@ export default function AnalyticsPage() {
                       <Plot data={[{ x: analytics.anomalyRecentTrend.map((e) => e.label), y: analytics.anomalyRecentTrend.map((e) => e.flagged), type: "scatter", mode: "lines+markers", name: "Flagged checks per sample", line: { color: "#f43f5e", width: 2 }, marker: { color: "#f43f5e", size: 6 }, hovertemplate: "%{x}<br>Flagged checks: %{y}<extra></extra>" }]} layout={plotLayout({ height: 240, margin: { l: 44, r: 16, t: 8, b: 40 }, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Flagged checks", rangemode: "tozero", dtick: 1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, showlegend: false })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "240px" }} />
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Total checks</p><p className="mt-1 text-lg font-semibold text-slate-700">{analytics.totalAnomalyChecks}</p></div>
-                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-rose-700">Flagged checks</p><p className="mt-1 text-lg font-semibold text-rose-700">{analytics.flaggedAnomalyChecks}</p></div>
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Total checks</p><p className="mt-1 text-lg font-semibold text-slate-700">{analytics.totalAnomalyChecks}</p></div>
+                      <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-rose-700">Flagged checks</p><p className="mt-1 text-lg font-semibold text-rose-700">{analytics.flaggedAnomalyChecks}</p></div>
                     </div>
-                    <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                    <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800">
                       <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
                       <p className="mt-1 leading-relaxed">{buildAnomalyInsight(analytics.totalAnomalyChecks, analytics.flaggedAnomalyChecks, analytics.anomalyRecentTrend)}</p>
                     </div>
                   </div>
                 ) : <p className="mt-3 text-sm text-slate-500">No anomaly checks available yet.</p>}
-              </article>
-
-              <article className="rounded-2xl border border-emerald-300 bg-emerald-50 p-6">
-                <p className="text-xs uppercase tracking-[0.35em] text-emerald-700">Automated insights</p>
-                <ul className="mt-3 space-y-2 text-sm text-slate-700">
-                  {analytics.insights.map((insight, i) => (<li key={`${insight}-${i}`} className="rounded-lg border border-emerald-100 bg-white/80 px-3 py-2">{insight}</li>))}
-                </ul>
-              </article>
-            </div>
+            </article>
           </Suspense>
         )}
       </div>

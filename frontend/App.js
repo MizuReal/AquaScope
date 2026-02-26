@@ -43,9 +43,9 @@ const ROUTE_MAP = {
  */
 function useOnNavigate(navigation) {
   return useCallback(
-    (route) => {
+    (route, params) => {
       const target = ROUTE_MAP[route] || route;
-      navigation.navigate(target);
+      navigation.navigate(target, params);
     },
     [navigation],
   );
@@ -58,9 +58,9 @@ function HomeTab({ navigation, route }) {
   return <HomeScreen onNavigate={onNavigate} openChatSignal={route?.params?.openChatSignal} />;
 }
 
-function ForumTab({ navigation }) {
+function ForumTab({ navigation, route }) {
   const onNavigate = useOnNavigate(navigation);
-  return <CommunityForumScreen onNavigate={onNavigate} />;
+  return <CommunityForumScreen onNavigate={onNavigate} openNotificationsSignal={route?.params?.openNotificationsSignal} />;
 }
 
 function HistoryTab({ navigation }) {

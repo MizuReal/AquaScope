@@ -67,7 +67,8 @@ debug_output/
 best.pt
 best.torchscript
 hugging-face
-hugging-face/
+hugging-face-not/
+hugging-face-not
 cs
 
 # Legacy Next.js web app (old folder)

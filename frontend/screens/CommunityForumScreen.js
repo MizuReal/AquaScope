@@ -29,6 +29,8 @@ import forumAnim from '../assets/public/forumanim.json';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
 import { useAppTheme } from '../utils/theme';
+import ForumNotificationsModal from '../components/forum/ForumNotificationsModal';
+import { useForumNotifications } from '../hooks/useForumNotifications';
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
@@ -301,7 +303,7 @@ const PostCard = memo(function PostCard({
   && prev.isDark === next.isDark
 ));
 
-const CommunityForumScreen = ({ onNavigate }) => {
+const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
   const { isDark } = useAppTheme();
   const screenAnim = useRef(new Animated.Value(0)).current;
   const filter = useMemo(() => new Filter(), []);
@@ -342,8 +344,25 @@ const CommunityForumScreen = ({ onNavigate }) => {
   const [threadLikeBusyId, setThreadLikeBusyId] = useState('');
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [threadDeleteBusyId, setThreadDeleteBusyId] = useState('');
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const [highlightedPostId, setHighlightedPostId] = useState('');
   const fabBottomOffset = BOTTOM_TAB_BAR_MARGIN + BOTTOM_TAB_BAR_HEIGHT + FAB_TAB_GAP;
   const feedBottomPadding = fabBottomOffset + FAB_HEIGHT_ESTIMATE + FAB_CLEARANCE;
+
+  const {
+    notifications,
+    notificationsLoading,
+    notificationsError,
+    notificationsBusyId,
+    unreadNotificationsCount,
+    refreshNotifications,
+    markNotificationAsRead,
+    setNotificationsError,
+  } = useForumNotifications({
+    sessionUserId: sessionUser?.id || '',
+    profilesTable: SUPABASE_PROFILES_TABLE,
+    normalizeAvatarUrl,
+  });
 
   const applyProfileToForumState = useCallback((userId, profile) => {
     if (!userId) return;
@@ -870,7 +889,41 @@ const CommunityForumScreen = ({ onNavigate }) => {
     }
   }, [filter]);
 
-  const openThread = useCallback(async (thread) => {
+  const fetchThreadById = useCallback(async (threadId) => {
+    if (!threadId) return null;
+
+    const threadResult = await supabase
+      .from('forum_threads')
+      .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .eq('id', threadId)
+      .maybeSingle();
+
+    if (threadResult.error) throw threadResult.error;
+    if (!threadResult.data) return null;
+
+    const thread = threadResult.data;
+    const profileResult = await supabase
+      .from(SUPABASE_PROFILES_TABLE)
+      .select('id, display_name, organization, avatar_url')
+      .eq('id', thread.user_id)
+      .maybeSingle();
+
+    if (profileResult.error) throw profileResult.error;
+
+    const categoryLinks = thread.forum_thread_categories || [];
+    const mappedCategories = dedupeById(categoryLinks.map((link) => link.forum_categories).filter(Boolean));
+    const profile = profileResult.data || {};
+
+    return {
+      ...thread,
+      categories: mappedCategories,
+      authorName: profile.display_name || 'Community member',
+      authorOrg: profile.organization || '',
+      authorAvatar: normalizeAvatarUrl(profile.avatar_url),
+    };
+  }, []);
+
+  const openThread = useCallback(async (thread, options = {}) => {
     setActiveThread(thread);
     setThreadModalVisible(true);
     setReplyText('');
@@ -928,10 +981,13 @@ const CommunityForumScreen = ({ onNavigate }) => {
         };
       });
 
-      setThreadPosts(dedupeById(enrichedPosts));
+      const dedupedPosts = dedupeById(enrichedPosts);
+      setThreadPosts(dedupedPosts);
+      setHighlightedPostId(options?.focusPostId || '');
     } catch (error) {
       console.warn('[Supabase] thread load failed:', error?.message || error);
       setReplyError('Unable to load thread replies.');
+      setHighlightedPostId('');
     } finally {
       setThreadLoading(false);
     }
@@ -944,7 +1000,36 @@ const CommunityForumScreen = ({ onNavigate }) => {
     setReplyText('');
     setReplyTarget(null);
     setReplyError('');
+    setHighlightedPostId('');
   }, []);
+
+  const handleOpenNotification = useCallback(async (notification) => {
+    if (!notification?.id || !notification?.thread_id) return;
+    if (!sessionUser?.id) return;
+
+    setNotificationsError('');
+
+    try {
+      if (!notification.is_read) {
+        await markNotificationAsRead(notification.id);
+      }
+
+      const localThread = dedupeById([activeThread, ...threads, ...myThreads]).find(
+        (thread) => thread?.id === notification.thread_id
+      );
+      const threadToOpen = localThread || await fetchThreadById(notification.thread_id);
+
+      if (!threadToOpen) {
+        throw new Error('Thread not found');
+      }
+
+      setNotificationsVisible(false);
+      await openThread(threadToOpen, { focusPostId: notification.post_id || '' });
+    } catch (error) {
+      console.warn('[Supabase] notification open failed:', error?.message || error);
+      setNotificationsError('Unable to open this notification right now.');
+    }
+  }, [activeThread, fetchThreadById, markNotificationAsRead, myThreads, openThread, sessionUser?.id, setNotificationsError, threads]);
 
   const handleSendReply = useCallback(async () => {
     const trimmed = replyText.trim();
@@ -1317,12 +1402,19 @@ const CommunityForumScreen = ({ onNavigate }) => {
     }
   }, [selectedMode, sessionUser?.id]);
 
+  useEffect(() => {
+    if (!openNotificationsSignal) return;
+    setNotificationsVisible(true);
+    refreshNotifications();
+  }, [openNotificationsSignal, refreshNotifications]);
+
   const handleRefresh = useCallback(async () => {
     await Promise.all([
       loadForumData(),
       fetchMyThreads(),
+      refreshNotifications(),
     ]);
-  }, [fetchMyThreads, loadForumData]);
+  }, [fetchMyThreads, loadForumData, refreshNotifications]);
 
   const keyExtractor = useCallback((item) => item.id, []);
 
@@ -1362,7 +1454,30 @@ const CommunityForumScreen = ({ onNavigate }) => {
 
         <Text style={styles.kicker}>Community</Text>
 
-        <View style={styles.iconButtonSpacer} />
+        {sessionUser?.id ? (
+          <TouchableOpacity
+            style={[
+              styles.iconButton,
+              { borderColor: colors.chipBorder, backgroundColor: colors.chipBg },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => {
+              setNotificationsVisible(true);
+              refreshNotifications();
+            }}
+          >
+            <Ionicons name="notifications-outline" size={18} color={isDark ? '#dbeafe' : '#334155'} />
+            {unreadNotificationsCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.iconButtonSpacer} />
+        )}
       </View>
 
       <View style={[
@@ -1551,7 +1666,7 @@ const CommunityForumScreen = ({ onNavigate }) => {
         </View>
       )}
     </View>
-  ), [categoriesOpen, clearTopics, colors, feedError, isDark, loggedInAs, myAvatarUrl, myThreadsError, onNavigate, selectMode, selectedMode, selectedTopics, tagFilters, toggleCategoriesSection, toggleTopic]);
+  ), [categoriesOpen, clearTopics, colors, feedError, isDark, loggedInAs, myAvatarUrl, myThreadsError, onNavigate, refreshNotifications, selectMode, selectedMode, selectedTopics, sessionUser?.id, tagFilters, toggleCategoriesSection, toggleTopic, unreadNotificationsCount]);
 
   const emptyComponent = useMemo(() => {
     if (loading || (selectedMode === 'mine' && myThreadsLoading)) {
@@ -1632,6 +1747,18 @@ const CommunityForumScreen = ({ onNavigate }) => {
         <LottieView source={forumAnim} autoPlay loop style={styles.fabAnim} />
         <Text style={styles.fabLabel}>Start a thread</Text>
       </TouchableOpacity>
+
+      <ForumNotificationsModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        notificationsLoading={notificationsLoading}
+        notificationsError={notificationsError}
+        notificationsBusyId={notificationsBusyId}
+        onOpenNotification={handleOpenNotification}
+        colors={colors}
+        isDark={isDark}
+      />
 
       <Modal visible={composeVisible} animationType="slide" transparent={false} presentationStyle="fullScreen" onRequestClose={() => setComposeVisible(false)}>
         <SafeAreaView style={[styles.flex1, { backgroundColor: colors.modalBg }]}>
@@ -1953,7 +2080,17 @@ const CommunityForumScreen = ({ onNavigate }) => {
                   </View>
                 }
                 renderItem={({ item }) => (
-                  <View style={[styles.replyCard, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+                  <View
+                    style={[
+                      styles.replyCard,
+                      item.id === highlightedPostId
+                        ? {
+                            borderColor: '#22d3ee',
+                            backgroundColor: isDark ? 'rgba(8,47,73,0.45)' : '#ecfeff',
+                          }
+                        : { borderColor: colors.cardBorder, backgroundColor: colors.card },
+                    ]}
+                  >
                     <View style={styles.rowBetweenStart}>
                       <View style={styles.rowStart}>
                         <Avatar avatarUrl={item.authorAvatar} name={item.authorName} isDark={isDark} size={40} />
@@ -2119,6 +2256,19 @@ const styles = StyleSheet.create({
   },
   iconButtonText: { fontSize: 20, fontWeight: '600' },
   iconButtonSpacer: { width: 40, height: 40 },
+  notificationBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    backgroundColor: '#f43f5e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadgeText: { fontSize: 9, fontWeight: '700', color: '#ffffff' },
   errorCard: {
     marginHorizontal: 20,
     borderWidth: 1,
@@ -2170,7 +2320,44 @@ const styles = StyleSheet.create({
   },
   closeButtonText: { fontSize: 12, fontWeight: '500' },
   modalContent: { paddingHorizontal: 20 },
+  notificationsListContent: { paddingTop: 14, paddingBottom: 24, gap: 12 },
   modalContentContainer: { paddingBottom: 24 },
+  notificationCard: {
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  notificationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  notificationMainRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
+  notificationTextWrap: { flex: 1, minWidth: 0 },
+  notificationTime: {
+    fontSize: 11,
+    textAlign: 'right',
+    flexShrink: 0,
+    maxWidth: 52,
+    marginTop: 2,
+  },
+  notificationTitle: { fontSize: 13, fontWeight: '700' },
+  notificationBody: { marginTop: 4, fontSize: 12, lineHeight: 17 },
+  notificationFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  notificationOpenHint: { fontSize: 11, fontWeight: '600' },
+  notificationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#22d3ee',
+  },
   inputCard: {
     marginTop: 16,
     borderWidth: 1,

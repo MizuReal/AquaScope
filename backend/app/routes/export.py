@@ -115,37 +115,69 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
       :root {{
-        color-scheme: light;
+        --px-per-mm: 3.7795275591;
+        --a4-width-px: 793.7007874016px;
+        --a4-height-px: 1122.5196850394px;
+        --page-margin-mm: 8;
+        --page-margin-px: calc(var(--page-margin-mm) * var(--px-per-mm) * 1px);
+        --safe-width: calc(var(--a4-width-px) - (var(--page-margin-px) * 2));
+        --safe-height: calc(var(--a4-height-px) - (var(--page-margin-px) * 2));
+        --header-height: 96px;
+        --row-gap: 8px;
+        --chart-slot-height: calc((var(--safe-height) - var(--header-height) - var(--row-gap)) / 2);
       }}
 
+      @page {{
+        size: A4;
+        margin: calc(var(--page-margin-mm) * 1mm);
+      }}
+
+      :root {{ color-scheme: light; }}
+
       * {{ box-sizing: border-box; }}
+
+      html,
+      body {{
+        width: var(--a4-width-px);
+        min-width: var(--a4-width-px);
+      }}
 
       body {{
         margin: 0;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial;
         color: #0f172a;
         background: #f8fafc;
+        display: block;
+        overflow-x: hidden;
       }}
 
       .pdf-page {{
-        width: 100%;
-        min-height: 100vh;
-        padding: 18px 20px 12px;
+        width: var(--safe-width);
+        height: var(--safe-height);
+        min-height: var(--safe-height);
+        max-height: var(--safe-height);
+        margin: var(--page-margin-px);
+        overflow: hidden;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         page-break-after: always;
+        break-after: page;
       }}
 
       .pdf-page:last-child {{
         page-break-after: auto;
+        break-after: auto;
       }}
 
       .page-header {{
         border: 1px solid #bae6fd;
         background: #ffffff;
         border-radius: 10px;
-        padding: 10px 12px;
+        padding: 8px 10px;
+        min-height: var(--header-height);
+        max-height: var(--header-height);
+        overflow: hidden;
       }}
 
       .report-title {{
@@ -165,6 +197,8 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
+        max-height: 34px;
+        overflow: hidden;
       }}
 
       .badge {{
@@ -179,14 +213,24 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
       .charts-grid {{
         display: grid;
         grid-template-columns: 1fr;
-        gap: 10px;
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        height: calc(var(--safe-height) - var(--header-height) - 8px);
+        min-height: calc(var(--safe-height) - var(--header-height) - 8px);
       }}
 
       .chart-card {{
         border: 1px solid #bfdbfe;
         background: #ffffff;
         border-radius: 10px;
-        padding: 10px;
+        padding: 8px;
+        height: var(--chart-slot-height);
+        min-height: var(--chart-slot-height);
+        max-height: var(--chart-slot-height);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }}
 
       .chart-title {{
@@ -199,31 +243,52 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
       }}
 
       .chart-subtitle {{
-        margin: 4px 0 8px;
+        margin: 0;
         font-size: 11px;
         color: #64748b;
+        line-height: 1.2;
+        max-height: 28px;
+        overflow: hidden;
       }}
 
       .plot {{
         width: 100%;
-        min-height: 270px;
+        height: 250px;
+        min-height: 250px;
+        max-height: 250px;
         border: 1px solid #dbeafe;
         border-radius: 8px;
         background: #ffffff;
+        overflow: hidden;
+        flex: 0 0 auto;
+      }}
+
+      .chart-card.has-metrics .plot {{
+        height: 210px;
+        min-height: 210px;
+        max-height: 210px;
+      }}
+
+      .plot .js-plotly-plot,
+      .plot .plot-container,
+      .plot .svg-container {{
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
       }}
 
       .metrics {{
-        margin-top: 8px;
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
+        overflow: hidden;
       }}
 
       .metric {{
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         background: #f8fafc;
-        padding: 6px 8px;
+        padding: 4px 6px;
       }}
 
       .metric-label {{
@@ -236,17 +301,17 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
 
       .metric-value {{
         margin: 4px 0 0;
-        font-size: 11px;
+        font-size: 10px;
         color: #0f172a;
         font-weight: 600;
       }}
 
       .insight {{
-        margin-top: 8px;
         border: 1px solid #bae6fd;
         border-radius: 8px;
         background: #f0f9ff;
-        padding: 6px 8px;
+        padding: 5px 7px;
+        overflow: hidden;
       }}
 
       .insight-label {{
@@ -260,9 +325,11 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
 
       .insight-text {{
         margin: 4px 0 0;
-        font-size: 11px;
+        font-size: 10px;
         color: #0f172a;
-        line-height: 1.4;
+        line-height: 1.25;
+        max-height: 38px;
+        overflow: hidden;
       }}
     </style>
   </head>
@@ -275,9 +342,31 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
           const encoded = element.getAttribute('data-chart');
           if (!encoded) continue;
           const parsed = JSON.parse(atob(encoded));
+          const parentCard = element.closest('.chart-card');
+          if (parsed?.metrics?.length && parentCard) {{
+            parentCard.classList.add('has-metrics');
+          }}
+
+          const width = Math.max(320, Math.floor(element.getBoundingClientRect().width));
+          const incomingHeight = Number(parsed?.layout?.height);
+          const cardHasMetrics = !!parsed?.metrics?.length;
+          const maxHeight = cardHasMetrics ? 210 : 250;
+          const minHeight = cardHasMetrics ? 180 : 220;
+          const printHeight = Number.isFinite(incomingHeight)
+            ? Math.min(Math.max(incomingHeight, minHeight), maxHeight)
+            : maxHeight;
+
+          const nextXaxis = {{ ...(parsed?.layout?.xaxis || {{}}), automargin: true }};
+          const nextYaxis = {{ ...(parsed?.layout?.yaxis || {{}}), automargin: true }};
+
           const layout = {{
             ...parsed.layout,
-            autosize: true,
+            autosize: false,
+            width,
+            height: printHeight,
+            margin: {{ l: 36, r: 14, t: 8, b: 28, ...(parsed?.layout?.margin || {{}}) }},
+            xaxis: nextXaxis,
+            yaxis: nextYaxis,
             paper_bgcolor: 'rgba(255,255,255,0)',
             plot_bgcolor: '#ffffff',
           }};
@@ -328,7 +417,7 @@ async def export_analytics_pdf(payload: AnalyticsExportRequest) -> Response:
                 pdf_bytes = await page.pdf(
                     format="A4",
                     print_background=True,
-                    margin={"top": "8mm", "right": "8mm", "bottom": "8mm", "left": "8mm"},
+                  margin={"top": "0mm", "right": "0mm", "bottom": "0mm", "left": "0mm"},
                     prefer_css_page_size=True,
                 )
                 await browser.close()

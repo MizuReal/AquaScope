@@ -1,9 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Lottie from "lottie-react";
 import { Filter } from "bad-words";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import ForumNotificationsModal from "@/components/forum/ForumNotificationsModal";
+import { useForumNotifications } from "@/hooks/useForumNotifications";
 import forumAnim from "@/assets/lottie/forumanim.json";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
@@ -205,6 +207,13 @@ const IconMegaphone = ({ className = "h-4 w-4" }) => (
   <svg {...iconProps} className={className}>
     <path d="M3 11v2a2 2 0 0 0 2 2h2l8 4V5l-8 4H5a2 2 0 0 0-2 2Z" />
     <path d="M18 9a4 4 0 0 1 0 6" />
+  </svg>
+);
+
+const IconBell = ({ className = "h-4 w-4" }) => (
+  <svg {...iconProps} className={className}>
+    <path d="M15 18H5a2 2 0 0 1-2-2v-1.3c0-.7.2-1.4.6-2l1-1.4A4.8 4.8 0 0 0 5.5 8V7a4.5 4.5 0 1 1 9 0v1a4.8 4.8 0 0 0 .9 2.9l1 1.4c.4.6.6 1.3.6 2V16a2 2 0 0 1-2 2h0Z" />
+    <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
   </svg>
 );
 
@@ -575,6 +584,9 @@ function ThreadCard({
 }
 
 export default function CommunityPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [authReady, setAuthReady] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -611,10 +623,27 @@ export default function CommunityPage() {
   const [threadLikeBusyId, setThreadLikeBusyId] = useState("");
   const [threadDeleteBusyId, setThreadDeleteBusyId] = useState("");
   const [categoriesOpen, setCategoriesOpen] = useState(true);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
   const [loadingAnimData, setLoadingAnimData] = useState(null);
   const loadMoreTriggerRef = useRef(null);
   const badWordFilter = useMemo(() => new Filter(), []);
   const { toasts, addToast, dismissToast, runToastAction } = useToast();
+  const {
+    notifications,
+    notificationsLoading,
+    notificationsError,
+    notificationsBusyId,
+    unreadNotificationsCount,
+    refreshNotifications,
+    markNotificationAsRead,
+    setNotificationsError,
+  } = useForumNotifications({
+    sessionUserId: sessionUser?.id || "",
+    profilesTable: SUPABASE_PROFILES_TABLE,
+    normalizeAvatarUrl: resolveAvatarUrl,
+  });
+  const pendingOpenThreadId = location.state?.openThreadId || "";
+  const pendingNotificationId = location.state?.notificationId || "";
 
   useEffect(() => {
     let mounted = true;
@@ -964,6 +993,55 @@ export default function CommunityPage() {
 
   const topicFilters = useMemo(() => tagFilters.filter((tag) => tag.id !== "all" && tag.id !== "mine"), [tagFilters]);
 
+  const fetchThreadById = useCallback(async (threadId) => {
+    if (!threadId) return null;
+
+    const threadResult = await supabase
+      .from("forum_threads")
+      .select(
+        "id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+      )
+      .eq("id", threadId)
+      .maybeSingle();
+
+    if (threadResult.error) throw threadResult.error;
+    if (!threadResult.data) return null;
+
+    let profile = null;
+    if (threadResult.data.user_id) {
+      const profileResult = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select("id, display_name, organization, avatar_url")
+        .eq("id", threadResult.data.user_id)
+        .maybeSingle();
+
+      if (profileResult.error) throw profileResult.error;
+      profile = profileResult.data || null;
+      if (profile?.avatar_url) {
+        const resolved = await resolveAvatarUrl(profile.avatar_url);
+        profile = {
+          ...profile,
+          avatar_url: resolved || profile.avatar_url,
+        };
+      }
+    }
+
+    const categories = (threadResult.data.forum_thread_categories || [])
+      .map((link) => link.forum_categories)
+      .filter(Boolean);
+
+    return {
+      ...threadResult.data,
+      categories,
+      ...resolveAuthor({
+        profile,
+        userId: threadResult.data.user_id,
+        sessionUser,
+        sessionAvatar: sessionAvatarUrl,
+      }),
+    };
+  }, [sessionAvatarUrl, sessionUser]);
+
   const toggleThreadLike = async (thread) => {
     if (!sessionUser) {
       setFeedError("Please sign in to like a thread.");
@@ -1102,6 +1180,90 @@ export default function CommunityPage() {
       setReplyError("");
     }, THREAD_MODAL_ANIMATION_MS);
   };
+
+  const handleOpenNotification = useCallback(async (notification) => {
+    if (!notification?.thread_id) {
+      setNotificationsError("This notification has no linked thread.");
+      return;
+    }
+
+    try {
+      if (!notification.is_read) {
+        await markNotificationAsRead(notification.id);
+      }
+
+      const existingThread = threads.find((item) => item.id === notification.thread_id);
+      const targetThread = existingThread || await fetchThreadById(notification.thread_id);
+
+      if (!targetThread) {
+        setNotificationsError("Thread is no longer available.");
+        return;
+      }
+
+      if (!existingThread) {
+        setThreads((prev) => dedupeById([targetThread, ...prev]));
+      }
+
+      setNotificationsVisible(false);
+      await openThread(targetThread);
+    } catch (error) {
+      console.warn("[Supabase] notification open failed:", error?.message || error);
+      setNotificationsError("Unable to open this notification right now.");
+    }
+  }, [fetchThreadById, markNotificationAsRead, openThread, setNotificationsError, threads]);
+
+  useEffect(() => {
+    if (!authReady || !pendingOpenThreadId) return;
+
+    let active = true;
+
+    const openPendingThread = async () => {
+      try {
+        if (pendingNotificationId) {
+          const source = notifications.find((item) => item.id === pendingNotificationId);
+          if (source && !source.is_read) {
+            await markNotificationAsRead(pendingNotificationId);
+          }
+        }
+
+        const existingThread = threads.find((item) => item.id === pendingOpenThreadId);
+        const targetThread = existingThread || await fetchThreadById(pendingOpenThreadId);
+        if (!active || !targetThread) return;
+
+        if (!existingThread) {
+          setThreads((prev) => dedupeById([targetThread, ...prev]));
+        }
+
+        await openThread(targetThread);
+      } catch (error) {
+        if (active) {
+          setNotificationsError("Unable to open the selected notification thread.");
+        }
+      } finally {
+        if (active) {
+          navigate(location.pathname, { replace: true, state: null });
+        }
+      }
+    };
+
+    openPendingThread();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    authReady,
+    fetchThreadById,
+    location.pathname,
+    markNotificationAsRead,
+    navigate,
+    notifications,
+    openThread,
+    pendingNotificationId,
+    pendingOpenThreadId,
+    setNotificationsError,
+    threads,
+  ]);
 
   const deleteThread = async (thread) => {
     if (!sessionUser?.id) {
@@ -1475,9 +1637,28 @@ export default function CommunityPage() {
                 <p className="text-xs text-slate-500">Hi there 👋</p>
                 <p className="truncate text-sm font-semibold text-slate-900">{loggedInAs}</p>
               </div>
-              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">
-                Forum Feed
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNotificationsVisible(true);
+                    refreshNotifications();
+                  }}
+                  className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-sky-200 bg-white text-sky-700 transition hover:border-sky-300 hover:bg-sky-50"
+                  aria-label="Open notifications"
+                  title="Notifications"
+                >
+                  <IconBell className="h-4 w-4" />
+                  {unreadNotificationsCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                      {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                    </span>
+                  ) : null}
+                </button>
+                <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-700">
+                  Forum Feed
+                </span>
+              </div>
             </div>
           </div>
         </header>
@@ -1886,6 +2067,16 @@ export default function CommunityPage() {
       ) : null}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} onAction={runToastAction} />
+
+      <ForumNotificationsModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        notificationsLoading={notificationsLoading}
+        notificationsError={notificationsError}
+        notificationsBusyId={notificationsBusyId}
+        onOpenNotification={handleOpenNotification}
+      />
     </section>
   );
 }

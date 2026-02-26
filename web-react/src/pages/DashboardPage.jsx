@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import ForumNotificationsModal from "@/components/forum/ForumNotificationsModal";
+import { useForumNotifications } from "@/hooks/useForumNotifications";
 import { chatWithCopilot } from "@/lib/api";
 import cuteRobotAnim from "@/assets/lottie/CuteRobot.json";
 import aiAnim from "@/assets/lottie/AI.json";
@@ -125,6 +127,12 @@ const IconSun = ({ className = "h-4 w-4" }) => (
 const IconChevron = ({ className = "h-4 w-4" }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className}><path d="m6 9 6 6 6-6" /></svg>
 );
+const IconBell = ({ className = "h-4 w-4" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M15 18H5a2 2 0 0 1-2-2v-1.3c0-.7.2-1.4.6-2l1-1.4A4.8 4.8 0 0 0 5.5 8V7a4.5 4.5 0 1 1 9 0v1a4.8 4.8 0 0 0 .9 2.9l1 1.4c.4.6.6 1.3.6 2V16a2 2 0 0 1-2 2h0Z" />
+    <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+  </svg>
+);
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -133,6 +141,7 @@ export default function DashboardPage() {
   const [checking, setChecking] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
   const [userStats, setUserStats] = useState({ scans: 0, predictions: 0 });
+  const [sessionUser, setSessionUser] = useState(null);
   const [displayName, setDisplayName] = useState("User");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -149,6 +158,20 @@ export default function DashboardPage() {
   const [forumSpotlight, setForumSpotlight] = useState(null);
   const [spotlightAvatarFailed, setSpotlightAvatarFailed] = useState(false);
   const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const {
+    notifications,
+    notificationsLoading,
+    notificationsError,
+    notificationsBusyId,
+    unreadNotificationsCount,
+    refreshNotifications,
+    markNotificationAsRead,
+  } = useForumNotifications({
+    sessionUserId: sessionUser?.id || "",
+    profilesTable: SUPABASE_PROFILES_TABLE,
+    normalizeAvatarUrl: resolveAvatarUrl,
+  });
 
   const hydrateIdentity = useCallback(async (user, isActive = () => true) => {
     if (!user) return;
@@ -211,6 +234,7 @@ export default function DashboardPage() {
           return;
         }
 
+        setSessionUser(data.session.user);
         setAuthReady(true);
         setChecking(false);
         hydrateIdentity(data.session.user, () => alive);
@@ -272,6 +296,7 @@ export default function DashboardPage() {
         if (event === "SIGNED_OUT") {
           setChecking(false);
           setAuthReady(false);
+          setSessionUser(null);
           setRedirecting(true);
           navigate("/", { replace: true });
         }
@@ -279,6 +304,7 @@ export default function DashboardPage() {
       }
 
       (async () => {
+        setSessionUser(session.user);
         setAuthReady(true);
         setChecking(false);
         hydrateIdentity(session.user, () => alive);
@@ -319,6 +345,24 @@ export default function DashboardPage() {
   const closeChatModal = () => { setChatModalActive(false); setTimeout(() => setChatOpen(false), 220); };
   const openTutorialModal = () => { setTutorialOpen(true); setTimeout(() => setTutorialModalActive(true), 10); };
   const closeTutorialModal = () => { setTutorialModalActive(false); setTimeout(() => setTutorialOpen(false), 220); };
+  const handleOpenNotification = async (notification) => {
+    if (!notification?.thread_id) return;
+
+    try {
+      if (!notification.is_read) {
+        await markNotificationAsRead(notification.id);
+      }
+    } catch {
+    } finally {
+      setNotificationsVisible(false);
+      navigate("/dashboard/community", {
+        state: {
+          openThreadId: notification.thread_id,
+          notificationId: notification.id,
+        },
+      });
+    }
+  };
   const handleChatTabChange = (t) => { if (t === chatTab) return; setChatTab(t); setChatHistory([]); setChatInput(""); setChatError(""); };
 
   /* ── Last-sample contextual summary for chatbot card ───── */
@@ -357,8 +401,25 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Water Quality Control Room</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <button type="button" onClick={openTutorialModal} className="inline-flex items-center gap-2 rounded-lg border border-sky-500 bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700">
+            <button type="button" onClick={openTutorialModal} className="inline-flex items-center gap-2 rounded-lg border border-sky-500 bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700">
               <IconSpark className="h-3.5 w-3.5" />Tutorial
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNotificationsVisible(true);
+                refreshNotifications();
+              }}
+              className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 shadow-sm transition hover:border-sky-300 hover:bg-sky-50"
+              aria-label="Open notifications"
+              title="Notifications"
+            >
+              <IconBell className="h-4 w-4" />
+              {unreadNotificationsCount > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+                </span>
+              ) : null}
             </button>
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
                 {avatarUrl && !avatarFailed ? (
@@ -728,6 +789,16 @@ export default function DashboardPage() {
           )}
         </article>
       </div>
+
+      <ForumNotificationsModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        notificationsLoading={notificationsLoading}
+        notificationsError={notificationsError}
+        notificationsBusyId={notificationsBusyId}
+        onOpenNotification={handleOpenNotification}
+      />
     </section>
   );
 }

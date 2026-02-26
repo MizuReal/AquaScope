@@ -79,6 +79,16 @@ function NavIcon({ icon }) {
     );
   }
 
+  if (icon === "logout") {
+    return (
+      <svg {...commonProps}>
+        <path d="M15 17l5-5-5-5" />
+        <path d="M20 12H9" />
+        <path d="M12 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7" />
+      </svg>
+    );
+  }
+
   return (
     <svg {...commonProps}>
       <path d="M9 5h10" />

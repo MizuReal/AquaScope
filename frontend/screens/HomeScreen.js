@@ -225,6 +225,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const [clusterRiskLabel, setClusterRiskLabel] = useState('No data');
 	const [clusterIndexLabel, setClusterIndexLabel] = useState('Composite index pending');
 	const [clusterBarPercent, setClusterBarPercent] = useState(8);
+	const [unreadNotifications, setUnreadNotifications] = useState(0);
 	const [chatThreads, setChatThreads] = useState({
 		quality: [
 			{
@@ -262,6 +263,27 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 			};
 		});
 	};
+
+	const refreshUnreadNotifications = useCallback(async (userIdParam = '') => {
+		const recipientId = userIdParam || sessionUserId;
+		if (!recipientId) {
+			setUnreadNotifications(0);
+			return;
+		}
+
+		try {
+			const { count, error } = await supabase
+				.from('forum_notifications')
+				.select('id', { count: 'exact', head: true })
+				.eq('recipient_user_id', recipientId)
+				.eq('is_read', false);
+
+			if (error) throw error;
+			setUnreadNotifications(count || 0);
+		} catch (error) {
+			console.warn('[Supabase] unread notifications load failed:', error?.message || error);
+		}
+	}, [sessionUserId]);
 
 	const refreshProfileOnly = useCallback(async (sessionUser = null) => {
 		try {
@@ -654,6 +676,37 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 		};
 	}, [refreshProfileOnly, sessionUserId]);
 
+	useEffect(() => {
+		refreshUnreadNotifications();
+	}, [refreshUnreadNotifications]);
+
+	useEffect(() => {
+		if (!sessionUserId) {
+			setUnreadNotifications(0);
+			return undefined;
+		}
+
+		const notificationsChannel = supabase
+			.channel(`home-forum-notifications-${sessionUserId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'forum_notifications',
+					filter: `recipient_user_id=eq.${sessionUserId}`,
+				},
+				() => {
+					refreshUnreadNotifications(sessionUserId);
+				}
+			)
+			.subscribe();
+
+		return () => {
+			supabase.removeChannel(notificationsChannel);
+		};
+	}, [refreshUnreadNotifications, sessionUserId]);
+
 	const currentThread = chatThreads[activeChatTab === 'quality' ? 'quality' : 'data'] || [];
 
 	useEffect(() => {
@@ -712,18 +765,34 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 								</Text>
 							</View>
 						</View>
-						<View
-							className={`rounded-full border px-3 py-1 ${
-								isDark ? 'border-amber-400/60 bg-amber-400/10' : 'border-amber-300 bg-amber-100'
-							}`}
-						>
-							<View className="flex-row items-center gap-1.5">
-								<MaterialCommunityIcons
-									name="shield-check"
-									size={12}
-									color={isDark ? '#fcd34d' : '#92400e'}
-								/>
-								<Text className={`text-[11px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>Status</Text>
+						<View className="flex-row items-center gap-2">
+							<TouchableOpacity
+								activeOpacity={0.85}
+								onPress={() => onNavigate?.('community', { openNotificationsSignal: Date.now() })}
+								className={`relative h-9 w-9 items-center justify-center rounded-full border ${
+									isDark ? 'border-sky-800/70 bg-slate-950/70' : 'border-slate-300 bg-slate-100'
+								}`}
+							>
+								<MaterialCommunityIcons name="bell-outline" size={18} color={isDark ? '#dbeafe' : '#334155'} />
+								{unreadNotifications > 0 && (
+									<View className="absolute -right-1 -top-1 min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1">
+										<Text className="text-[9px] font-bold text-white">{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text>
+									</View>
+								)}
+							</TouchableOpacity>
+							<View
+								className={`rounded-full border px-3 py-1 ${
+									isDark ? 'border-amber-400/60 bg-amber-400/10' : 'border-amber-300 bg-amber-100'
+								}`}
+							>
+								<View className="flex-row items-center gap-1.5">
+									<MaterialCommunityIcons
+										name="shield-check"
+										size={12}
+										color={isDark ? '#fcd34d' : '#92400e'}
+									/>
+									<Text className={`text-[11px] font-semibold ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>Status</Text>
+								</View>
 							</View>
 						</View>
 					</View>
