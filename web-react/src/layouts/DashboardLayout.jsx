@@ -1,7 +1,12 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 
+import { isAdminRole } from "@/lib/profileRole";
 import { supabase } from "@/lib/supabaseClient";
+
+const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
+
+const isDeactivatedAccount = (status) => String(status || "").toLowerCase() === "deactivated";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
@@ -106,6 +111,7 @@ export default function DashboardLayout() {
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [authToast, setAuthToast] = useState("");
 
   const activeItem = useMemo(() => {
     const match = navItems.find((item) => item.href === pathname);
@@ -116,6 +122,44 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     let isMounted = true;
+
+    const guardByProfile = async (userId) => {
+      const { data: profile, error: profileError } = await supabase
+        .from(SUPABASE_PROFILES_TABLE)
+        .select("role, status")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (!isMounted) return false;
+
+      if (profileError) {
+        navigate("/?auth=required&reason=signin_required", { replace: true });
+        return false;
+      }
+
+      if (isDeactivatedAccount(profile?.status)) {
+        setAuthToast("Account is deactivated.");
+        setAuthChecked(false);
+        setTimeout(async () => {
+          if (!isMounted) return;
+          try {
+            await supabase.auth.signOut();
+          } catch {
+          }
+          if (!isMounted) return;
+          navigate("/?auth=required&reason=account_deactivated", { replace: true });
+        }, 1200);
+        return false;
+      }
+
+      if (isAdminRole(profile?.role)) {
+        navigate("/admin/dashboard", { replace: true });
+        return false;
+      }
+
+      setAuthChecked(true);
+      return true;
+    };
 
     const guardAccess = async () => {
       if (!supabase) {
@@ -131,12 +175,27 @@ export default function DashboardLayout() {
         return;
       }
 
-      setAuthChecked(true);
+      await guardByProfile(data.session.user.id);
     };
 
     guardAccess();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (!session?.user?.id) {
+        if (event === "SIGNED_OUT") {
+          navigate("/?auth=required&reason=signin_required", { replace: true });
+        }
+        return;
+      }
+
+      await guardByProfile(session.user.id);
+    });
+
     return () => {
       isMounted = false;
+      listener.subscription.unsubscribe();
     };
   }, [navigate]);
 
@@ -156,6 +215,11 @@ export default function DashboardLayout() {
   if (!authChecked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
+        {authToast ? (
+          <div className="pointer-events-none fixed right-4 top-4 z-50 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 shadow-lg">
+            {authToast}
+          </div>
+        ) : null}
         <div className="space-y-3">
           <p className="text-xl font-semibold">Verifying your session...</p>
           <p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p>
