@@ -76,3 +76,7 @@ web/
 
 # Debug artifacts
 debug_output/
+
+#Folder
+deploy
+deploy/
