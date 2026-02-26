@@ -20,9 +20,12 @@ from app.routes.container import router as container_router
 from app.routes.export import router as export_router
 from app.routes.admin_notifications import router as admin_notifications_router
 
-# Enable debug logging for fiducial detection
-logging.basicConfig(level=logging.DEBUG)
+# Default app logging (keeps request logs, avoids verbose third-party HTTP debug traces)
+logging.basicConfig(level=logging.INFO)
 logging.getLogger("app.routes.fiducial").setLevel(logging.DEBUG)
+logging.getLogger("groq").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 settings = get_settings()
 
