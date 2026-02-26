@@ -62,7 +62,6 @@ yarn-error.log*
 # Debug
 DEBUG_REFERENCE/
 debug_output/
-```
 
 # files
 best.pt
@@ -70,4 +69,6 @@ best.torchscript
 hugging-face
 hugging-face/
 cs
-web
+
+# Legacy Next.js web app (old folder)
+web/
