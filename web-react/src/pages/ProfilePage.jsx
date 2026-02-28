@@ -69,6 +69,9 @@ export default function ProfilePage() {
   useEffect(() => {
     if (configMissing) return;
     let isMounted = true;
+    // Prevents the immediate SIGNED_IN auth event from running loadProfile
+    // in parallel with the bootstrap call, causing a redundant double-load.
+    let sessionAcquired = false;
 
     const loadProfile = async (session) => {
       if (!isMounted) return;
@@ -134,6 +137,8 @@ export default function ProfilePage() {
       setAuthReady(true);
       setChecking(false);
       await loadProfile(data.session);
+      // Mark session as acquired so future auth events can trigger reloads.
+      sessionAcquired = true;
     };
 
     bootstrap();
@@ -150,6 +155,11 @@ export default function ProfilePage() {
       }
 
       setAuthReady(true);
+      // Guard: supabase-js v2 fires SIGNED_IN immediately when a session already exists.
+      // Only reload the profile after the bootstrap has finished its own load.
+      // Once bootstrap sets sessionAcquired=true it stays true, so any future
+      // SIGNED_IN (e.g. after signing out and back in) will correctly reload.
+      if (!sessionAcquired) return;
       await loadProfile(session);
     });
 

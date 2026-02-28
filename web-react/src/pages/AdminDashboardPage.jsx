@@ -534,7 +534,11 @@ export default function AdminDashboardPage() {
     } finally {
       snapshotInFlightRef.current = false;
 
-      if (latestSnapshotRequestIdRef.current === requestId) {
+      // A non-silent request sets loading=true when it starts, so it must
+      // always clear it when it finishes — even if a newer silent request has
+      // since incremented latestSnapshotRequestIdRef. Omitting the check here
+      // was the original cause of the dashboard getting stuck on "Loading…".
+      if (!silent) {
         setLoading(false);
       }
 

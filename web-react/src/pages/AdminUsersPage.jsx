@@ -133,6 +133,8 @@ export default function AdminUsersPage() {
   const [deactivationSubmitting, setDeactivationSubmitting] = useState(false);
   const mountedRef = useRef(true);
   const latestLoadRequestIdRef = useRef(0);
+  // Prevents auth-state events that fire during initialization from superseding the first load.
+  const sessionAcquiredRef = useRef(false);
   const { toasts, addToast, dismissToast } = useToast();
 
   const loadProfiles = useCallback(async ({ silent = false, showToastOnError = true } = {}) => {
@@ -197,7 +199,13 @@ export default function AdminUsersPage() {
         addToast(err?.message || "Unable to load profiles.", "error");
       }
     } finally {
-      if (mountedRef.current && !silent && latestLoadRequestIdRef.current === requestId) {
+      if (mountedRef.current && latestLoadRequestIdRef.current === requestId) {
+        // Mark session as acquired so future auth events can trigger silent refreshes.
+        sessionAcquiredRef.current = true;
+      }
+      // The non-silent request owns the loading state and must always clear it,
+      // even if a newer request has superseded it in the meantime.
+      if (mountedRef.current && !silent) {
         setLoading(false);
       }
     }
@@ -214,8 +222,14 @@ export default function AdminUsersPage() {
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      // Guard: supabase-js v2 fires SIGNED_IN immediately on subscription when a session
+      // already exists, which would supersede the ongoing initial load and leave `loading`
+      // stuck at true forever. Only trigger a silent refresh once the first load has settled.
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        loadProfiles({ silent: true, showToastOnError: false });
+        if (sessionAcquiredRef.current) {
+          loadProfiles({ silent: true, showToastOnError: false });
+        }
+        return;
       }
 
       if (event === "SIGNED_OUT" && mountedRef.current) {
