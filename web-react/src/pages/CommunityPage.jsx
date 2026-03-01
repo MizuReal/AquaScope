@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Lottie from "lottie-react";
 import { Filter } from "bad-words";
 
-import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import ForumNotificationsModal from "@/components/forum/ForumNotificationsModal";
 import { useForumNotifications } from "@/hooks/useForumNotifications";
 import forumAnim from "@/assets/lottie/forumanim.json";
@@ -13,7 +14,6 @@ const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKE
 const MAX_CATEGORIES = 5;
 const THREADS_BATCH_SIZE = 10;
 const THREAD_MODAL_ANIMATION_MS = 220;
-const configMissing = !supabase || !isSupabaseConfigured;
 
 const resolveAvatarUrl = async (rawUrlOrPath) => {
   if (!rawUrlOrPath) return "";
@@ -587,11 +587,15 @@ export default function CommunityPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [authReady, setAuthReady] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [authError, setAuthError] = useState("");
-  const [sessionUser, setSessionUser] = useState(null);
+  const { user: sessionUser } = useAuth();
   const [sessionAvatarUrl, setSessionAvatarUrl] = useState("");
+
+  // Refs so fetchThreadsBatch can access the latest values without its
+  // useCallback identity changing on every avatar/user update.
+  const sessionUserRef = useRef(sessionUser);
+  const sessionAvatarUrlRef = useRef(sessionAvatarUrl);
+  useEffect(() => { sessionUserRef.current = sessionUser; }, [sessionUser]);
+  useEffect(() => { sessionAvatarUrlRef.current = sessionAvatarUrl; }, [sessionAvatarUrl]);
 
   const [categories, setCategories] = useState([]);
   const [threads, setThreads] = useState([]);
@@ -700,60 +704,12 @@ export default function CommunityPage() {
     }
   }, []);
 
+  // Sync the user's profile to Supabase whenever the session user changes.
   useEffect(() => {
-    if (configMissing) {
-      return;
-    }
-
-    let isMounted = true;
-
-    const bootstrap = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
-
-      if (error) {
-        setAuthError("Unable to verify your session. Please try logging in again.");
-        setChecking(false);
-        return;
-      }
-
-      if (!data?.session) {
-        setAuthReady(false);
-        setSessionAvatarUrl("");
-        setChecking(false);
-        return;
-      }
-
-      setSessionUser(data.session.user);
-      setSessionAvatarUrl(data.session.user?.user_metadata?.avatar_url || data.session.user?.user_metadata?.picture || "");
-      await syncSessionProfile(data.session.user);
-      setAuthReady(true);
-      setChecking(false);
-    };
-
-    bootstrap();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) return;
-      if (!session?.user) {
-        if (event === "SIGNED_OUT") {
-          setAuthReady(false);
-          setSessionUser(null);
-          setSessionAvatarUrl("");
-        }
-      } else {
-        setAuthReady(true);
-        setSessionUser(session.user);
-        setSessionAvatarUrl(session.user?.user_metadata?.avatar_url || session.user?.user_metadata?.picture || "");
-        syncSessionProfile(session.user);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, [syncSessionProfile]);
+    if (!sessionUser?.id) return;
+    syncSessionProfile(sessionUser);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id, syncSessionProfile]);
 
   useEffect(() => {
     if (!sessionUser?.id) {
@@ -839,8 +795,8 @@ export default function CommunityPage() {
         ...resolveAuthor({
           profile: profileMap.get(thread.user_id),
           userId: thread.user_id,
-          sessionUser,
-          sessionAvatar: sessionAvatarUrl,
+          sessionUser: sessionUserRef.current,
+          sessionAvatar: sessionAvatarUrlRef.current,
         }),
       };
     });
@@ -872,7 +828,8 @@ export default function CommunityPage() {
         const threadId = row.thread_id;
         if (!threadId) return;
         likesCount[threadId] = (likesCount[threadId] || 0) + 1;
-        if (sessionUser?.id && row.user_id === sessionUser.id) {
+        const su = sessionUserRef.current;
+        if (su?.id && row.user_id === su.id) {
           likedThreadIds.add(threadId);
         }
       });
@@ -888,7 +845,9 @@ export default function CommunityPage() {
     }, {});
 
     return { hydratedThreads, stats };
-  }, [sessionAvatarUrl, sessionUser]);
+  // fetchThreadsBatch is now stable — it reads session values through refs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadForumData = useCallback(async () => {
     setLoading(true);
@@ -936,9 +895,12 @@ export default function CommunityPage() {
   }, [fetchThreadsBatch, hasMoreThreads, loading, loadingMore, threads.length]);
 
   useEffect(() => {
-    if (!authReady) return;
+    if (!sessionUser?.id) return;
     loadForumData();
-  }, [authReady, loadForumData]);
+  // loadForumData is now stable (fetchThreadsBatch uses refs); only re-run
+  // when the signed-in user changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id]);
 
   useEffect(() => {
     const node = loadMoreTriggerRef.current;
@@ -1213,7 +1175,7 @@ export default function CommunityPage() {
   }, [fetchThreadById, markNotificationAsRead, openThread, setNotificationsError, threads]);
 
   useEffect(() => {
-    if (!authReady || !pendingOpenThreadId) return;
+    if (!sessionUser?.id || !pendingOpenThreadId) return;
 
     let active = true;
 
@@ -1252,7 +1214,6 @@ export default function CommunityPage() {
       active = false;
     };
   }, [
-    authReady,
     fetchThreadById,
     location.pathname,
     markNotificationAsRead,
@@ -1555,61 +1516,6 @@ export default function CommunityPage() {
       return [...prev, categoryId];
     });
   };
-
-  if (configMissing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="max-w-md space-y-4">
-          <p className="text-xl font-semibold">Configure Supabase auth</p>
-          <p className="text-sm text-slate-500">
-            Add VITE_PUBLIC_SUPABASE_URL and VITE_PUBLIC_SUPABASE_ANON_KEY to .env so we can secure the forum route.
-          </p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (authError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="max-w-md space-y-4">
-          <p className="text-xl font-semibold">Authentication unavailable</p>
-          <p className="text-sm text-slate-500">{authError}</p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="space-y-4">
-          <p className="text-xl font-semibold">Verifying your session...</p>
-          <p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!authReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="space-y-4">
-          <p className="text-xl font-semibold">Please sign in</p>
-          <p className="text-sm text-slate-500">Log in to access the community forum.</p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <section className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900 lg:px-12">

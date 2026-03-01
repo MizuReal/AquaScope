@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getUserRole, isAdminRole } from "@/lib/profileRole";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const navItems = [
   { label: "Admin dashboard", href: "/admin/dashboard", icon: "dashboard" },
@@ -105,6 +106,8 @@ const configMissing = !supabase || !isSupabaseConfigured;
 export default function AdminLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [collapsed, setCollapsed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -115,30 +118,19 @@ export default function AdminLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    if (configMissing) {
-      setChecking(false);
+    // Wait for the shared AuthContext to resolve before running the role check
+    if (authLoading) return;
+
+    if (!userId) {
+      navigate("/", { replace: true });
       return;
     }
 
     let isMounted = true;
 
-    const bootstrap = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
-
-      if (error) {
-        setAuthError("Unable to verify your session.");
-        setChecking(false);
-        return;
-      }
-
-      if (!data?.session?.user?.id) {
-        navigate("/", { replace: true });
-        return;
-      }
-
+    (async () => {
       try {
-        const role = await getUserRole(data.session.user.id);
+        const role = await getUserRole(userId);
         if (!isMounted) return;
 
         if (!isAdminRole(role)) {
@@ -152,39 +144,12 @@ export default function AdminLayout() {
         setAuthError("Unable to load your profile role.");
         setChecking(false);
       }
-    };
-
-    bootstrap();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!isMounted) return;
-
-        if (!session) {
-          if (event === "SIGNED_OUT") {
-            navigate("/", { replace: true });
-          }
-          return;
-        }
-
-        /* Re-verify admin role on token refresh / sign-in */
-        try {
-          const role = await getUserRole(session.user.id);
-          if (!isMounted) return;
-          if (!isAdminRole(role)) {
-            navigate("/dashboard", { replace: true });
-          }
-        } catch {
-          /* non-critical — initial check already passed */
-        }
-      },
-    );
+    })();
 
     return () => {
       isMounted = false;
-      listener.subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [userId, authLoading, navigate]);
 
   const sidebarWidth = collapsed ? "w-20" : "w-64";
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ADMIN_ROLE_VALUE } from "@/lib/profileRole";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const configMissing = !supabase || !isSupabaseConfigured;
 const missingRelationCode = "42P01";
@@ -226,6 +227,7 @@ function StatIcon({ icon }) {
 }
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [warningNote, setWarningNote] = useState("");
@@ -259,26 +261,20 @@ export default function AdminDashboardPage() {
 
     const loadAdminIdentity = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!isMounted || !session?.user?.id) {
-          return;
-        }
+        if (!user?.id) return;
 
         const { data: profile } = await supabase
           .from(SUPABASE_PROFILES_TABLE)
           .select("display_name, avatar_url")
-          .eq("id", session.user.id)
+          .eq("id", user.id)
           .maybeSingle();
 
         if (!isMounted) {
           return;
         }
 
-        const resolvedName = pickAdminName(session.user, profile);
-        const metadataAvatar = session.user?.user_metadata?.avatar_url || session.user?.user_metadata?.picture;
+        const resolvedName = pickAdminName(user, profile);
+        const metadataAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
         const rawAvatar = profile?.avatar_url || metadataAvatar || "";
         const resolvedAvatar = await resolveAvatarUrl(rawAvatar);
 
@@ -297,7 +293,8 @@ export default function AdminDashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const loadSnapshot = useCallback(async ({ silent = false } = {}) => {
     if (configMissing) {

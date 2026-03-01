@@ -24,29 +24,46 @@ _MAX_RETRIES = 3
 _INITIAL_BACKOFF = 5  # seconds
 
 FILTRATION_SYSTEM_PROMPT = (
-    "You are an expert water-treatment engineer. "
+    "You are a friendly and knowledgeable water-safety assistant. "
     "The user will provide water quality analysis results including microbial risk "
     "level, WHO threshold violations, detected bacteria, and parameter readings. "
     "Your job:\n"
-    "1. Recommend the most appropriate WHO-recognised filtration / disinfection "
+    "1. Recommend the most appropriate WHO-recognised filtration or disinfection "
     "method(s) for the specific contaminants found.\n"
-    "2. Briefly explain WHY each method works for those contaminants.\n"
+    "2. Briefly explain WHY each method works for those contaminants in plain language.\n"
     "3. Note any low-cost alternatives suitable for field or household use.\n"
-    "4. If the water is already safe, say so clearly.\n"
-    "Keep answers concise (≤200 words). Use bullet points. "
-    "Cite WHO guideline names where relevant."
+    "4. If the water is already safe, say so clearly and reassuringly.\n"
+    "Keep answers concise (200 words or less). Use short numbered steps or dashes for lists. "
+    "Do NOT use markdown symbols such as *, **, #, or backticks. "
+    "Write in plain, friendly, easy-to-understand language."
 )
 
 CONTAINER_CLEANING_SYSTEM_PROMPT = (
-    "You are a senior water-sanitation operations advisor for container hygiene. "
+    "You are a friendly water-container hygiene advisor. "
     "The user provides a container scan result with one of these classes: "
     "Clean, LightMoss, MediumMoss, HeavyMoss, or an invalid/unrecognized result. "
     "Your job:\n"
-    "1. Explain what the class implies in practical risk terms.\n"
+    "1. Explain what the class means in simple, practical terms.\n"
     "2. Give clear step-by-step cleaning guidance tailored to that class.\n"
     "3. State when to keep using, deep-clean, or discard/replace the container.\n"
     "4. Include low-cost household options and a brief safety reminder.\n"
-    "Keep responses concise (<=180 words), practical, and in bullet points."
+    "Keep responses concise (180 words or less) and easy to follow. "
+    "Do NOT use markdown symbols such as *, **, #, or backticks. "
+    "Use plain numbered steps or dashes for lists instead."
+)
+
+DASHBOARD_SYSTEM_PROMPT = (
+    "You are a friendly personal water-safety assistant built into a water quality dashboard. "
+    "You have access to the user's dashboard activity data — their total scan count, "
+    "prediction count, and their most recent water sample result. "
+    "Your job:\n"
+    "1. Summarize what the user's activity data tells you in plain, conversational language.\n"
+    "2. Highlight anything noteworthy about their latest sample (risk level, potability).\n"
+    "3. Suggest clear, practical next steps based on their data.\n"
+    "4. If data is limited, be honest and encouraging rather than making things up.\n"
+    "Keep answers concise (200 words or less). "
+    "Do NOT use markdown symbols such as *, **, #, or backticks. "
+    "Write in a warm, easy-to-understand tone as if talking to a non-expert."
 )
 
 
@@ -156,7 +173,87 @@ def _build_container_context(analysis: Dict) -> str:
         for label in ("Clean", "LightMoss", "MediumMoss", "HeavyMoss"):
             value = probabilities.get(label)
             if isinstance(value, (int, float)):
-                lines.append(f"  • {label}: {value:.3f}")
+                lines.append(f"  - {label}: {value:.3f}")
+
+    return "\n".join(lines)
+
+
+def _build_dashboard_context(analysis: Dict) -> str:
+    """Build grounding context for the 'my_data' dashboard chat tab.
+
+    The frontend sends:
+      { source, user_stats: {scans, predictions}, context: { focus, user_name,
+        dashboard_metrics: {scans, predictions}, last_sample: {risk_level,
+        is_potable, recorded_at} } }
+    """
+    lines: list[str] = []
+
+    ctx = analysis.get("context") or {}
+    user_name = ctx.get("user_name") or "the user"
+    lines.append(f"User: {user_name}")
+
+    metrics = ctx.get("dashboard_metrics") or analysis.get("user_stats") or {}
+    scans = metrics.get("scans", 0)
+    predictions = metrics.get("predictions", 0)
+    lines.append(f"Total scans recorded: {scans}")
+    lines.append(f"Total potability predictions made: {predictions}")
+
+    last = ctx.get("last_sample")
+    if last:
+        risk = last.get("risk_level") or "unknown"
+        potable = last.get("is_potable")
+        recorded_at = last.get("recorded_at") or ""
+        potable_str = "potable (safe to drink)" if potable else "not potable (unsafe)"
+        lines.append(f"Most recent sample result: {potable_str}, risk level: {risk}")
+        if recorded_at:
+            lines.append(f"Recorded at: {recorded_at}")
+    else:
+        lines.append("Most recent sample: no data available yet.")
+
+    return "\n".join(lines)
+
+
+def _build_dashboard_water_context(analysis: Dict) -> str:
+    """Build grounding context for the 'water_quality' dashboard chat tab.
+
+    The frontend sends last_sample with: label, ph, turbidity, hardness,
+    chloramines, risk_level, is_potable, confidence, recorded_at.
+    """
+    lines: list[str] = []
+
+    ctx = analysis.get("context") or {}
+    last = ctx.get("last_sample")
+
+    if last:
+        label = last.get("label") or "last sample"
+        lines.append(f"Sample: {label}")
+
+        potable = last.get("is_potable")
+        risk = last.get("risk_level") or "unknown"
+        confidence = last.get("confidence")
+        potable_str = "potable (safe to drink)" if potable else "not potable (unsafe)"
+        lines.append(f"Potability prediction: {potable_str}")
+        lines.append(f"Risk level: {risk}")
+        if isinstance(confidence, (int, float)):
+            lines.append(f"Model confidence: {confidence * 100:.1f}%")
+
+        params = [
+            ("pH",          last.get("ph"),          "(safe range 6.5-8.5)"),
+            ("Turbidity",   last.get("turbidity"),   "NTU (safe < 5)"),
+            ("Hardness",    last.get("hardness"),    "mg/L"),
+            ("Chloramines", last.get("chloramines"), "ppm"),
+        ]
+        readings = [(n, v, u) for n, v, u in params if isinstance(v, (int, float))]
+        if readings:
+            lines.append("Measured parameters:")
+            for name, value, unit in readings:
+                lines.append(f"  - {name}: {value:.2f} {unit}".rstrip())
+
+        recorded_at = last.get("recorded_at") or ""
+        if recorded_at:
+            lines.append(f"Recorded at: {recorded_at}")
+    else:
+        lines.append("No recent water sample data available.")
 
     return "\n".join(lines)
 
@@ -184,23 +281,41 @@ def chat_message(
     history: List[Dict[str, str]],
     user_message: str,
 ) -> str:
-    """Continue a multi-turn conversation grounded in the water analysis context."""
+    """Continue a multi-turn conversation grounded in the correct context.
+
+    Routes to a dedicated context builder and system prompt based on the
+    'focus' field sent by the dashboard frontend:
+      - 'my_data'       -> DASHBOARD_SYSTEM_PROMPT + _build_dashboard_context
+      - 'water_quality' -> FILTRATION_SYSTEM_PROMPT + _build_dashboard_water_context
+      - (anything else) -> FILTRATION_SYSTEM_PROMPT + _build_water_context (field analysis)
+    """
     client = _get_client()
-    context = _build_water_context(analysis)
+
+    focus = (analysis.get("context") or {}).get("focus") or ""
+
+    if focus == "my_data":
+        system_prompt = DASHBOARD_SYSTEM_PROMPT
+        context = _build_dashboard_context(analysis)
+        handshake = "Got it! I can see your dashboard activity. How can I help you today?"
+    elif focus == "water_quality" and analysis.get("source") == "web-dashboard":
+        system_prompt = FILTRATION_SYSTEM_PROMPT
+        context = _build_dashboard_water_context(analysis)
+        handshake = "Got it! I have your latest water sample data. How can I help?"
+    else:
+        system_prompt = FILTRATION_SYSTEM_PROMPT
+        context = _build_water_context(analysis)
+        handshake = "Understood. I have the water quality context. How can I help?"
 
     messages: list[dict] = [
-        {"role": "system", "content": FILTRATION_SYSTEM_PROMPT},
-        # Inject the water context as the first user turn so every reply is grounded
-        {"role": "user", "content": f"Water quality analysis context:\n\n{context}"},
-        {"role": "assistant", "content": "Understood. I have the water quality context. How can I help?"},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"User data context:\n\n{context}"},
+        {"role": "assistant", "content": handshake},
     ]
 
-    # Replay prior conversation
     for msg in history:
         role = "user" if msg.get("role") == "user" else "assistant"
         messages.append({"role": role, "content": msg.get("text", "")})
 
-    # Append the new user message
     messages.append({"role": "user", "content": user_message})
 
     response = _call_with_retry(

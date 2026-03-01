@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
+import { AuthProvider } from './lib/AuthContext'
 import HomePage from './pages/HomePage'
 import DashboardLayout from './layouts/DashboardLayout'
 import DashboardPage from './pages/DashboardPage'
@@ -17,16 +18,21 @@ import AdminUsersPage from './pages/AdminUsersPage'
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage'
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
+import ContainerScanPage from './pages/ContainerScanPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <Routes>
+      <AuthProvider>
+        <Routes>
         <Route element={<App />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="scans" element={<ScansPage />} />
+            <Route path="container-scan" element={<ContainerScanPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
@@ -43,6 +49,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )

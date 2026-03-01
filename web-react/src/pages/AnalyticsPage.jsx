@@ -1,14 +1,12 @@
 import { Suspense } from "react";
-import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import Plot from "@/lib/Plot";
 import { exportAnalyticsPdf } from "@/lib/api";
 
 const WATER_SAMPLES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_SAMPLES_TABLE || "field_samples";
-
-const configMissing = !supabase || !isSupabaseConfigured;
 const analyticsDebugEnabled = Boolean(import.meta.env.DEV);
 const analyticsDebug = (...args) => {
   if (!analyticsDebugEnabled) return;
@@ -220,24 +218,20 @@ const PARAMETER_REFERENCE_META = {
 };
 
 export default function AnalyticsPage() {
-  const [authReady, setAuthReady] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [authError, setAuthError] = useState("");
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [samples, setSamples] = useState([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [insightsOpen, setInsightsOpen] = useState(false);
-  const authResolvedRef = useRef(false);
   const analyticsInFlightRef = useRef(false);
   const lastLoadedUserIdRef = useRef("");
-  const hasLoadedDataRef = useRef(false);
 
   useEffect(() => {
-    if (configMissing) return;
+    // DashboardLayout guarantees auth — user.id is always present here.
+    if (!user?.id) return;
     let isMounted = true;
-    let sessionTimeoutId;
 
     analyticsDebug("effect:init", {
       path: window.location.pathname,
@@ -245,20 +239,6 @@ export default function AnalyticsPage() {
       visibilityState: document.visibilityState,
       onLine: navigator.onLine,
     });
-
-    const resolveChecking = () => {
-      if (!isMounted) return;
-      analyticsDebug("state:checking=false");
-      setChecking(false);
-    };
-
-    const markAuthResolved = () => {
-      authResolvedRef.current = true;
-      if (sessionTimeoutId) {
-        window.clearTimeout(sessionTimeoutId);
-        sessionTimeoutId = undefined;
-      }
-    };
 
     const loadAnalytics = async (userId) => {
       if (analyticsInFlightRef.current && lastLoadedUserIdRef.current === userId) {
@@ -294,7 +274,6 @@ export default function AnalyticsPage() {
         if (qe) throw qe;
         if (isMounted) {
           analyticsDebug("loadAnalytics:success", { rows: (data || []).length });
-          hasLoadedDataRef.current = true;
           setSamples(data || []);
         }
       } catch (fe) {
@@ -313,124 +292,7 @@ export default function AnalyticsPage() {
       }
     };
 
-    const bootstrap = async () => {
-      try {
-        analyticsDebug("bootstrap:start");
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => {
-          sessionTimeoutId = window.setTimeout(() => {
-            analyticsDebug("bootstrap:timeout", { ms: 7000 });
-            reject(new Error("Session check timed out"));
-          }, 7000);
-        });
-
-        const { data, error: se } = await Promise.race([sessionPromise, timeoutPromise]);
-        analyticsDebug("bootstrap:getSession:resolved", {
-          hasSession: !!data?.session,
-          userId: data?.session?.user?.id || null,
-          hasError: !!se,
-          visibilityState: document.visibilityState,
-        });
-        if (sessionTimeoutId) {
-          window.clearTimeout(sessionTimeoutId);
-          sessionTimeoutId = undefined;
-        }
-
-        if (!isMounted) return;
-        if (se) {
-          if (authResolvedRef.current) {
-            analyticsDebug("bootstrap:error-ignored-after-auth-resolved", se?.message || se);
-            return;
-          }
-          analyticsDebug("bootstrap:getSession:error", se?.message || se);
-          setAuthError("Unable to verify your session. Please try logging in again.");
-          resolveChecking();
-          setLoading(false);
-          return;
-        }
-        const userId = data?.session?.user?.id;
-        if (!userId) {
-          if (authResolvedRef.current) {
-            analyticsDebug("bootstrap:no-session-ignored-after-auth-resolved");
-            return;
-          }
-          analyticsDebug("bootstrap:no-session");
-          setAuthReady(false);
-          resolveChecking();
-          setLoading(false);
-          return;
-        }
-        analyticsDebug("state:authReady=true", { userId });
-        markAuthResolved();
-        setAuthError("");
-        setAuthReady(true);
-        resolveChecking();
-        await loadAnalytics(userId);
-      } catch {
-        if (!isMounted) return;
-        if (authResolvedRef.current) {
-          analyticsDebug("bootstrap:catch-ignored-after-auth-resolved", {
-            visibilityState: document.visibilityState,
-            onLine: navigator.onLine,
-          });
-          return;
-        }
-        analyticsDebug("bootstrap:catch", {
-          visibilityState: document.visibilityState,
-          onLine: navigator.onLine,
-        });
-        setAuthError("Unable to verify your session. Please try logging in again.");
-        resolveChecking();
-        setLoading(false);
-      }
-    };
-
-    bootstrap();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-      analyticsDebug("auth:event", {
-        event,
-        hasSession: !!session,
-        userId: session?.user?.id || null,
-        visibilityState: document.visibilityState,
-      });
-      if (!session?.user?.id) {
-        if (event === "SIGNED_OUT" || event === "INITIAL_SESSION") {
-          if (event === "INITIAL_SESSION" && authResolvedRef.current) {
-            analyticsDebug("auth:event:initial-session-ignored-after-auth-resolved");
-            return;
-          }
-          analyticsDebug("auth:event:no-user", { event });
-          if (event === "SIGNED_OUT") {
-            authResolvedRef.current = false;
-            hasLoadedDataRef.current = false;
-            lastLoadedUserIdRef.current = "";
-          }
-          resolveChecking();
-          setAuthReady(false);
-          setSamples([]);
-          setLoading(false);
-        }
-        return;
-      }
-      analyticsDebug("state:authReady=true(from event)", { userId: session.user.id });
-      markAuthResolved();
-      setAuthError("");
-      setAuthReady(true);
-      resolveChecking();
-
-      if (
-        (event === "SIGNED_IN" || event === "INITIAL_SESSION")
-        && hasLoadedDataRef.current
-        && lastLoadedUserIdRef.current === session.user.id
-      ) {
-        analyticsDebug("loadAnalytics:skip-duplicate-event", { event, userId: session.user.id });
-        return;
-      }
-
-      await loadAnalytics(session.user.id);
-    });
+    loadAnalytics(user.id);
 
     const handleVisibility = () => {
       analyticsDebug("window:visibilitychange", { visibilityState: document.visibilityState });
@@ -451,15 +313,16 @@ export default function AnalyticsPage() {
     return () => {
       analyticsDebug("effect:cleanup");
       isMounted = false;
-      if (sessionTimeoutId) {
-        window.clearTimeout(sessionTimeoutId);
-      }
+      // Reset dedup refs so a remount (e.g. React StrictMode) triggers a fresh load
+      // instead of silently skipping because the previous in-flight flag is still set.
+      analyticsInFlightRef.current = false;
+      lastLoadedUserIdRef.current = "";
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("blur", handleBlur);
-      listener.subscription.unsubscribe();
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const analytics = useMemo(() => {
     const total = samples.length;
@@ -638,11 +501,6 @@ export default function AnalyticsPage() {
       setExporting(false);
     }
   };
-
-  if (configMissing) return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="max-w-md space-y-4"><p className="text-xl font-semibold">Configure Supabase auth</p><p className="text-sm text-slate-500">Add VITE_PUBLIC_SUPABASE_URL and VITE_PUBLIC_SUPABASE_ANON_KEY to .env so we can secure the analytics route.</p><Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">Return home</Link></div></div>);
-  if (authError) return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="max-w-md space-y-4"><p className="text-xl font-semibold">Authentication unavailable</p><p className="text-sm text-slate-500">{authError}</p><Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">Return home</Link></div></div>);
-  if (checking) return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="space-y-4"><p className="text-xl font-semibold">Verifying your session...</p><p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p></div></div>);
-  if (!authReady) return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="space-y-4"><p className="text-xl font-semibold">Please sign in</p><p className="text-sm text-slate-500">Log in to view your analytics.</p><Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">Return home</Link></div></div>);
 
   const plotConfig = { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"], scrollZoom: false };
 

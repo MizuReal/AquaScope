@@ -35,10 +35,20 @@ allowed_origins = [
 	origin.strip()
 	for origin in os.getenv(
 		"BACKEND_CORS_ORIGINS",
+		# Defaults cover localhost dev servers. For LAN / deployed access, set
+		# BACKEND_CORS_ORIGINS in your backend .env, e.g.:
+		#   BACKEND_CORS_ORIGINS=http://192.168.100.112:5173,http://192.168.100.112:3000
+		# Or set FRONTEND_URL to a single additional allowed origin:
+		#   FRONTEND_URL=http://192.168.100.112:5173
 		"http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173",
 	).split(",")
 	if origin.strip()
 ]
+
+# Also accept FRONTEND_URL as a convenience single-origin override
+_frontend_url = os.getenv("FRONTEND_URL", "").strip()
+if _frontend_url and _frontend_url not in allowed_origins:
+	allowed_origins.append(_frontend_url)
 
 app.add_middleware(
 	CORSMiddleware,

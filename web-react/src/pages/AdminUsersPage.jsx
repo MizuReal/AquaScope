@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 
 import { ADMIN_ROLE_VALUE, isAdminRole } from "@/lib/profileRole";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import { sendUserDeactivationEmail } from "@/lib/api";
 
 const configMissing = !supabase;
@@ -122,11 +123,12 @@ function ToastContainer({ toasts, onDismiss }) {
 }
 
 export default function AdminUsersPage() {
+  const { session, user } = useAuth();
+  const currentUserId = user?.id ?? null;
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyRowId, setBusyRowId] = useState(null);
   const [sorting, setSorting] = useState([{ id: "created_at", desc: true }]);
-  const [currentUserId, setCurrentUserId] = useState(null);
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
   const [pendingDeactivateUser, setPendingDeactivateUser] = useState(null);
   const [deactivationReason, setDeactivationReason] = useState("");
@@ -154,19 +156,6 @@ export default function AdminUsersPage() {
       const isCurrentRequest = () => latestLoadRequestIdRef.current === requestId;
 
       const sessionResult = await withTimeout(
-        supabase.auth.getSession(),
-        SESSION_TIMEOUT_MS,
-        "Session check timed out. Please retry.",
-      );
-
-      if (!mountedRef.current || !isCurrentRequest()) {
-        return;
-      }
-
-      const session = sessionResult?.data?.session || null;
-      setCurrentUserId(session?.user?.id ?? null);
-
-      const profilesResult = await withTimeout(
         supabase
           .from(SUPABASE_PROFILES_TABLE)
           .select("id, display_name, organization, role, status, created_at")
@@ -178,6 +167,8 @@ export default function AdminUsersPage() {
       if (!mountedRef.current || !isCurrentRequest()) {
         return;
       }
+
+      const profilesResult = sessionResult;
 
       const { data, error } = profilesResult;
       if (error) {
@@ -233,8 +224,8 @@ export default function AdminUsersPage() {
       }
 
       if (event === "SIGNED_OUT" && mountedRef.current) {
+        // AdminLayout will redirect unauthenticated users; just clear displayed profiles.
         setProfiles([]);
-        setCurrentUserId(null);
       }
     });
 
@@ -364,11 +355,8 @@ export default function AdminUsersPage() {
       let adminUserId = "";
 
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
         accessToken = session?.access_token || "";
-        adminUserId = session?.user?.id || "";
+        adminUserId = user?.id || "";
       } catch {
       }
 

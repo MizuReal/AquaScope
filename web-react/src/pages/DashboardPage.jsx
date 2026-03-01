@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/lib/AuthContext";
 import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
@@ -71,6 +72,27 @@ const resolveContainerScansTableForUser = async (userId) => {
   return 0;
 };
 
+/* Fetch last 5 valid moss scans (LightMoss | MediumMoss | HeavyMoss) */
+const MOSS_CLASSES = ["LightMoss", "MediumMoss", "HeavyMoss"];
+
+const fetchRecentMossScans = async (userId) => {
+  for (const table of CONTAINER_SCANS_TABLE_CANDIDATES) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("id, predicted_class, confidence, image_uri, created_at")
+      .eq("user_id", userId)
+      .eq("is_valid", true)
+      .in("predicted_class", MOSS_CLASSES)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (!error) return data || [];
+    if (isMissingRelationError(error)) continue;
+    break;
+  }
+  return [];
+};
+
 const resolveAvatarUrl = async (rawUrlOrPath) => {
   if (!rawUrlOrPath) return "";
   // If it's already a fully-qualified URL, return as-is
@@ -95,6 +117,26 @@ const resolveAvatarUrl = async (rawUrlOrPath) => {
   }
 };
 const CHAT_TABS = { WATER: "water_quality", DATA: "my_data" };
+
+/* Strip residual markdown symbols from LLM replies */
+const formatCopilotText = (text = "") =>
+  String(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "\u2022 ")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+/* ── Moss class display metadata (mirrored from ContainerScanPage) ── */
+const MOSS_META = {
+  LightMoss:  { label: "Light Moss",  bg: "bg-yellow-50",  border: "border-yellow-300",  text: "text-yellow-700",  dot: "bg-yellow-400" },
+  MediumMoss: { label: "Medium Moss", bg: "bg-orange-50",  border: "border-orange-300",  text: "text-orange-700",  dot: "bg-orange-400" },
+  HeavyMoss:  { label: "Heavy Moss",  bg: "bg-red-50",     border: "border-red-300",     text: "text-red-700",    dot: "bg-red-500"   },
+};
 
 const pickDisplayName = (user) => {
   const m = user?.user_metadata || {};
@@ -171,15 +213,14 @@ const IconBell = ({ className = "h-4 w-4" }) => (
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [authReady, setAuthReady] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [checking, setChecking] = useState(true);
-  const [redirecting, setRedirecting] = useState(false);
+  const { user: sessionUser } = useAuth();
   const [userStats, setUserStats] = useState({ scans: 0, predictions: 0 });
-  const [sessionUser, setSessionUser] = useState(null);
   const [displayName, setDisplayName] = useState("User");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [recentMossScans, setRecentMossScans] = useState([]);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+  const [carouselPaused, setCarouselPaused] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
@@ -249,119 +290,75 @@ export default function DashboardPage() {
   }, []);
 
   /* ── Auth bootstrap ─────────────────────────────────────── */
+  /* ── Identity hydration ────────────────────────────────── */
   useEffect(() => {
-    if (configMissing) return;
+    if (!sessionUser) return;
+    let alive = true;
+    hydrateIdentity(sessionUser, () => alive);
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id, hydrateIdentity]);
+
+  /* ── Data fetching ──────────────────────────────────────── */
+  useEffect(() => {
+    if (!sessionUser || !supabase) return;
     let alive = true;
 
-    const bootstrap = async () => {
+    (async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
-        if (!alive) return;
-        if (error) {
-          setAuthError("Unable to verify your session. Please try logging in again.");
-          setChecking(false);
-          return;
-        }
-        if (!data?.session) {
-          setChecking(false);
-          setRedirecting(true);
-          navigate("/", { replace: true });
-          return;
-        }
+        const uid = sessionUser.id;
+        const { count: fc } = await supabase
+          .from("field_samples")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", uid);
+        const cc = await resolveContainerScansTableForUser(uid);
+        if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
 
-        setSessionUser(data.session.user);
-        setAuthReady(true);
-        setChecking(false);
-        hydrateIdentity(data.session.user, () => alive);
+        const mossScans = await fetchRecentMossScans(uid);
+        if (alive) { setRecentMossScans(mossScans); setCarouselIdx(0); }
 
-        try {
-          const uid = data.session.user.id;
-          const { count: fc } = await supabase
-            .from("field_samples")
-            .select("*", { count: "exact", head: true })
-            .eq("user_id", uid);
-          const cc = await resolveContainerScansTableForUser(uid);
-          if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
+        const { data: sampleData } = await supabase
+          .from("field_samples")
+          .select("id, sample_label, ph, turbidity, risk_level, prediction_is_potable, prediction_probability, hardness, chloramines, created_at")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (alive && sampleData) setLastSample(sampleData);
+      } catch {
+      }
 
-          const { data: sampleData } = await supabase
-            .from("field_samples")
-            .select("id, sample_label, ph, turbidity, risk_level, prediction_is_potable, prediction_probability, hardness, chloramines, created_at")
-            .eq("user_id", uid)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (alive && sampleData) setLastSample(sampleData);
-        } catch {
-        }
-
-        try {
-          const tr = await supabase.from("forum_threads").select("id, user_id, title, body, created_at, forum_thread_categories(category_id, forum_categories(id, slug, label))").order("created_at", { ascending: false }).limit(50);
-          if (!tr.error && (tr.data || []).length > 0) {
-            const sel = tr.data[Math.floor(Math.random() * tr.data.length)];
-            let profile = null;
-            if (sel?.user_id) { const pr = await supabase.from(SUPABASE_PROFILES_TABLE).select("id, display_name, organization, avatar_url").eq("id", sel.user_id).maybeSingle(); profile = pr.data || null; }
-            const md = data.session.user?.user_metadata || {};
-            const authorName = profile?.display_name || (sel.user_id === data.session.user.id ? md.display_name || md.full_name || md.name || data.session.user.email?.split("@")[0] : null) || "Community member";
-            const sessionAuthorAvatar = sel.user_id === data.session.user.id ? (pickAvatarUrl(data.session.user) || "") : "";
-            const rawAuthorAvatar = profile?.avatar_url || sessionAuthorAvatar;
-            const authorAvatar = rawAuthorAvatar ? ((await resolveAvatarUrl(rawAuthorAvatar)) || rawAuthorAvatar) : "";
-            const cats = (sel.forum_thread_categories || []).map((i) => i.forum_categories).filter(Boolean);
-            if (alive) {
-              setSpotlightAvatarFailed(false);
-              setForumSpotlight({ id: sel.id, title: sel.title, body: sel.body, created_at: sel.created_at, authorName, authorOrg: profile?.organization || "", authorAvatar, categories: cats });
-            }
-          } else if (alive) {
-            setForumSpotlight(null);
-            setSpotlightAvatarFailed(false);
-          }
-        } catch {
+      try {
+        const tr = await supabase.from("forum_threads").select("id, user_id, title, body, created_at, forum_thread_categories(category_id, forum_categories(id, slug, label))").order("created_at", { ascending: false }).limit(50);
+        if (!tr.error && (tr.data || []).length > 0) {
+          const sel = tr.data[Math.floor(Math.random() * tr.data.length)];
+          let profile = null;
+          if (sel?.user_id) { const pr = await supabase.from(SUPABASE_PROFILES_TABLE).select("id, display_name, organization, avatar_url").eq("id", sel.user_id).maybeSingle(); profile = pr.data || null; }
+          const md = sessionUser?.user_metadata || {};
+          const authorName = profile?.display_name || (sel.user_id === sessionUser.id ? md.display_name || md.full_name || md.name || sessionUser.email?.split("@")[0] : null) || "Community member";
+          const sessionAuthorAvatar = sel.user_id === sessionUser.id ? (pickAvatarUrl(sessionUser) || "") : "";
+          const rawAuthorAvatar = profile?.avatar_url || sessionAuthorAvatar;
+          const authorAvatar = rawAuthorAvatar ? ((await resolveAvatarUrl(rawAuthorAvatar)) || rawAuthorAvatar) : "";
+          const cats = (sel.forum_thread_categories || []).map((i) => i.forum_categories).filter(Boolean);
           if (alive) {
-            setForumSpotlight(null);
             setSpotlightAvatarFailed(false);
+            setForumSpotlight({ id: sel.id, title: sel.title, body: sel.body, created_at: sel.created_at, authorName, authorOrg: profile?.organization || "", authorAvatar, categories: cats });
           }
+        } else if (alive) {
+          setForumSpotlight(null);
+          setSpotlightAvatarFailed(false);
         }
       } catch {
-        if (!alive) return;
-        setAuthError("Unable to verify your session. Please try logging in again.");
-        setChecking(false);
-      }
-    };
-
-    bootstrap();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        if (event === "SIGNED_OUT") {
-          setChecking(false);
-          setAuthReady(false);
-          setSessionUser(null);
-          setRedirecting(true);
-          navigate("/", { replace: true });
+        if (alive) {
+          setForumSpotlight(null);
+          setSpotlightAvatarFailed(false);
         }
-        return;
       }
+    })();
 
-      (async () => {
-        setSessionUser(session.user);
-        setAuthReady(true);
-        setChecking(false);
-        hydrateIdentity(session.user, () => alive);
-      })();
-    });
-
-    return () => { alive = false; listener.subscription.unsubscribe(); };
-  }, [hydrateIdentity, navigate]);
-
-  /* ── Early returns ──────────────────────────────────────── */
-  if (configMissing) {
-    return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="max-w-md space-y-4"><p className="text-xl font-semibold">Configure Supabase auth</p><p className="text-sm text-slate-500">Add VITE_PUBLIC_SUPABASE_URL and VITE_PUBLIC_SUPABASE_ANON_KEY to .env so we can secure the dashboard route.</p><Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">Return home</Link></div></div>);
-  }
-  if (authError) {
-    return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="max-w-md space-y-4"><p className="text-xl font-semibold">Authentication unavailable</p><p className="text-sm text-slate-500">{authError}</p><Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">Return home</Link></div></div>);
-  }
-  if (checking || !authReady) {
-    return (<div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900"><div className="space-y-4"><p className="text-xl font-semibold">{redirecting ? "Redirecting you to login" : "Verifying your session"}…</p><p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p></div></div>);
-  }
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id]);
 
   /* ── Chat helpers ───────────────────────────────────────── */
   const handleSendChat = async () => {
@@ -378,6 +375,15 @@ export default function DashboardPage() {
     } catch (e) { const t = e?.message || "Unable to contact chatbot right now."; setChatError(t); setChatHistory((prev) => [...prev, { role: "assistant", text: `Error: ${t}` }]); }
     finally { setChatLoading(false); }
   };
+
+  /* ── Carousel auto-advance ────────────────────────── */
+  useEffect(() => {
+    if (recentMossScans.length <= 1 || carouselPaused) return;
+    const id = setInterval(() => {
+      setCarouselIdx((i) => (i + 1) % recentMossScans.length);
+    }, 4000);
+    return () => clearInterval(id);
+  }, [recentMossScans.length, carouselPaused]);
 
   const openChatModal = () => { setChatOpen(true); setTimeout(() => setChatModalActive(true), 10); };
   const closeChatModal = () => { setChatModalActive(false); setTimeout(() => setChatOpen(false), 220); };
@@ -658,7 +664,7 @@ export default function DashboardPage() {
               ) : chatHistory.map((m, i) => (
                 <div key={`${m.role}-${i}`} className={`max-w-[85%] rounded-2xl border px-4 py-3 text-sm shadow-sm ${m.role === "user" ? "ml-auto border-sky-300 bg-sky-100 text-slate-800" : "border-slate-200 bg-white text-slate-700"}`}>
                   <div className="mb-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">{m.role === "user" ? <IconData className="h-3 w-3" /> : <IconBot className="h-3 w-3" />}{m.role === "user" ? "You" : "Copilot"}</div>
-                  <p>{m.text}</p>
+                  <p className="whitespace-pre-line">{m.role === "assistant" ? formatCopilotText(m.text) : m.text}</p>
                 </div>
               ))}
               {chatLoading && (
@@ -745,6 +751,158 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Container Scan Carousel */}
+      {recentMossScans.length > 0 && (
+        <div className="mt-6">
+          <article
+            className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-md"
+            onMouseEnter={() => setCarouselPaused(true)}
+            onMouseLeave={() => setCarouselPaused(false)}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-600 to-teal-500 px-5 py-3">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white">
+                  <IconCamera className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-white/80">Container Scans</p>
+                  <p className="text-sm font-semibold text-white">Recent Moss Detections</p>
+                </div>
+              </div>
+              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white">
+                {carouselIdx + 1} / {recentMossScans.length}
+              </span>
+            </div>
+
+            {/* Auto-advance progress bar */}
+            {recentMossScans.length > 1 && (
+              <div className="h-0.5 w-full bg-emerald-100">
+                <div
+                  key={`${carouselIdx}-${carouselPaused}`}
+                  className="h-full bg-emerald-400"
+                  style={carouselPaused ? { width: "0%" } : { animation: "carousel-progress 4s linear forwards" }}
+                />
+              </div>
+            )}
+
+            {/* Carousel body */}
+            <div className="relative">
+              {(() => {
+                const scan = recentMossScans[carouselIdx];
+                const meta = MOSS_META[scan.predicted_class] || MOSS_META.LightMoss;
+                const pct = scan.confidence != null ? `${Math.round(scan.confidence * 100)}%` : null;
+                const dateStr = scan.created_at
+                  ? new Date(scan.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                  : null;
+                return (
+                  <div className="flex flex-col sm:flex-row">
+                    {/* Image pane */}
+                    <div className="relative flex items-center justify-center bg-slate-900 sm:w-72 sm:shrink-0">
+                      {scan.image_uri ? (
+                        <img
+                          key={scan.id}
+                          src={scan.image_uri}
+                          alt={`${meta.label} container scan`}
+                          className="h-56 w-full object-cover sm:h-full"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="flex h-56 w-full items-center justify-center text-slate-500 sm:h-full">
+                          <IconCamera className="h-10 w-10 opacity-30" />
+                        </div>
+                      )}
+                      {/* Class badge overlay */}
+                      <span className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold shadow-sm ${meta.bg} ${meta.border} ${meta.text}`}>
+                        <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+                        {meta.label}
+                      </span>
+                    </div>
+
+                    {/* Info pane */}
+                    <div className="flex flex-1 flex-col justify-between gap-4 p-5">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Detection</p>
+                          <p className="mt-1 text-xl font-bold text-slate-900">{meta.label}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {pct && (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Confidence</p>
+                              <p className="mt-1 text-lg font-bold text-slate-800">{pct}</p>
+                            </div>
+                          )}
+                          {dateStr && (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Scanned</p>
+                              <p className="mt-1 text-sm font-bold text-slate-800">{dateStr}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className={`rounded-xl border px-4 py-3 text-xs leading-relaxed ${meta.bg} ${meta.border} ${meta.text}`}>
+                          {scan.predicted_class === "HeavyMoss" && "Heavy moss detected — immediate cleaning and decontamination is strongly recommended."}
+                          {scan.predicted_class === "MediumMoss" && "Moderate moss growth present — schedule cleaning soon to prevent further contamination."}
+                          {scan.predicted_class === "LightMoss" && "Early-stage moss detected — routine cleaning advised to prevent escalation."}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate("/dashboard/scans")}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-600 hover:text-white"
+                      >
+                        <IconData className="h-3.5 w-3.5" />
+                        View all scan results
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Prev / Next */}
+              {recentMossScans.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Previous scan"
+                    onClick={() => setCarouselIdx((i) => (i - 1 + recentMossScans.length) % recentMossScans.length)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-600 shadow-sm transition hover:bg-emerald-600 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m15 18-6-6 6-6" /></svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next scan"
+                    onClick={() => setCarouselIdx((i) => (i + 1) % recentMossScans.length)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/90 text-slate-600 shadow-sm transition hover:bg-emerald-600 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4"><path d="m9 18 6-6-6-6" /></svg>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Dot indicators */}
+            {recentMossScans.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 py-3">
+                {recentMossScans.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to scan ${i + 1}`}
+                    onClick={() => setCarouselIdx(i)}
+                    className={`h-2 rounded-full transition-all duration-200 ${
+                      i === carouselIdx ? "w-5 bg-emerald-500" : "w-2 bg-slate-300 hover:bg-emerald-300"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </article>
         </div>
       )}
 

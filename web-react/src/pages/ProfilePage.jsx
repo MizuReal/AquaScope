@@ -1,11 +1,10 @@
-import { Link } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 
-import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
-const configMissing = !supabase || !isSupabaseConfigured;
 
 const getExtensionFromMimeType = (mimeType) => {
   if (!mimeType || typeof mimeType !== "string") return "jpg";
@@ -54,9 +53,7 @@ const statusToneClassName = (value) => {
 
 export default function ProfilePage() {
   const fileInputRef = useRef(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [authError, setAuthError] = useState("");
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [profile, setProfile] = useState({
@@ -67,20 +64,18 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    if (configMissing) return;
+    // DashboardLayout guarantees auth — user is always present here.
+    // Re-run loadProfile whenever the authenticated user changes.
+    if (!user) return;
     let isMounted = true;
-    // Prevents the immediate SIGNED_IN auth event from running loadProfile
-    // in parallel with the bootstrap call, causing a redundant double-load.
-    let sessionAcquired = false;
 
-    const loadProfile = async (session) => {
+    const loadProfile = async (contextUser) => {
       if (!isMounted) return;
       setStatus("");
       setLoading(true);
 
       try {
-        const user = session?.user;
-        if (!user) {
+        if (!contextUser) {
           if (isMounted) {
             setProfile({ name: "", email: "", organization: "", avatarUrl: "" });
           }
@@ -90,7 +85,7 @@ export default function ProfilePage() {
         const { data, error } = await supabase
           .from(SUPABASE_PROFILES_TABLE)
           .select("display_name, organization, avatar_url")
-          .eq("id", user.id)
+          .eq("id", contextUser.id)
           .maybeSingle();
 
         if (!isMounted) return;
@@ -104,13 +99,13 @@ export default function ProfilePage() {
         if (!isMounted) return;
 
         setProfile({
-          name: data?.display_name || user.user_metadata?.display_name || user.user_metadata?.name || "",
-          email: user.email || "",
-          organization: data?.organization || user.user_metadata?.organization || "",
-          avatarUrl: resolvedAvatar || data?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || "",
+          name: data?.display_name || contextUser.user_metadata?.display_name || contextUser.user_metadata?.name || "",
+          email: contextUser.email || "",
+          organization: data?.organization || contextUser.user_metadata?.organization || "",
+          avatarUrl: resolvedAvatar || data?.avatar_url || contextUser.user_metadata?.avatar_url || contextUser.user_metadata?.picture || "",
         });
-      } catch (error) {
-        console.warn("[Supabase] profile load error:", error?.message || error);
+      } catch (loadError) {
+        console.warn("[Supabase] profile load error:", loadError?.message || loadError);
       } finally {
         if (isMounted) {
           setLoading(false);
@@ -118,56 +113,11 @@ export default function ProfilePage() {
       }
     };
 
-    const bootstrap = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
+    loadProfile(user);
 
-      if (error) {
-        setAuthError("Unable to verify your session. Please try logging in again.");
-        setChecking(false);
-        return;
-      }
-
-      if (!data?.session) {
-        setAuthReady(false);
-        setChecking(false);
-        return;
-      }
-
-      setAuthReady(true);
-      setChecking(false);
-      await loadProfile(data.session);
-      // Mark session as acquired so future auth events can trigger reloads.
-      sessionAcquired = true;
-    };
-
-    bootstrap();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (!session) {
-        if (event === "SIGNED_OUT") {
-          setAuthReady(false);
-          setProfile({ name: "", email: "", organization: "", avatarUrl: "" });
-        }
-        return;
-      }
-
-      setAuthReady(true);
-      // Guard: supabase-js v2 fires SIGNED_IN immediately when a session already exists.
-      // Only reload the profile after the bootstrap has finished its own load.
-      // Once bootstrap sets sessionAcquired=true it stays true, so any future
-      // SIGNED_IN (e.g. after signing out and back in) will correctly reload.
-      if (!sessionAcquired) return;
-      await loadProfile(session);
-    });
-
-    return () => {
-      isMounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
+    return () => { isMounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleChange = (key, value) => {
     setProfile((prev) => ({ ...prev, [key]: value }));
@@ -178,9 +128,6 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const { data } = await supabase.auth.getSession();
-      const user = data?.session?.user || null;
-
       if (!user) {
         setStatus("Please sign in to update your profile.");
         return;
@@ -220,9 +167,6 @@ export default function ProfilePage() {
     if (!file) return;
 
     try {
-      const { data } = await supabase.auth.getSession();
-      const user = data?.session?.user || null;
-
       if (!user) {
         setStatus("Please sign in to update your profile.");
         return;
@@ -290,9 +234,6 @@ export default function ProfilePage() {
     setLoading(true);
 
     try {
-      const { data } = await supabase.auth.getSession();
-      const user = data?.session?.user || null;
-
       if (!user) {
         setStatus("Please sign in to update your profile.");
         return;
@@ -333,61 +274,6 @@ export default function ProfilePage() {
       setLoading(false);
     }
   };
-
-  if (configMissing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="max-w-md space-y-4">
-          <p className="text-xl font-semibold">Configure Supabase auth</p>
-          <p className="text-sm text-slate-500">
-            Add VITE_PUBLIC_SUPABASE_URL and VITE_PUBLIC_SUPABASE_ANON_KEY to .env so we can secure the profile route.
-          </p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (authError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="max-w-md space-y-4">
-          <p className="text-xl font-semibold">Authentication unavailable</p>
-          <p className="text-sm text-slate-500">{authError}</p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="space-y-4">
-          <p className="text-xl font-semibold">Verifying your session...</p>
-          <p className="text-sm text-slate-500">Hang tight while we secure your workspace.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!authReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center text-slate-900">
-        <div className="space-y-4">
-          <p className="text-xl font-semibold">Please sign in</p>
-          <p className="text-sm text-slate-500">Log in to manage your profile.</p>
-          <Link className="text-sm uppercase tracking-[0.3em] text-sky-600" to="/">
-            Return home
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <section className="px-6 py-10 text-slate-900 lg:px-12">

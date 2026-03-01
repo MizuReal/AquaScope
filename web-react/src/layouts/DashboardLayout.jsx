@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { isAdminRole } from "@/lib/profileRole";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 
@@ -11,6 +12,7 @@ const isDeactivatedAccount = (status) => String(status || "").toLowerCase() === 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   { label: "My scans", href: "/dashboard/scans", icon: "scans" },
+  { label: "Container", href: "/dashboard/container-scan", icon: "container" },
   { label: "Community", href: "/dashboard/community", icon: "community" },
   { label: "Analytics", href: "/dashboard/analytics", icon: "analytics" },
   { label: "Profile", href: "/dashboard/profile", icon: "profile" },
@@ -93,6 +95,18 @@ function NavIcon({ icon }) {
     );
   }
 
+  if (icon === "container") {
+    return (
+      <svg {...commonProps}>
+        <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+        <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+        <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+        <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    );
+  }
+
   if (icon === "logout") {
     return (
       <svg {...commonProps}>
@@ -118,6 +132,8 @@ function NavIcon({ icon }) {
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [collapsed, setCollapsed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [authToast, setAuthToast] = useState("");
@@ -130,9 +146,17 @@ export default function DashboardLayout() {
   const sidebarWidth = collapsed ? "w-20" : "w-64";
 
   useEffect(() => {
+    // Wait for the shared AuthContext to resolve before running the profile guard
+    if (authLoading) return;
+
+    if (!userId) {
+      navigate("/?auth=required&reason=signin_required", { replace: true });
+      return;
+    }
+
     let isMounted = true;
 
-    const guardByProfile = async (userId) => {
+    const guardByProfile = async () => {
       const { data: profile, error: profileError } = await supabase
         .from(SUPABASE_PROFILES_TABLE)
         .select("role, status")
@@ -170,43 +194,12 @@ export default function DashboardLayout() {
       return true;
     };
 
-    const guardAccess = async () => {
-      if (!supabase) {
-        navigate("/?auth=required&reason=signin_required", { replace: true });
-        return;
-      }
-
-      const { data, error } = await supabase.auth.getSession();
-      if (!isMounted) return;
-
-      if (error || !data?.session?.user?.id) {
-        navigate("/?auth=required&reason=signin_required", { replace: true });
-        return;
-      }
-
-      await guardByProfile(data.session.user.id);
-    };
-
-    guardAccess();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-
-      if (!session?.user?.id) {
-        if (event === "SIGNED_OUT") {
-          navigate("/?auth=required&reason=signin_required", { replace: true });
-        }
-        return;
-      }
-
-      await guardByProfile(session.user.id);
-    });
+    guardByProfile();
 
     return () => {
       isMounted = false;
-      listener.subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, [userId, authLoading, navigate]);
 
   const handleNavItemClick = async (item) => {
     if (item.label === "Logout") {

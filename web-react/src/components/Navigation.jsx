@@ -6,9 +6,28 @@ import { useLocation, useNavigate } from "react-router-dom";
 import AuthModal from "@/components/AuthModal";
 import { getUserRole, isAdminRole } from "@/lib/profileRole";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+
+const extractAuthCallbackParams = (location) => {
+  const searchParams = new URLSearchParams(location.search || "");
+  const hashValue = (location.hash || "").startsWith("#") ? location.hash.slice(1) : (location.hash || "");
+  const hashParams = new URLSearchParams(hashValue);
+
+  const params = new URLSearchParams();
+  for (const [key, value] of searchParams.entries()) {
+    params.set(key, value);
+  }
+  for (const [key, value] of hashParams.entries()) {
+    if (!params.has(key)) {
+      params.set(key, value);
+    }
+  }
+
+  return params;
+};
 
 const resolveAvatarUrl = async (rawUrlOrPath) => {
   if (!rawUrlOrPath) return "";
@@ -32,13 +51,14 @@ const resolveAvatarUrl = async (rawUrlOrPath) => {
 export default function Navigation() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user: sessionUser } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState("login");
-  const [sessionUser, setSessionUser] = useState(null);
   const [displayName, setDisplayName] = useState("User");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [authNotice, setAuthNotice] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
 
   const getDisplayName = (user) => {
     const metadata = user?.user_metadata || {};
@@ -84,6 +104,59 @@ export default function Navigation() {
     const nextSearch = params.toString();
     navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash || ""}`, { replace: true });
   }, [location.hash, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+
+    const params = extractAuthCallbackParams(location);
+    const errorCode = params.get("error_code") || "";
+    const error = params.get("error") || "";
+    const errorDescription = params.get("error_description") || "";
+
+    const isExpiredLink =
+      errorCode.toLowerCase() === "otp_expired" ||
+      errorDescription.toLowerCase().includes("expired");
+    const isInvalidLink =
+      errorCode.toLowerCase() === "otp_disabled" ||
+      error.toLowerCase() === "access_denied" ||
+      errorDescription.toLowerCase().includes("invalid");
+
+    if (!isExpiredLink && !isInvalidLink) return;
+
+    setMode("login");
+    setAuthNotice(
+      isExpiredLink
+        ? "This confirmation link has expired. Please sign in and request a new confirmation email."
+        : "This confirmation link is invalid. Please sign in and request a new confirmation email.",
+    );
+    setModalOpen(true);
+
+    const cleanSearch = new URLSearchParams(location.search || "");
+    ["error", "error_code", "error_description", "code"].forEach((key) => cleanSearch.delete(key));
+    const nextSearch = cleanSearch.toString();
+
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+  }, [location, navigate]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+
+    const params = new URLSearchParams(location.search);
+    const signup = params.get("signup");
+    if (signup !== "success" || !sessionUser) return;
+
+    setToastMessage("Thank you for signing up!");
+
+    const timer = window.setTimeout(() => {
+      setToastMessage("");
+    }, 3200);
+
+    params.delete("signup");
+    const nextSearch = params.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash || ""}`, { replace: true });
+
+    return () => window.clearTimeout(timer);
+  }, [location.hash, location.pathname, location.search, navigate, sessionUser]);
 
   const hydrateIdentity = useCallback(async (user, activeRef) => {
     if (!user) {
@@ -134,67 +207,22 @@ export default function Navigation() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !isSupabaseConfigured) {
-      return;
-    }
-
+    if (!supabase || !isSupabaseConfigured) return;
+    // Sync display name & avatar whenever the authenticated user changes
+    if (sessionUser) setAuthNotice("");
     let isMounted = true;
-
-    const syncSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!isMounted) {
-        return;
-      }
-      const user = data?.session?.user || null;
-      setSessionUser(user);
-      await hydrateIdentity(user, () => isMounted);
-    };
-
-    syncSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) {
-        return;
-      }
-      if (session?.user) {
-        setSessionUser(session.user);
-        setAuthNotice("");
-        hydrateIdentity(session.user, () => isMounted);
-        return;
-      }
-
-      if (event === "SIGNED_OUT") {
-        setSessionUser(null);
-        setDisplayName("User");
-        setAvatarUrl("");
-        setAvatarFailed(false);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      listener.subscription.unsubscribe();
-    };
-  }, []);
+    hydrateIdentity(sessionUser, () => isMounted);
+    return () => { isMounted = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id, hydrateIdentity]);
 
   const handleDashboardClick = async () => {
-    if (!supabase) {
-      navigate("/dashboard");
+    if (!sessionUser) {
+      openModal("login");
       return;
     }
-
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        openModal("login");
-        return;
-      }
-
-      const userId = session?.user?.id;
-      const role = userId ? await getUserRole(userId) : null;
+      const role = await getUserRole(sessionUser.id);
       navigate(isAdminRole(role) ? "/admin/dashboard" : "/dashboard");
     } catch {
       openModal("login");
@@ -202,22 +230,12 @@ export default function Navigation() {
   };
 
   const handleProfileClick = async () => {
-    if (!supabase) {
-      navigate("/dashboard");
+    if (!sessionUser) {
+      openModal("login");
       return;
     }
-
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.user?.id) {
-        openModal("login");
-        return;
-      }
-
-      const role = await getUserRole(session.user.id);
+      const role = await getUserRole(sessionUser.id);
       navigate(isAdminRole(role) ? "/admin/dashboard" : "/dashboard");
     } catch {
       navigate("/dashboard");
@@ -225,20 +243,22 @@ export default function Navigation() {
   };
 
   const handleLogout = async () => {
-    if (!supabase) {
-      setSessionUser(null);
-      return;
+    if (supabase) {
+      await supabase.auth.signOut();
+      // AuthContext's onAuthStateChange sets user=null, propagating to all consumers
     }
-
-    await supabase.auth.signOut();
-    setSessionUser(null);
-    navigate(0);
+    navigate("/");
   };
 
   const initials = getInitials(displayName);
 
   return (
     <>
+      {toastMessage ? (
+        <div className="fixed right-4 top-4 z-50 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm" role="status" aria-live="polite">
+          {toastMessage}
+        </div>
+      ) : null}
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <span className="text-sm font-semibold tracking-[0.4em] text-slate-900">

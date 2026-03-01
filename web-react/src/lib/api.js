@@ -154,6 +154,81 @@ export async function getContainerCleaningSuggestion(analysis) {
   return response.json();
 }
 
+export async function analyzeContainer(file, signal) {
+  if (!file) {
+    throw new Error("No image file supplied for container analysis.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/container/analyze`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: formData,
+      signal,
+    });
+  } catch (networkError) {
+    if (networkError?.name === "AbortError") throw networkError;
+    throw new Error(
+      `Network error contacting ${API_BASE_URL}. Details: ${networkError?.message || "unknown"}`,
+    );
+  }
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Container analysis failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
+export async function chatContainerWithCopilot(analysis, history, message) {
+  const trimmed = String(message || "").trim();
+  if (!trimmed) throw new Error("Message cannot be empty.");
+
+  const legacyAnalysis = buildLegacyWaterCompatibleContainerAnalysis(analysis);
+  const topClass = resolveTopContainerClass(analysis);
+  const topClassPrompt = buildContainerContextPrompt(topClass);
+  const containerAnalysis = {
+    ...analysis,
+    predicted_class: topClass,
+    predictedClass: topClass,
+    classificationPrompt: topClassPrompt,
+  };
+  const contextualMessage = `${topClassPrompt} User question: ${trimmed}`;
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/chat/container-message`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis: containerAnalysis, history: normalizeHistory(history), message: contextualMessage }),
+    });
+
+    if (response.status === 404) {
+      response = await fetch(`${API_BASE_URL}/chat/message`, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ analysis: legacyAnalysis, history: normalizeHistory(history), message: contextualMessage }),
+      });
+    }
+  } catch (networkError) {
+    throw new Error(
+      `Network request failed while contacting ${API_BASE_URL}. Details: ${networkError?.message || "unknown"}`,
+    );
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("AI rate limit reached — please wait a moment and retry.");
+    throw new Error(payload?.detail || "Container chat request failed.");
+  }
+  return payload;
+}
+
 export async function exportAnalyticsPdf(payload) {
   const response = await fetch(`${API_BASE_URL}/export/analytics-pdf`, {
     method: "POST",

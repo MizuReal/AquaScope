@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/AuthContext";
 import { getContainerCleaningSuggestion } from "@/lib/api";
 
 import noAnim from "@/assets/lottie/not.json";
@@ -187,6 +188,7 @@ const formatAdvisorText = (text = "") =>
     .trim();
 
 export default function UserSamples() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("water");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -208,6 +210,8 @@ export default function UserSamples() {
 
   useEffect(() => {
     if (!supabase || !isSupabaseConfigured) return;
+    const userId = user?.id;
+    if (!userId) return;
 
     let isMounted = true;
 
@@ -215,14 +219,6 @@ export default function UserSamples() {
       setLoading(true);
       setError("");
       try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-        const userId = sessionData?.session?.user?.id;
-        if (!userId) {
-          if (isMounted) { setError("Sign in to view your history."); setWaterItems([]); setContainerItems([]); setTotalCount(0); }
-          return;
-        }
-
         const start = (page - 1) * pageSize;
         const end = start + pageSize - 1;
 
@@ -257,7 +253,8 @@ export default function UserSamples() {
 
     loadSamples();
     return () => { isMounted = false; };
-  }, [activeTab, page, pageSize]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, page, pageSize, user?.id]);
 
   useEffect(() => {
     if (!detailOpen || !detailItem || detailItem.type !== "container") {
