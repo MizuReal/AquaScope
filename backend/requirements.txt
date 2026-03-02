@@ -17,4 +17,7 @@ Pillow
 supabase
 groq
 python-dotenv
+google-auth
+google-auth-oauthlib
+google-api-python-client
 playwright

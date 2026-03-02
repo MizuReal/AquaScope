@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from email.message import EmailMessage
+import base64
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import html
 import logging
 from pathlib import Path
 import re
-import smtplib
 from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
@@ -150,8 +153,8 @@ def notify_user_deactivated(
     if not supabase:
         raise HTTPException(status_code=500, detail="Supabase admin client is not configured.")
 
-    if not settings.smtp_host or not settings.smtp_user or not settings.smtp_pass or not settings.smtp_from:
-        raise HTTPException(status_code=500, detail="SMTP credentials are not configured on the backend.")
+    if not settings.gmail_client_id or not settings.gmail_client_secret or not settings.gmail_refresh_token:
+        raise HTTPException(status_code=500, detail="Gmail API credentials are not configured on the backend.")
 
     token = (authorization or "").replace("Bearer", "").strip()
     if not token:
@@ -218,27 +221,31 @@ def notify_user_deactivated(
         "If you believe this action was made in error, please contact AquaScope support."
     )
 
-    message = EmailMessage()
-    message["Subject"] = "AquaScope account disabled"
-    message["From"] = settings.smtp_from
-    message["To"] = target_email
-    message.set_content(text_body)
-    message.add_alternative(html_body, subtype="html")
+    sender = settings.gmail_sender_email or "noreply@aquascope.dev"
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "AquaScope account disabled"
+    msg["From"] = sender
+    msg["To"] = target_email
+    msg.attach(MIMEText(text_body, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+    raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
     try:
-        if settings.smtp_secure:
-            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-                smtp.login(settings.smtp_user, settings.smtp_pass)
-                smtp.send_message(message)
-        else:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.ehlo()
-                smtp.login(settings.smtp_user, settings.smtp_pass)
-                smtp.send_message(message)
+        creds = Credentials(
+            token=None,
+            refresh_token=settings.gmail_refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=settings.gmail_client_id,
+            client_secret=settings.gmail_client_secret,
+            scopes=["https://www.googleapis.com/auth/gmail.send"],
+        )
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        service.users().messages().send(
+            userId="me", body={"raw": raw_message}
+        ).execute()
+        logger.info("[admin_notifications] email sent via Gmail API to %s", target_email)
     except Exception as exc:
-        logger.exception("Failed to send deactivation email")
+        logger.exception("Failed to send deactivation email via Gmail API")
         raise HTTPException(status_code=502, detail="Failed to send deactivation email.") from exc
 
     return DeactivationEmailResponse(success=True, message="Deactivation email sent successfully.")

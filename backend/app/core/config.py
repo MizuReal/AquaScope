@@ -29,13 +29,11 @@ class Settings:
 		self.app_host: str = os.getenv("APP_HOST", "127.0.0.1")
 		self.app_port: int = int(os.getenv("APP_PORT", "8000"))
 
-		# SMTP
-		self.smtp_host: str = os.getenv("SMTP_HOST", "")
-		self.smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
-		self.smtp_secure: bool = os.getenv("SMTP_SECURE", "false").lower() in {"1", "true", "yes"}
-		self.smtp_user: str = os.getenv("SMTP_USER", "")
-		self.smtp_pass: str = os.getenv("SMTP_PASS", "")
-		self.smtp_from: str = os.getenv("SMTP_FROM", "")
+		# Gmail API
+		self.gmail_client_id: str = os.getenv("GMAIL_CLIENT_ID", "")
+		self.gmail_client_secret: str = os.getenv("GMAIL_CLIENT_SECRET", "")
+		self.gmail_refresh_token: str = os.getenv("GMAIL_REFRESH_TOKEN", "")
+		self.gmail_sender_email: str = os.getenv("GMAIL_SENDER_EMAIL", "")
 
 	@property
 	def database_url(self) -> str:
