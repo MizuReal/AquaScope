@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "AquaScope",
-    "slug": "rn-frontend",
+    "slug": "aquascope",
     "scheme": "rnaaw",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,13 +28,16 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "2410520d-abd8-44d9-8706-2cb472458721"
-      }
-    },
     "plugins": [
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "googleAndroidClientId": "595591413760-nurkaqnv63bb23t3f29sqth0b9ipg93d.apps.googleusercontent.com",
+      "googleWebClientId": "595591413760-86kvgae5jlrs2hobj3s553ageqo5261e.apps.googleusercontent.com",
+      "eas": {
+        "projectId": "8da85cb7-c439-493b-83d8-21d3b1963a76"
+      }
+    },
+    "owner": "mizureal"
   }
 }

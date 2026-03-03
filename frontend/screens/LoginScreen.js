@@ -9,13 +9,19 @@ import {
   ScrollView,
   TextInput,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import LottieView from 'lottie-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import Constants from 'expo-constants';
 import PredictButton from '../components/PredictButton';
 import { supabase } from '../utils/supabaseClient';
 import { checkProfileActive, useAuth } from '../utils/AuthContext';
 import { useAppTheme } from '../utils/theme';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -141,6 +147,52 @@ const LoginScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: Constants.expoConfig?.extra?.googleAndroidClientId,
+    webClientId: Constants.expoConfig?.extra?.googleWebClientId,
+  });
+
+  // Handle Google OAuth response
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const idToken = response.authentication?.idToken;
+      const accessToken = response.authentication?.accessToken;
+      handleGoogleToken({ idToken, accessToken });
+    } else if (response?.type === 'error') {
+      setError('Google sign in failed. Please try again.');
+      setGoogleLoading(false);
+    } else if (response?.type === 'dismiss') {
+      setGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async ({ idToken, accessToken }) => {
+    try {
+      if (!idToken) {
+        throw new Error('No ID token received from Google.');
+      }
+      const { data, error: signInError } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+        access_token: accessToken,
+      });
+      if (signInError) throw signInError;
+      if (!data?.session) throw new Error('Sign in succeeded but no session was returned.');
+    } catch (err) {
+      setError(err?.message ?? 'Google sign in failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setNotice('');
+    setGoogleLoading(true);
+    await promptAsync();
+  };
 
   // Surface deactivation notice from AuthContext into the local error banner
   useEffect(() => {
@@ -623,6 +675,37 @@ const LoginScreen = () => {
             )}
 
             <View className="h-5" />
+
+            {/* ── Google sign-in ── */}
+            <TouchableOpacity
+              activeOpacity={0.82}
+              disabled={googleLoading || loading || !request}
+              onPress={handleGoogleSignIn}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: isDark ? 'rgba(56,189,248,0.25)' : '#e2e8f0',
+                backgroundColor: isDark ? 'rgba(15,23,42,0.6)' : '#ffffff',
+                paddingVertical: 13,
+                opacity: googleLoading || loading || !request ? 0.5 : 1,
+                marginBottom: 12,
+              }}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={isDark ? '#7dd3fc' : '#0369a1'} />
+              ) : (
+                // Google 'G' logo using coloured SVG paths via unicode glyph is not available;
+                // use a simple MaterialCommunityIcons placeholder instead
+                <MaterialCommunityIcons name="google" size={19} color="#EA4335" />
+              )}
+              <Text style={{ fontSize: 14, fontWeight: '600', color: isDark ? '#e2e8f0' : '#1e293b' }}>
+                {googleLoading ? 'Signing in…' : 'Continue with Google'}
+              </Text>
+            </TouchableOpacity>
 
             {/* CTA button */}
             <PredictButton

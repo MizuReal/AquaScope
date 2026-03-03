@@ -734,7 +734,14 @@ export default function HomePage() {
               </div>
               <span className="text-lg font-bold tracking-[0.2em] text-slate-900">AQUASCOPE</span>
             </div>
-            <p>&copy; {new Date().getFullYear()} AquaScope Intelligence. All rights reserved.</p>
+            <div className="flex flex-col items-center gap-2 md:items-end">
+              <p>&copy; {new Date().getFullYear()} AquaScope Intelligence. All rights reserved.</p>
+              <div className="flex gap-4 text-xs">
+                <a href="/privacy" className="text-sky-500 hover:text-sky-600 hover:underline transition-colors">Privacy Policy</a>
+                <span className="text-slate-300">·</span>
+                <a href="/terms" className="text-sky-500 hover:text-sky-600 hover:underline transition-colors">Terms of Service</a>
+              </div>
+            </div>
           </div>
         </footer>
       </main>

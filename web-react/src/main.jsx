@@ -21,6 +21,8 @@ import AdminSettingsPage from './pages/AdminSettingsPage'
 import AdminForumPage from './pages/AdminForumPage'
 import ContainerScanPage from './pages/ContainerScanPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import TermsOfServicePage from './pages/TermsOfServicePage'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -30,6 +32,8 @@ createRoot(document.getElementById('root')).render(
         <Route element={<App />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfServicePage />} />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="scans" element={<ScansPage />} />
