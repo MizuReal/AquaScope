@@ -338,11 +338,13 @@ def _classify_corner(cx: float, cy: float, width: int, height: int) -> Optional[
 
 def _preprocess_for_ocr_simple(region: np.ndarray) -> np.ndarray:
     """
-    Preprocessing for photographed forms (not scans).
+    Preprocessing for photographed forms — grayscale enhancement only.
     
-    Key insight: Camera photos have grayish backgrounds (~190-200) not pure white.
-    We need ADAPTIVE thresholding to handle uneven lighting.
-    Also need to filter out template guide lines while keeping dark ink.
+    Key insight: EasyOCR's CRNN recognizer is a deep learning model trained on
+    natural images. It uses grayscale gradient information to distinguish similar
+    digits (e.g. 3 vs 2, 8 vs 6). Binarization destroys these gradients.
+    
+    Strategy: normalize contrast with CLAHE, light denoise, preserve grayscale.
     """
     if region.size == 0:
         return region
@@ -353,78 +355,21 @@ def _preprocess_for_ocr_simple(region: np.ndarray) -> np.ndarray:
     h, w = gray.shape
     scaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
     
-    # Apply CLAHE to normalize contrast across the region
+    # CLAHE to normalize contrast across the region (handles uneven lighting)
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     normalized = clahe.apply(scaled)
     
-    # Gaussian blur to reduce noise
-    blurred = cv2.GaussianBlur(normalized, (5, 5), 0)
+    # Light Gaussian blur to reduce camera noise without destroying features
+    denoised = cv2.GaussianBlur(normalized, (3, 3), 0)
     
-    # ADAPTIVE thresholding - works with uneven lighting from photos
-    # blockSize=31 looks at local ~15px neighborhood
-    # C=35 means pixel must be 35 units darker than local mean to be "ink"
-    # Higher C = more aggressive filtering of light pixels (guide lines, shadows)
-    binary = cv2.adaptiveThreshold(
-        blurred, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        blockSize=31,
-        C=35  # Aggressive - filters out guide lines and faint artifacts
-    )
-    
-    # Morphological operations to clean up
-    kernel = np.ones((2, 2), np.uint8)
-    # Open to remove small noise specks (like guide line remnants)
-    cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-    # Close to connect broken strokes
-    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel)
-    
-    # Add border padding (helps OCR)
-    padded = cv2.copyMakeBorder(cleaned, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=255)
-    
-    return cv2.cvtColor(padded, cv2.COLOR_GRAY2BGR)
-
-
-def _preprocess_for_ocr_binarized(region: np.ndarray) -> np.ndarray:
-    """
-    Alternative preprocessing with Otsu's method.
-    Used when adaptive thresholding doesn't work well.
-    Otsu automatically finds the optimal threshold for bimodal distributions.
-    """
-    if region.size == 0:
-        return region
-    
-    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-    
-    # Upscale
-    h, w = gray.shape
-    scaled = cv2.resize(gray, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
-    
-    # Apply CLAHE first to improve contrast
-    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(scaled)
-    
-    # Gaussian blur
-    blurred = cv2.GaussianBlur(enhanced, (5, 5), 0)
-    
-    # Otsu's method automatically finds the optimal threshold
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    # Remove small noise with morphological open
-    kernel = np.ones((2, 2), np.uint8)
-    opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-    
-    # Close small gaps in strokes
-    closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
-    
-    # Padding
-    padded = cv2.copyMakeBorder(closed, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=255)
+    # Add border padding (helps OCR engine with edge characters)
+    padded = cv2.copyMakeBorder(denoised, 10, 10, 10, 10, cv2.BORDER_CONSTANT, value=255)
     
     return cv2.cvtColor(padded, cv2.COLOR_GRAY2BGR)
 
 
 # ============================================================================
-# NEW EXTRACTOR CLASS - Uses precise pixel coordinates
+# EXTRACTOR CLASS - Uses precise pixel coordinates
 # ============================================================================
 
 class WaterQualityOCRExtractor:
@@ -434,8 +379,8 @@ class WaterQualityOCRExtractor:
     Key design decisions:
     1. Uses ABSOLUTE PIXEL coordinates (not ratios) for maximum precision
     2. Targets ONLY the write-areas (not labels) 
-    3. Minimal preprocessing to preserve digit features
-    4. Multiple OCR attempts with different preprocessing
+    3. Minimal preprocessing to preserve digit features (adaptive threshold only)
+    4. Zero-margin crops to exclude form borders
     5. Robust decimal detection
     """
     
@@ -491,13 +436,8 @@ class WaterQualityOCRExtractor:
             if DEBUG_SAVE_IMAGES:
                 _save_debug_image(region, f"region_{idx:02d}_{area.name}_raw.png")
             
-            # Try BOTH preprocessing methods and pick the best result
-            value_simple = self._extract_from_region(region, reader, area.name, "simple")
-            value_binarized = self._extract_from_region(region, reader, area.name, "binarized")
-            
-            # Smart selection: prefer longer valid result (more digits captured)
-            # This helps with cases like "4.0" vs "0" - pick "4.0"
-            value = self._select_best_value(value_simple, value_binarized, area.name)
+            # Single-pass extraction using adaptive threshold preprocessing
+            value = self._extract_from_region(region, reader, area.name)
             
             results[area.name] = value
             logger.info(f"    FINAL VALUE for {area.name}: {value}")
@@ -509,15 +449,16 @@ class WaterQualityOCRExtractor:
         return results
     
     def _crop_write_area(self, image: np.ndarray, area: WriteAreaSpec) -> np.ndarray:
-        """Crop write area with small safety margin."""
+        """Crop write area with inward margin to exclude form borders."""
         h, w = image.shape[:2]
         
-        # Add small margin to handle slight misalignment
-        margin = 3
-        x1 = max(0, area.x - margin)
-        y1 = max(0, area.y - margin)
-        x2 = min(w, area.x + area.width + margin)
-        y2 = min(h, area.y + area.height + margin)
+        # Inward margin: shrink crop by a few pixels to avoid capturing
+        # the form's box borders which OCR misreads as digits (e.g. '1').
+        inset = 4
+        x1 = max(0, area.x + inset)
+        y1 = max(0, area.y + inset)
+        x2 = min(w, area.x + area.width - inset)
+        y2 = min(h, area.y + area.height - inset)
         
         logger.debug(f"    Crop bounds: ({x1},{y1}) to ({x2},{y2})")
         
@@ -528,23 +469,18 @@ class WaterQualityOCRExtractor:
         region: np.ndarray, 
         reader: "easyocr.Reader",
         field_name: str,
-        preprocess_mode: str
     ) -> Optional[str]:
-        """Extract numeric value from a single region."""
+        """Extract numeric value from a single region using adaptive threshold."""
         if region.size == 0:
             logger.warning(f"    Empty region for {field_name}")
             return None
         
-        # Apply preprocessing
-        if preprocess_mode == "simple":
-            processed = _preprocess_for_ocr_simple(region)
-        else:
-            processed = _preprocess_for_ocr_binarized(region)
+        processed = _preprocess_for_ocr_simple(region)
         
-        logger.info(f"    Preprocessing mode: {preprocess_mode}, result shape: {processed.shape}")
+        logger.info(f"    Preprocessed region shape: {processed.shape}")
         
         if DEBUG_SAVE_IMAGES:
-            _save_debug_image(processed, f"region_{field_name}_{preprocess_mode}.png")
+            _save_debug_image(processed, f"region_{field_name}_processed.png")
         
         # Run EasyOCR with tuned parameters
         # Balanced settings: capture more text while filtering noise
@@ -554,10 +490,10 @@ class WaterQualityOCRExtractor:
                 allowlist=self._allowlist,
                 detail=1,
                 paragraph=False,
-                min_size=8,           # Slightly smaller to catch decimal points
-                text_threshold=0.4,   # Lower threshold to catch more characters
+                min_size=4,           # Small enough to catch decimal points
+                text_threshold=0.4,   # Balanced detection threshold
                 low_text=0.3,         # More permissive for faint strokes
-                link_threshold=0.6,   # Link nearby characters (helps "4.0" stay together)
+                link_threshold=0.4,   # Lower link threshold to keep decimals connected
                 decoder='greedy',     # Faster, works well for numbers
                 batch_size=1,
                 contrast_ths=0.2,     # Lower contrast requirement
@@ -566,7 +502,7 @@ class WaterQualityOCRExtractor:
                 mag_ratio=1.5,        # Magnify text slightly for detection
             )
             
-            logger.info(f"    EasyOCR detections ({preprocess_mode}): {len(detections)} items")
+            logger.info(f"    EasyOCR detections: {len(detections)} items")
             for det in detections:
                 bbox, text, conf = det
                 logger.info(f"      -> text='{text}', conf={conf:.3f}")
@@ -576,12 +512,12 @@ class WaterQualityOCRExtractor:
             return None
         
         if not detections:
-            logger.info(f"    No detections for {field_name} with {preprocess_mode}")
+            logger.info(f"    No detections for {field_name}")
             return None
         
         # Process all detections
         result = self._process_detections(detections)
-        logger.info(f"    Processed result ({preprocess_mode}): {result}")
+        logger.info(f"    Processed result: {result}")
         return result
     
     def _process_detections(self, detections: List) -> Optional[str]:
@@ -624,26 +560,45 @@ class WaterQualityOCRExtractor:
                 return cleaned
             return None
         
-        # Multiple detections - combine only if they look like parts of one number
-        # Check spatial proximity: if gap between detections is small, combine them
-        combined_text = ""
+        # Multiple detections - collect spatially close fragments
+        fragments = []
         last_x_end = None
         
         for det in sorted_dets:
             bbox, text, conf = det
+            text = str(text).strip()
+            if not text:
+                continue
             x_start = bbox[0][0]  # Top-left x
             x_end = bbox[1][0]    # Top-right x
             
             if last_x_end is not None:
                 gap = x_start - last_x_end
-                # If gap is large (>50 pixels after 2x scaling = 25 original), treat as separate
                 if gap > 100:
                     logger.info(f"    Large gap ({gap}px) - ignoring subsequent detection")
                     break
             
-            combined_text += str(text).strip()
+            fragments.append(text)
             last_x_end = x_end
         
+        if not fragments:
+            return None
+        
+        # Key heuristic: when CRAFT splits a number into exactly 2 pure-digit
+        # groups, the split point is almost always where a decimal point was.
+        # Insert a '.' between them to reconstruct the original number.
+        if len(fragments) == 2:
+            f1, f2 = fragments
+            both_pure_digits = (f1.isdigit() and f2.isdigit())
+            if both_pure_digits:
+                decimal_text = f1 + '.' + f2
+                logger.info(f"    Decimal insertion: '{f1}' + '{f2}' -> '{decimal_text}'")
+                cleaned = self._clean_numeric(decimal_text)
+                if cleaned and self._is_valid_number(cleaned):
+                    return cleaned
+        
+        # Fallback: plain concatenation
+        combined_text = ''.join(fragments)
         logger.info(f"    Combined text: '{combined_text}'")
         cleaned = self._clean_numeric(combined_text)
         logger.info(f"    After cleaning: '{cleaned}'")
@@ -664,31 +619,31 @@ class WaterQualityOCRExtractor:
             return ""
         
         # Very conservative corrections - only the most common OCR errors
-        # that are unambiguous
         corrections = {
             'O': '0',   # Capital O -> 0
             'o': '0',   # Lowercase o -> 0 (when in numeric context)
             'l': '1',   # Lowercase L -> 1
             'I': '1',   # Capital I -> 1  
             '|': '1',   # Pipe -> 1
-            ',': '.',   # European decimal comma -> point
         }
         
-        result = []
-        for char in text:
-            # Only apply correction if the character is in our limited set
-            corrected = corrections.get(char, char)
-            result.append(corrected)
+        corrected = ''.join(corrections.get(c, c) for c in text)
+        
+        # Handle commas: distinguish thousands separator from decimal comma.
+        # Thousands separator: comma followed by exactly 3 digits (e.g., "18,620")
+        # Decimal comma: comma followed by 1-2 digits (e.g., "592,89")
+        if re.search(r'\d,\d{3}(?!\d)', corrected):
+            corrected = corrected.replace(',', '')   # strip thousands separators
+        else:
+            corrected = corrected.replace(',', '.')  # decimal comma → dot
         
         # Extract only digits and decimal points
         cleaned = ""
         has_decimal = False
-        for char in result:
+        for char in corrected:
             if char.isdigit():
                 cleaned += char
             elif char == '.' and not has_decimal:
-                # Only add decimal if we have at least one digit before it
-                # or if it's at the start (like ".5")
                 cleaned += '.'
                 has_decimal = True
         
@@ -719,73 +674,6 @@ class WaterQualityOCRExtractor:
         except ValueError:
             return False
     
-    def _select_best_value(self, value1: Optional[str], value2: Optional[str], field_name: str) -> Optional[str]:
-        """
-        Select the best value from two OCR attempts.
-        
-        Strategy:
-        1. If both are None, return None
-        2. If only one has a value, return that
-        3. If both have values, prefer the one with more information (longer, has decimal)
-        4. If equal length, prefer the one that looks more like a typical measurement
-        """
-        logger.info(f"    Selecting best value: simple='{value1}' vs binarized='{value2}'")
-        
-        if value1 is None and value2 is None:
-            return None
-        if value1 is None:
-            return value2
-        if value2 is None:
-            return value1
-        
-        # Both have values - need to pick the better one
-        
-        # Score each value
-        def score_value(val: str) -> tuple:
-            """Return (length, has_decimal, num_digits, numeric_value)"""
-            if not val:
-                return (0, 0, 0, 0)
-            has_decimal = 1 if '.' in val else 0
-            num_digits = sum(1 for c in val if c.isdigit())
-            try:
-                numeric = float(val)
-            except:
-                numeric = 0
-            return (len(val), has_decimal, num_digits, numeric)
-        
-        score1 = score_value(value1)
-        score2 = score_value(value2)
-        
-        logger.info(f"    Scores: '{value1}'={score1} vs '{value2}'={score2}")
-        
-        # Prefer value with more digits (captures more of the number)
-        if score1[2] > score2[2]:
-            logger.info(f"    Selected '{value1}' (more digits)")
-            return value1
-        if score2[2] > score1[2]:
-            logger.info(f"    Selected '{value2}' (more digits)")
-            return value2
-        
-        # Same digit count - prefer one with decimal (more precise)
-        if score1[1] > score2[1]:
-            logger.info(f"    Selected '{value1}' (has decimal)")
-            return value1
-        if score2[1] > score1[1]:
-            logger.info(f"    Selected '{value2}' (has decimal)")
-            return value2
-        
-        # Still tied - prefer longer string
-        if score1[0] > score2[0]:
-            logger.info(f"    Selected '{value1}' (longer)")
-            return value1
-        if score2[0] > score1[0]:
-            logger.info(f"    Selected '{value2}' (longer)")
-            return value2
-        
-        # Completely tied - prefer simple preprocessing result
-        logger.info(f"    Tied - defaulting to simple: '{value1}'")
-        return value1
-
     def _fallback_full_ocr(
         self, 
         image: np.ndarray, 

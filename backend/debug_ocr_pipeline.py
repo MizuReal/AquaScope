@@ -31,7 +31,6 @@ from app.ml.inference import (
     _detect_fiducials,
     _warp_with_fiducials,
     _preprocess_for_ocr_simple,
-    _preprocess_for_ocr_binarized,
     _deskew,
 )
 
@@ -247,16 +246,12 @@ def debug_step6_preprocessing(crops: list) -> list:
     
     processed = []
     for i, (name, crop) in enumerate(crops):
-        # Method 1: Simple adaptive threshold
-        proc1 = _preprocess_for_ocr_simple(crop)
-        save_image(proc1, f"06a_preproc_simple_{i:02d}_{name}.png")
+        # Adaptive threshold preprocessing (single-pass)
+        proc = _preprocess_for_ocr_simple(crop)
+        save_image(proc, f"06_preproc_{i:02d}_{name}.png")
         
-        # Method 2: Otsu binarization
-        proc2 = _preprocess_for_ocr_binarized(crop)
-        save_image(proc2, f"06b_preproc_otsu_{i:02d}_{name}.png")
-        
-        processed.append((name, proc1, proc2))
-        print(f"    [{i}] {name}: simple={proc1.shape}, otsu={proc2.shape}")
+        processed.append((name, proc))
+        print(f"    [{i}] {name}: processed={proc.shape}")
     
     return processed
 
