@@ -47,7 +47,6 @@ const numericFormFields = [
   'organicCarbon',
   'trihalomethanes',
   'turbidity',
-  'freeChlorineResidual',
 ];
 
 const parseNumericInput = (value) => {
@@ -83,9 +82,6 @@ const backendFieldAliasMap = {
   trihalomethanes: 'trihalomethanes',
   thm: 'trihalomethanes',
   turbidity: 'turbidity',
-  freechlorineresidual: 'freeChlorineResidual',
-  freechlorine: 'freeChlorineResidual',
-  residualchlorine: 'freeChlorineResidual',
 };
 
 const resolveOcrFieldKey = (key) => backendFieldAliasMap[canonicalizeFieldKey(key ?? '')];
@@ -380,7 +376,6 @@ const DataInputScreen = ({ onNavigate }) => {
     organicCarbon: '',
     trihalomethanes: '',
     turbidity: '',
-    freeChlorineResidual: '',
     color: 'Clear',
     source: 'Surface water',
   });
@@ -1103,7 +1098,7 @@ const DataInputScreen = ({ onNavigate }) => {
   const EMPTY_FORM = {
     pH: '', hardness: '', solids: '', chloramines: '', sulfate: '',
     conductivity: '', organicCarbon: '', trihalomethanes: '', turbidity: '',
-    freeChlorineResidual: '', color: 'Clear', source: 'Surface water',
+    color: 'Clear', source: 'Surface water',
   };
 
   const handleClearAll = useCallback(() => {
@@ -1127,7 +1122,6 @@ const DataInputScreen = ({ onNavigate }) => {
       organicCarbon: parseNumericInput(form.organicCarbon),
       trihalomethanes: parseNumericInput(form.trihalomethanes),
       turbidity: parseNumericInput(form.turbidity),
-      freeChlorineResidual: parseNumericInput(form.freeChlorineResidual),
       color: form.color,
       source: form.source,
     };
@@ -1149,7 +1143,6 @@ const DataInputScreen = ({ onNavigate }) => {
       payload.organicCarbon,
       payload.trihalomethanes,
       payload.turbidity,
-      payload.freeChlorineResidual,
     ].filter((value) => typeof value === 'number' && Number.isFinite(value));
 
     if (numericValues.length < 3) {
@@ -1175,7 +1168,6 @@ const DataInputScreen = ({ onNavigate }) => {
           organic_carbon: payload.organicCarbon,
           trihalomethanes: payload.trihalomethanes,
           turbidity: payload.turbidity,
-          free_chlorine_residual: payload.freeChlorineResidual,
           color: payload.color,
           source: payload.source,
           notes: null,
@@ -1229,7 +1221,7 @@ const DataInputScreen = ({ onNavigate }) => {
   const isFilled = (k) => String(form[k] ?? '').trim().length > 0;
   const coreFilledCount  = ['pH', 'hardness', 'solids', 'conductivity'].filter(isFilled).length;
   const chemFilledCount  = ['chloramines', 'sulfate', 'organicCarbon', 'trihalomethanes'].filter(isFilled).length;
-  const physFilledCount  = ['turbidity', 'freeChlorineResidual'].filter(isFilled).length;
+  const physFilledCount  = ['turbidity'].filter(isFilled).length;
   const totalFilledCount = coreFilledCount + chemFilledCount + physFilledCount;
   return (
     <>
@@ -1815,11 +1807,11 @@ const DataInputScreen = ({ onNavigate }) => {
               </View>
             </CollapsibleSection>
 
-            {/* Physical & disinfectant — collapsed by default */}
+            {/* Physical — collapsed by default */}
             <CollapsibleSection
-              title="Physical & disinfectant"
+              title="Physical"
               icon="thermometer"
-              fieldCount={2}
+              fieldCount={1}
               filledCount={physFilledCount}
               isDark={isDark}
             >
@@ -1831,15 +1823,6 @@ const DataInputScreen = ({ onNavigate }) => {
                     keyboardType="numeric"
                     value={form.turbidity}
                     onChangeText={(v) => updateField('turbidity', v)}
-                  />
-                </View>
-                <View className="flex-1">
-                  <InputField
-                    label="Free Chlorine Residual (mg/L)"
-                    placeholder="e.g. 0.5"
-                    keyboardType="numeric"
-                    value={form.freeChlorineResidual}
-                    onChangeText={(v) => updateField('freeChlorineResidual', v)}
                   />
                 </View>
               </View>

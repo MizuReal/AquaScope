@@ -24,9 +24,7 @@ def _get_microbial_predictor():
 
 logger = logging.getLogger(__name__)
 
-# NOTE: Temporarily excluding "free_chlorine_residual" until dataset is available.
-# When re-enabling, add "free_chlorine_residual" back into this tuple and
-# ensure the training data and schema include the column.
+# free_chlorine_residual has been removed from the capture form.
 FEATURE_COLUMNS = (
     "ph",
     "hardness",
@@ -49,7 +47,6 @@ FIELD_LABELS = {
     "organic_carbon": "Organic carbon (mg/L)",
     "trihalomethanes": "Trihalomethanes (µg/L)",
     "turbidity": "Turbidity (NTU)",
-    "free_chlorine_residual": "Free chlorine residual (mg/L)",
 }
 
 DATASET_PATH = Path(__file__).resolve().parents[2] / "water_potability.csv"
@@ -97,8 +94,6 @@ class ParameterCheck:
 class PotabilityPredictor:
     def __init__(self, dataset_path: Optional[Path] = None, threshold: float = 0.58) -> None:
         self.dataset_path = Path(dataset_path or DATASET_PATH)
-        if not self.dataset_path.exists():
-            raise FileNotFoundError(self.dataset_path)
         self.threshold = threshold
         self.settings = get_settings()
         self.samples_table = (self.settings.supabase_samples_table or "").strip()
@@ -106,17 +101,73 @@ class PotabilityPredictor:
         self.feature_stats = self._compute_feature_stats()
         self.model_version = "random_forest_v1"
 
+    # ------------------------------------------------------------------
+    # Training-data loading: Supabase first, CSV fallback
+    # ------------------------------------------------------------------
+
     def _load_training_frame(self) -> pd.DataFrame:
-        df = pd.read_csv(self.dataset_path)
-        missing = [src for src in COLUMN_MAP if src not in df.columns]
-        if missing:
-            raise ValueError(f"Dataset missing expected columns: {', '.join(missing)}")
-        df = df.rename(columns=COLUMN_MAP)
-        for column in FEATURE_COLUMNS:
-            if column not in df.columns:
-                df[column] = np.nan
-        df = df[list(FEATURE_COLUMNS) + ["is_potable"]]
-        return df
+        """Load training data from Supabase `water_potability`, CSV fallback."""
+        client = get_supabase_client()
+        if client:
+            try:
+                df = self._fetch_training_from_supabase(client)
+                if not df.empty:
+                    logger.info("Loaded %d training rows from Supabase water_potability", len(df))
+                    return df
+            except Exception:
+                logger.exception("Supabase training-data fetch failed")
+
+        # Fallback: local CSV
+        if self.dataset_path.exists():
+            logger.info("Falling back to local CSV: %s", self.dataset_path)
+            df = pd.read_csv(self.dataset_path)
+            missing = [src for src in COLUMN_MAP if src not in df.columns]
+            if missing:
+                raise ValueError(f"Dataset missing expected columns: {', '.join(missing)}")
+            df = df.rename(columns=COLUMN_MAP)
+            for column in FEATURE_COLUMNS:
+                if column not in df.columns:
+                    df[column] = np.nan
+            return df[list(FEATURE_COLUMNS) + ["is_potable"]]
+
+        raise RuntimeError(
+            "No training data available: Supabase fetch failed and local CSV not found at "
+            f"{self.dataset_path}"
+        )
+
+    def _fetch_training_from_supabase(self, client) -> pd.DataFrame:
+        """Paginate over the water_potability table and return a DataFrame."""
+        select_cols = ",".join(list(FEATURE_COLUMNS) + ["is_potable"])
+        all_rows: list = []
+        page_size = 1000
+        offset = 0
+        while True:
+            resp = (
+                client.table("water_potability")
+                .select(select_cols)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            data = getattr(resp, "data", None) or []
+            if not data:
+                break
+            all_rows.extend(data)
+            if len(data) < page_size:
+                break
+            offset += page_size
+
+        if not all_rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(all_rows)
+        for col in FEATURE_COLUMNS:
+            df[col] = pd.to_numeric(df.get(col), errors="coerce") if col in df.columns else np.nan
+        df["is_potable"] = (
+            df["is_potable"].map({True: 1, False: 0, "true": 1, "false": 0}).fillna(0).astype(float)
+            if "is_potable" in df.columns
+            else 0
+        )
+        return df[list(FEATURE_COLUMNS) + ["is_potable"]]
 
     def _train_pipeline(self) -> Pipeline:
         df = self._load_training_frame()

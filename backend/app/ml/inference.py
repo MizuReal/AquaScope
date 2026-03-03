@@ -89,8 +89,8 @@ class WriteAreaSpec:
 
 def _compute_write_areas() -> Tuple[WriteAreaSpec, ...]:
     """
-    Compute exact pixel coordinates for all 10 write-areas.
-    Layout: 5 rows x 2 columns
+    Compute exact pixel coordinates for all 9 write-areas.
+    Layout: 5 rows x 2 columns (Row 4 has only left column — turbidity).
     Coordinates based on actual image analysis, not template CSS.
     """
     # Field names in order: left column then right column for each row
@@ -105,7 +105,6 @@ def _compute_write_areas() -> Tuple[WriteAreaSpec, ...]:
         ("organic_carbon", 3, 0),          # Row 3, Left
         ("trihalomethanes", 3, 1),         # Row 3, Right
         ("turbidity", 4, 0),               # Row 4, Left
-        ("free_chlorine_residual", 4, 1),  # Row 4, Right
     ]
     
     areas = []

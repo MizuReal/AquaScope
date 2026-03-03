@@ -303,7 +303,7 @@ const parameterGroupMeta = {
 	},
 	physical: {
 		title: 'Physical & disinfectant',
-		fields: ['turbidity', 'free_chlorine_residual'],
+		fields: ['turbidity'],
 	},
 };
 

@@ -17,7 +17,6 @@ class WaterSamplePayload(BaseModel):
     organic_carbon: Optional[float] = Field(None, alias="organicCarbon")
     trihalomethanes: Optional[float] = None
     turbidity: Optional[float] = None
-    free_chlorine_residual: Optional[float] = Field(None, alias="freeChlorineResidual")
 
     color: Optional[str] = None
     source: Optional[str] = None
@@ -51,7 +50,6 @@ class WaterSamplePayload(BaseModel):
             "organic_carbon": self.organic_carbon,
             "trihalomethanes": self.trihalomethanes,
             "turbidity": self.turbidity,
-            "free_chlorine_residual": self.free_chlorine_residual,
         }
 
     def meta_dict(self) -> Dict[str, Optional[str]]:

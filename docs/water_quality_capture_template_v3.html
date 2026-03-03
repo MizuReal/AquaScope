@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Water Quality Capture Template v2</title>
+    <title>Water Quality Capture Template v3 — 9 Parameters</title>
     <style>
       :root {
         --page-width: 1080px;
@@ -10,8 +10,6 @@
         --page-padding: 40px;
         --grid-gap: 20px;
         --box-height: 160px;
-        --fiducial-size: 48px;
-        --fiducial-inner: 24px;
         --primary-color: #1a3a4a;
         --border-color: #2d5a6e;
         --write-border: #4a8fa8;
@@ -24,12 +22,14 @@
       * {
         box-sizing: border-box;
         font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       body {
         margin: 0;
-        background: #d8e8ed;
-        padding: 24px;
+        background: #fff;
+        padding: 0;
         display: flex;
         justify-content: center;
       }
@@ -42,18 +42,18 @@
         border: 4px solid var(--border-color);
         border-radius: 12px;
         padding: var(--page-padding);
-        box-shadow: 0 16px 48px rgba(18, 54, 66, 0.15);
       }
 
-      /* SIMPLE SOLID BLACK FIDUCIAL MARKERS - Maximum contrast for easy detection */
+      /* FIDUCIAL MARKERS — solid black 56×56 squares, 12px from each edge */
       .fiducial {
         position: absolute;
         width: 56px;
         height: 56px;
-        background: #000000;
+        background: #000000 !important;
         border-radius: 0;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
-
       .fiducial.tl { top: 12px; left: 12px; }
       .fiducial.tr { top: 12px; right: 12px; }
       .fiducial.bl { bottom: 12px; left: 12px; }
@@ -104,7 +104,7 @@
       }
 
       .instructions {
-        background: #f0f8fa;
+        background: #f0f8fa !important;
         border: 2px solid #b8d4de;
         border-radius: 10px;
         padding: 12px 20px;
@@ -112,12 +112,15 @@
         font-size: 13px;
         line-height: 1.5;
         margin-bottom: 16px;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       .instructions strong {
         color: var(--primary-color);
       }
 
+      /* 2-column grid — 9 param boxes; last row has one box on the left */
       .parameters {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -131,7 +134,9 @@
         min-height: var(--box-height);
         display: flex;
         flex-direction: column;
-        background: #fafefe;
+        background: #fafefe !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       .param-header {
@@ -155,7 +160,6 @@
         font-weight: 500;
       }
 
-      /* IMPROVED WRITE AREA - Larger, clearer, with character guides */
       .write-area {
         flex: 1;
         border: 3px solid var(--primary-color);
@@ -168,12 +172,12 @@
         justify-content: center;
       }
 
-      /* Character positioning guides - helps users write in consistent positions */
+      /* Character positioning guides */
       .write-area::before {
         content: "";
         position: absolute;
         inset: 8px;
-        background-image: 
+        background-image:
           repeating-linear-gradient(
             to right,
             var(--guide-color) 0,
@@ -184,6 +188,8 @@
         opacity: 0.6;
         pointer-events: none;
         border-radius: 6px;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       /* Baseline guide */
@@ -196,17 +202,8 @@
         height: 2px;
         background: var(--guide-color);
         border-radius: 1px;
-      }
-
-      /* Sample values for demonstration (remove for blank form) */
-      .sample-value {
-        position: relative;
-        z-index: 1;
-        font-family: "Courier New", "SF Mono", monospace;
-        font-size: 40px;
-        letter-spacing: 8px;
-        color: #0a1d25;
-        font-weight: 600;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
 
       .note {
@@ -221,34 +218,23 @@
         color: var(--primary-color);
       }
 
-      /* Alignment markers for the capture guide */
-      .corner-marker {
-        position: absolute;
-        width: 24px;
-        height: 24px;
-        border: 3px solid var(--primary-color);
-      }
-
-      .corner-marker.tl-inner { top: 80px; left: 80px; border-right: none; border-bottom: none; }
-      .corner-marker.tr-inner { top: 80px; right: 80px; border-left: none; border-bottom: none; }
-      .corner-marker.bl-inner { bottom: 80px; left: 80px; border-right: none; border-top: none; }
-      .corner-marker.br-inner { bottom: 80px; right: 80px; border-left: none; border-top: none; }
-
       @media print {
-        body { background: #fff; padding: 0; }
-        .sheet { box-shadow: none; margin: 0 auto; border: 2px solid #333; }
-        .sample-value { color: transparent; } /* Hide samples when printing blank forms */
-      }
-
-      /* Version for blank printing */
-      @media print {
-        .sample-value { display: none; }
+        body {
+          background: #fff;
+          padding: 0;
+          margin: 0;
+        }
+        .sheet {
+          box-shadow: none;
+          margin: 0 auto;
+          border: 2px solid #333;
+        }
       }
     </style>
   </head>
   <body>
     <section class="sheet">
-      <!-- SOLID FIDUCIAL MARKERS - Much easier for CV detection -->
+      <!-- SOLID FIDUCIAL MARKERS — required for perspective correction -->
       <span class="fiducial tl" aria-hidden="true"></span>
       <span class="fiducial tr" aria-hidden="true"></span>
       <span class="fiducial bl" aria-hidden="true"></span>
@@ -274,17 +260,31 @@
 
       <section class="instructions">
         <strong>Instructions:</strong>
-        Write clearly with black ink. Place ONE digit per column guide. Keep numbers large and touch the baseline. 
-        Position the phone directly above the sheet with all <strong>four corner squares</strong> visible.
+        Write clearly with black ink. Place ONE digit per column guide.
+        Keep numbers large and touch the baseline.
+        Position the phone directly above the sheet with all
+        <strong>four corner squares</strong> visible.
       </section>
 
+      <!--
+        9 PARAMETER FIELDS — 2-column grid, 5 rows.
+        Row 0: pH | Hardness
+        Row 1: Solids | Chloramines
+        Row 2: Sulfate | Conductivity
+        Row 3: Organic Carbon | Trihalomethanes
+        Row 4: Turbidity | (empty)
+
+        IMPORTANT: Do NOT reorder or add fields here without updating
+        the OCR write-area coordinates in backend/app/ml/inference.py
+      -->
       <section class="parameters">
+        <!-- Row 0 -->
         <article class="param-box">
           <div class="param-header">
             <span class="param-label">pH</span>
             <span class="param-unit">(dimensionless)</span>
           </div>
-          <div class="write-area"><span class="sample-value">7.12</span></div>
+          <div class="write-area"></div>
         </article>
 
         <article class="param-box">
@@ -292,15 +292,16 @@
             <span class="param-label">Hardness</span>
             <span class="param-unit">mg/L as CaCO₃</span>
           </div>
-          <div class="write-area"><span class="sample-value">180</span></div>
+          <div class="write-area"></div>
         </article>
 
+        <!-- Row 1 -->
         <article class="param-box">
           <div class="param-header">
             <span class="param-label">Solids</span>
             <span class="param-unit">mg/L</span>
           </div>
-          <div class="write-area"><span class="sample-value">320</span></div>
+          <div class="write-area"></div>
         </article>
 
         <article class="param-box">
@@ -308,15 +309,16 @@
             <span class="param-label">Chloramines</span>
             <span class="param-unit">mg/L</span>
           </div>
-          <div class="write-area"><span class="sample-value">4.0</span></div>
+          <div class="write-area"></div>
         </article>
 
+        <!-- Row 2 -->
         <article class="param-box">
           <div class="param-header">
             <span class="param-label">Sulfate</span>
             <span class="param-unit">mg/L</span>
           </div>
-          <div class="write-area"><span class="sample-value">250</span></div>
+          <div class="write-area"></div>
         </article>
 
         <article class="param-box">
@@ -324,15 +326,16 @@
             <span class="param-label">Conductivity</span>
             <span class="param-unit">μS/cm</span>
           </div>
-          <div class="write-area"><span class="sample-value">410</span></div>
+          <div class="write-area"></div>
         </article>
 
+        <!-- Row 3 -->
         <article class="param-box">
           <div class="param-header">
             <span class="param-label">Organic Carbon</span>
             <span class="param-unit">mg/L</span>
           </div>
-          <div class="write-area"><span class="sample-value">12.5</span></div>
+          <div class="write-area"></div>
         </article>
 
         <article class="param-box">
@@ -340,20 +343,21 @@
             <span class="param-label">Trihalomethanes</span>
             <span class="param-unit">μg/L</span>
           </div>
-          <div class="write-area"><span class="sample-value">80</span></div>
+          <div class="write-area"></div>
         </article>
 
+        <!-- Row 4 — single field (turbidity only) -->
         <article class="param-box">
           <div class="param-header">
             <span class="param-label">Turbidity</span>
             <span class="param-unit">NTU</span>
           </div>
-          <div class="write-area"><span class="sample-value">4.5</span></div>
+          <div class="write-area"></div>
         </article>
       </section>
 
       <p class="note">
-        <strong>Tips:</strong> Use a flat surface with even lighting. 
+        <strong>Tips:</strong> Use a flat surface with even lighting.
         Avoid shadows and glare. The app will auto-capture when all four corner markers are detected.
       </p>
     </section>
