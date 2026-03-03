@@ -519,7 +519,15 @@ function ThreadCard({
         <span className="text-xs text-slate-500">{formatRelativeTime(thread.created_at)}</span>
       </div>
 
-      <h3 className="mt-4 text-lg font-semibold text-slate-900">{thread.title}</h3>
+      <h3 className="mt-4 text-lg font-semibold text-slate-900">
+        {thread.is_locked && (
+          <span className="mr-2 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+            Locked
+          </span>
+        )}
+        {thread.title}
+      </h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         {thread.body?.length > 220 ? `${thread.body.slice(0, 220)}...` : thread.body}
       </p>
@@ -754,7 +762,7 @@ export default function CommunityPage() {
     const threadResult = await supabase
       .from("forum_threads")
       .select(
-        "id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+        "id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
       )
       .order("created_at", { ascending: false })
       .range(offset, toIndex);
@@ -961,7 +969,7 @@ export default function CommunityPage() {
     const threadResult = await supabase
       .from("forum_threads")
       .select(
-        "id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+        "id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
       )
       .eq("id", threadId)
       .maybeSingle();
@@ -1854,6 +1862,16 @@ export default function CommunityPage() {
               <h3 className="mt-4 text-lg font-semibold text-slate-900">{activeThread.title}</h3>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{activeThread.body}</p>
 
+              {activeThread.is_locked && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">Thread Locked</p>
+                    <p className="mt-0.5 text-xs text-amber-700">{activeThread.lock_reason || "This thread has been locked by an administrator. New replies are not allowed."}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {(activeThread.categories || []).map((tag) => (
                   <span
@@ -1913,6 +1931,7 @@ export default function CommunityPage() {
                             {item.userLiked ? <IconHeartFilled className="h-3.5 w-3.5" /> : <IconHeart className="h-3.5 w-3.5" />}
                             Like {item.likeCount}
                           </button>
+                          {!activeThread.is_locked && (
                           <button
                             type="button"
                             onClick={() => setReplyTarget(item)}
@@ -1921,6 +1940,7 @@ export default function CommunityPage() {
                             <IconReply className="h-3.5 w-3.5" />
                             Reply
                           </button>
+                          )}
                         </div>
                         {item.parent_post_id ? (
                           <span className="text-xs text-slate-500">Reply</span>
@@ -1931,6 +1951,11 @@ export default function CommunityPage() {
                 : null}
             </div>
 
+            {activeThread.is_locked ? (
+              <div className="mt-5 rounded-3xl border-2 border-amber-200 bg-amber-50/50 p-4 text-center">
+                <p className="text-sm font-medium text-amber-700">This thread is locked. Replies are disabled.</p>
+              </div>
+            ) : (
             <div className="mt-5 rounded-3xl border-2 border-cyan-200 bg-white p-4">
               {replyTarget ? (
                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -1968,6 +1993,7 @@ export default function CommunityPage() {
                 {replyLoading ? "Sending..." : "Send reply"}
               </button>
             </div>
+            )}
           </div>
         </div>
       ) : null}

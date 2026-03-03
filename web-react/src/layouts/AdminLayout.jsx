@@ -9,6 +9,7 @@ const navItems = [
   { label: "Admin dashboard", href: "/admin/dashboard", icon: "dashboard" },
   { label: "User control", href: "/admin/users", icon: "users" },
   { label: "System Analytics", href: "/admin/analytics", icon: "analytics" },
+  { label: "Forum Control", href: "/admin/forum", icon: "forum" },
   { label: "System Settings", href: "/admin/system-settings", icon: "system" },
   { label: "Settings", href: "/admin/settings", icon: "settings" },
   { label: "Logout", href: "/logout", icon: "logout" },
@@ -75,6 +76,14 @@ function NavIcon({ icon }) {
       <svg {...commonProps}>
         <circle cx="12" cy="12" r="3" />
         <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z" />
+      </svg>
+    );
+  }
+
+  if (icon === "forum") {
+    return (
+      <svg {...commonProps}>
+        <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     );
   }

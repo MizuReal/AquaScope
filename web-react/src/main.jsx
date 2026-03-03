@@ -18,6 +18,7 @@ import AdminUsersPage from './pages/AdminUsersPage'
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage'
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage'
 import AdminSettingsPage from './pages/AdminSettingsPage'
+import AdminForumPage from './pages/AdminForumPage'
 import ContainerScanPage from './pages/ContainerScanPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
+            <Route path="forum" element={<AdminForumPage />} />
             <Route path="system-settings" element={<AdminSystemSettingsPage />} />
             <Route path="settings" element={<AdminSettingsPage />} />
           </Route>
