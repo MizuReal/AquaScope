@@ -204,6 +204,10 @@ def _warp_with_fiducials(image: np.ndarray) -> Optional[np.ndarray]:
     if fiducials is None:
         logger.debug("Fiducial detection failed - could not find all 4 corners")
         return None
+
+    # Correct sideways orientation before warping
+    fiducials = _correct_fiducial_orientation(fiducials, image)
+
     ordered = np.array(
         [fiducials[label] for label in ("tl", "tr", "br", "bl")],
         dtype=np.float32,
@@ -219,6 +223,77 @@ def _warp_with_fiducials(image: np.ndarray) -> Optional[np.ndarray]:
         flags=cv2.INTER_CUBIC,
         borderMode=cv2.BORDER_REPLICATE,
     )
+
+
+def _correct_fiducial_orientation(
+    corners: Dict[str, np.ndarray],
+    image: np.ndarray,
+) -> Dict[str, np.ndarray]:
+    """
+    Detect and correct sideways card orientation via aspect-ratio analysis.
+
+    The card is 1080x1240 (portrait, ratio ~0.87). When the detected fiducial
+    quadrilateral is landscape (wider than tall), the card was captured sideways.
+    We try both 90-degree label rotations, cheaply warp each, and pick the one
+    whose header region contains more dark pixels (text/borders), which indicates
+    the correct upright orientation.
+    """
+    tl, tr, br, bl = corners["tl"], corners["tr"], corners["br"], corners["bl"]
+
+    # Measure detected quad dimensions
+    avg_width = (float(np.linalg.norm(tr - tl)) + float(np.linalg.norm(br - bl))) / 2.0
+    avg_height = (float(np.linalg.norm(bl - tl)) + float(np.linalg.norm(br - tr))) / 2.0
+
+    if avg_height < 1e-6:
+        return corners
+
+    aspect = avg_width / avg_height
+
+    if aspect <= 1.0:
+        logger.info("Fiducial quad is portrait (aspect=%.3f) — no rotation needed", aspect)
+        return corners
+
+    logger.warning(
+        "Fiducial quad is LANDSCAPE (aspect=%.3f) — card is sideways, correcting orientation",
+        aspect,
+    )
+
+    # Two possible 90° label reassignments:
+    # rot_a: card was rotated CW on the table
+    rot_a = {"tl": corners["tr"], "tr": corners["br"], "br": corners["bl"], "bl": corners["tl"]}
+    # rot_b: card was rotated CCW on the table
+    rot_b = {"tl": corners["bl"], "tr": corners["tl"], "br": corners["tr"], "bl": corners["br"]}
+
+    score_a = _score_header_region(image, rot_a)
+    score_b = _score_header_region(image, rot_b)
+
+    logger.info("Orientation header scores: rot_a=%.0f  rot_b=%.0f", score_a, score_b)
+
+    chosen, label = (rot_a, "CW") if score_a >= score_b else (rot_b, "CCW")
+    logger.info("Applied %s correction for sideways card", label)
+    return chosen
+
+
+def _score_header_region(image: np.ndarray, corners: Dict[str, np.ndarray]) -> float:
+    """
+    Cheaply warp the image with the given corner mapping and return the count
+    of dark pixels in the header band.  The correct orientation will have the
+    title text ("Water Quality Data Sheet"), meta row, and instruction box in
+    the top ~15% of the card, producing significantly more dark pixels than the
+    mostly-blank bottom region that an incorrect rotation would place there.
+    """
+    ordered = np.array(
+        [corners[lbl] for lbl in ("tl", "tr", "br", "bl")], dtype=np.float32
+    )
+    matrix = cv2.getPerspectiveTransform(ordered, _FIDUCIAL_TARGETS)
+    warped = cv2.warpPerspective(
+        image, matrix, (_CANONICAL_WIDTH, _CANONICAL_HEIGHT),
+        flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE,
+    )
+    # Sample the header strip (y 60-200, skip fiducial zone on sides)
+    header = warped[60:200, 100:980]
+    gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
+    return float(np.sum(gray < 100))
 
 
 def _detect_fiducials(image: np.ndarray) -> Optional[Dict[str, np.ndarray]]:
