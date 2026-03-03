@@ -623,6 +623,7 @@ export default function CommunityPage() {
   const [replyError, setReplyError] = useState("");
   const [replyLoading, setReplyLoading] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
+  const replyInputRef = useRef(null);
 
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeModalActive, setComposeModalActive] = useState(false);
@@ -1934,7 +1935,12 @@ export default function CommunityPage() {
                           {!activeThread.is_locked && (
                           <button
                             type="button"
-                            onClick={() => setReplyTarget(item)}
+                            onClick={() => {
+                              setReplyTarget(item);
+                              const mention = `@${item.authorName} `;
+                              setReplyText((prev) => prev.startsWith(mention) ? prev : mention);
+                              window.setTimeout(() => replyInputRef.current?.focus(), 0);
+                            }}
                             className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700"
                           >
                             <IconReply className="h-3.5 w-3.5" />
@@ -1959,7 +1965,7 @@ export default function CommunityPage() {
             <div className="mt-5 rounded-3xl border-2 border-cyan-200 bg-white p-4">
               {replyTarget ? (
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm text-sky-700">Replying to {replyTarget.authorName}</p>
+                  <p className="text-sm text-slate-600">Replying to <span className="inline-block rounded-md bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-700">@{replyTarget.authorName}</span></p>
                   <button
                     type="button"
                     onClick={() => setReplyTarget(null)}
@@ -1971,6 +1977,7 @@ export default function CommunityPage() {
               ) : null}
 
               <textarea
+                ref={replyInputRef}
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
                 placeholder="Write a reply"

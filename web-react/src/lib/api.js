@@ -118,6 +118,31 @@ export async function chatWithCopilot(analysis, history, message) {
   return payload;
 }
 
+export async function getWaterFiltrationSuggestion(analysis) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/chat/filtration-suggestion`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ analysis: analysis || {} }),
+    });
+  } catch (networkError) {
+    throw new Error(
+      `Network request failed while contacting ${API_BASE_URL}. Details: ${networkError?.message || "unknown"}`,
+    );
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      throw new Error("AI rate limit reached — please wait a moment and retry.");
+    }
+    throw new Error(payload?.detail || "Filtration suggestion failed.");
+  }
+
+  return response.json();
+}
+
 export async function getContainerCleaningSuggestion(analysis) {
   const legacyAnalysis = buildLegacyWaterCompatibleContainerAnalysis(analysis);
   const topClass = resolveTopContainerClass(analysis);
