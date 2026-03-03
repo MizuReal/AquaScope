@@ -1,10 +1,26 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/lib/AuthContext";
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
+function hasValidRecoveryParams() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const hashParams = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+  const queryParams = new URLSearchParams(window.location.search || "");
+
+  const type = hashParams.get("type") || queryParams.get("type");
+  const accessToken = hashParams.get("access_token") || queryParams.get("access_token");
+  const refreshToken = hashParams.get("refresh_token") || queryParams.get("refresh_token");
+  const code = hashParams.get("code") || queryParams.get("code");
+
+  return type === "recovery" && Boolean(accessToken || refreshToken || code);
+}
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -14,10 +30,30 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [hasRecoveryToken] = useState(() => hasValidRecoveryParams());
+  const shouldRedirectBlocked = !authLoading && (!user || !hasRecoveryToken);
+
+  useEffect(() => {
+    if (!shouldRedirectBlocked) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      navigate("/", {
+        replace: true,
+        state: {
+          authIntent: "login",
+          authNotice: "Reset link is invalid or expired. Please log in and request a new reset email.",
+        },
+      });
+    }, 1800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [navigate, shouldRedirectBlocked]);
 
   const canSubmit = useMemo(() => {
-    return !submitting && !authLoading && Boolean(user) && isSupabaseConfigured;
-  }, [authLoading, submitting, user]);
+    return !submitting && !authLoading && Boolean(user) && isSupabaseConfigured && hasRecoveryToken;
+  }, [authLoading, hasRecoveryToken, submitting, user]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -34,6 +70,14 @@ export default function ResetPasswordPage() {
       setFeedback({
         type: "error",
         message: "Reset link is invalid or expired. Request a new password reset email.",
+      });
+      return;
+    }
+
+    if (!hasRecoveryToken) {
+      setFeedback({
+        type: "error",
+        message: "Reset link is invalid or expired. Open the latest reset email and use that link.",
       });
       return;
     }
@@ -92,6 +136,18 @@ export default function ResetPasswordPage() {
         {!authLoading && !user ? (
           <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
             Reset link is invalid or expired. Request a new reset email from the login screen.
+          </p>
+        ) : null}
+
+        {!authLoading && user && !hasRecoveryToken ? (
+          <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            This page only works from a valid password reset email link.
+          </p>
+        ) : null}
+
+        {shouldRedirectBlocked ? (
+          <p className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            Redirecting to home/login...
           </p>
         ) : null}
 

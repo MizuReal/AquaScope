@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 const getExtensionFromMimeType = (mimeType) => {
   if (!mimeType || typeof mimeType !== "string") return "jpg";
@@ -45,7 +46,13 @@ const resolveAvatarUrl = async (rawUrlOrPath) => {
 
 const statusToneClassName = (value) => {
   const normalized = String(value || "").toLowerCase();
-  if (normalized.includes("unable") || normalized.includes("required") || normalized.includes("sign in")) {
+  if (
+    normalized.includes("unable") ||
+    normalized.includes("required") ||
+    normalized.includes("sign in") ||
+    normalized.includes("invalid") ||
+    normalized.includes("match")
+  ) {
     return "text-rose-600";
   }
   return "text-emerald-600";
@@ -55,7 +62,14 @@ export default function ProfilePage() {
   const fileInputRef = useRef(null);
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [status, setStatus] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState("");
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const [profile, setProfile] = useState({
     name: "",
     email: "",
@@ -157,6 +171,85 @@ export default function ProfilePage() {
       setStatus("Unable to save profile right now.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = (key, value) => {
+    setPasswordForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleUpdatePassword = async () => {
+    setPasswordStatus("");
+
+    if (!user) {
+      setPasswordStatus("Please sign in to update your password.");
+      return;
+    }
+
+    if (!passwordForm.oldPassword) {
+      setPasswordStatus("Old password is required.");
+      return;
+    }
+
+    if (!passwordForm.newPassword) {
+      setPasswordStatus("New password is required.");
+      return;
+    }
+
+    if (!passwordForm.confirmPassword) {
+      setPasswordStatus("Confirm password is required.");
+      return;
+    }
+
+    if (!PASSWORD_REGEX.test(passwordForm.newPassword)) {
+      setPasswordStatus("Password must be at least 8 characters and include uppercase, lowercase, and a number.");
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordStatus("Passwords do not match.");
+      return;
+    }
+
+    if (passwordForm.oldPassword === passwordForm.newPassword) {
+      setPasswordStatus("New password must be different from old password.");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      const email = user.email || profile.email;
+
+      if (!email) {
+        setPasswordStatus("Unable to verify your account. Please sign in again.");
+        return;
+      }
+
+      const { data: verifyData, error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: passwordForm.oldPassword,
+      });
+
+      if (verifyError || !verifyData?.user || verifyData.user.id !== user.id) {
+        setPasswordStatus("Old password is invalid.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+
+      if (error) {
+        console.warn("[Supabase] password update failed:", error.message || error);
+        setPasswordStatus(error.message || "Unable to update password right now.");
+        return;
+      }
+
+      setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordStatus("Password updated.");
+    } catch (error) {
+      console.warn("[Supabase] password update error:", error?.message || error);
+      setPasswordStatus("Unable to update password right now.");
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -383,6 +476,78 @@ export default function ProfilePage() {
                   {status || "Changes sync to Supabase when saved."}
                 </p>
               </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="space-y-5">
+            <header className="space-y-1">
+              <h2 className="text-xl font-semibold text-slate-900">Update password</h2>
+              <p className="text-sm text-slate-500">Use a strong password to secure your account.</p>
+            </header>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-1">
+                <label htmlFor="oldPassword" className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                  Old password
+                </label>
+                <input
+                  id="oldPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  value={passwordForm.oldPassword}
+                  onChange={(event) => handlePasswordChange("oldPassword", event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300 focus:bg-white"
+                  disabled={passwordLoading}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="newPassword" className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                  New password
+                </label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.newPassword}
+                  onChange={(event) => handlePasswordChange("newPassword", event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300 focus:bg-white"
+                  disabled={passwordLoading}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="confirmPassword" className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                  Confirm password
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => handlePasswordChange("confirmPassword", event.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-sky-300 focus:bg-white"
+                  disabled={passwordLoading}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500">Password must be at least 8 characters and include uppercase, lowercase, and a number.</p>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleUpdatePassword}
+                disabled={passwordLoading}
+                className="rounded-2xl border border-sky-600 bg-sky-600 px-5 py-2.5 text-sm font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {passwordLoading ? "Updating..." : "Update password"}
+              </button>
+              <p className={`text-sm ${passwordStatus ? statusToneClassName(passwordStatus) : "text-slate-500"}`}>
+                {passwordStatus || "Password changes apply immediately after successful update."}
+              </p>
             </div>
           </div>
         </article>
