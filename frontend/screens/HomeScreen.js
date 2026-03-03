@@ -9,6 +9,7 @@ import { chatWithGemini } from '../utils/api';
 import homeWaterAnim from '../assets/public/HomeWater.json';
 import cuteRobotAnim from '../assets/public/CuteRobot.json';
 import { useAppTheme } from '../utils/theme';
+import ThinkingBubble from '../components/ThinkingBubble';
 
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const SUPABASE_SAMPLES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_SAMPLES_TABLE || 'field_samples';
@@ -183,28 +184,7 @@ const containsKeyword = (text = '', keywords = []) => {
 
 const isAllowedDataPrompt = (text = '') => Boolean(text && text.trim().length > 0);
 
-const isAllowedQualityPrompt = (text = '') => {
-	const qualityKeywords = [
-		'water',
-		'quality',
-		'potable',
-		'non-potable',
-		'ph',
-		'turbidity',
-		'conductivity',
-		'hardness',
-		'chlorine',
-		'contamination',
-		'bacteria',
-		'microbial',
-		'safe',
-		'unsafe',
-		'parameter',
-		'pollution',
-		'who',
-	];
-	return containsKeyword(text, qualityKeywords);
-};
+const isAllowedQualityPrompt = (text = '') => Boolean(text && text.trim().length > 0);
 
 const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const { isDark } = useAppTheme();
@@ -212,6 +192,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const tabBarClearance = Math.max(148, insets.bottom + 128);
   const heroAnim = useRef(new Animated.Value(0)).current;
   const cardsAnim = useRef(new Animated.Value(0)).current;
+	const chatScrollRef = useRef(null);
 	const [chatOpen, setChatOpen] = useState(false);
 	const [activeChatTab, setActiveChatTab] = useState('quality');
 	const [chatInput, setChatInput] = useState('');
@@ -219,6 +200,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	const [avatarUrl, setAvatarUrl] = useState('');
 	const [sessionUserId, setSessionUserId] = useState('');
 	const [savedSamples, setSavedSamples] = useState([]);
+	const [lastSample, setLastSample] = useState(null);
 	const [chatLoading, setChatLoading] = useState(false);
 	const [keyMetrics, setKeyMetrics] = useState(FALLBACK_KEY_METRICS);
 	const [chemistryCards, setChemistryCards] = useState(FALLBACK_CHEMISTRY_CARDS);
@@ -366,36 +348,72 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 		setChatLoading(true);
 
 		try {
-			const qualityContext = {
-				tab: 'quality',
-				scope: 'water_quality_only',
-				rule: 'Reject anything unrelated to water quality.',
-				clusterRisk: clusterRiskLabel,
-				clusterIndex: clusterIndexLabel,
-				keyMetrics,
-				chemistryCards,
-			};
+			const lastSampleObj = lastSample
+				? {
+					last_sample: {
+						label: lastSample.source || lastSample.sample_label || 'last sample',
+						ph: lastSample.ph,
+						turbidity: lastSample.turbidity,
+						hardness: lastSample.hardness,
+						conductivity: lastSample.conductivity,
+						chloramines: lastSample.chloramines,
+						risk_level: lastSample.risk_level,
+						is_potable: lastSample.prediction_is_potable,
+						confidence: lastSample.prediction_probability,
+						recorded_at: lastSample.created_at,
+					},
+				  }
+				: {};
 
-			const userDataContext = {
-				tab: 'users_data',
-				scope: 'user_saved_samples_only',
-				rule: 'Reject requests outside saved user water-sample context.',
-				sampleCount: savedSamples.length,
-				samples: savedSamples.slice(0, 20).map((row) => ({
-					id: row?.id,
-					created_at: row?.created_at,
-					source: row?.source,
-					prediction_is_potable: row?.prediction_is_potable,
-					prediction_probability: row?.prediction_probability,
-					risk_level: row?.risk_level,
-					ph: row?.ph,
-					turbidity: row?.turbidity,
-					conductivity: row?.conductivity,
-					hardness: row?.hardness,
-				})),
-			};
+			let analysisPayload;
 
-			const analysisPayload = threadKey === 'quality' ? qualityContext : userDataContext;
+			if (threadKey === 'quality') {
+				// Match web-dashboard format so backend routes to _build_dashboard_water_context
+				analysisPayload = {
+					source: 'mobile-app',
+					context: {
+						focus: 'water_quality',
+						guidance: 'Focus on water quality interpretation, filtration suggestions, risk-level explanation, and safe follow-up actions. The user\'s most recent sample data is provided — reference it directly when relevant.',
+						clusterRisk: clusterRiskLabel,
+						clusterIndex: clusterIndexLabel,
+						keyMetrics,
+						chemistryCards,
+						...lastSampleObj,
+					},
+				};
+			} else {
+				// Match web-dashboard format so backend routes to _build_dashboard_context
+				analysisPayload = {
+					source: 'mobile-app',
+					user_stats: {
+						scans: savedSamples.length,
+						predictions: savedSamples.filter((r) => r?.prediction_is_potable != null).length,
+					},
+					context: {
+						focus: 'my_data',
+						guidance: 'Focus on the user\'s activity and trends, summarize what their data implies, and suggest next steps based on personal data.',
+						user_name: profileName || 'User',
+						dashboard_metrics: {
+							scans: savedSamples.length,
+							predictions: savedSamples.filter((r) => r?.prediction_is_potable != null).length,
+						},
+						...lastSampleObj,
+						samples: savedSamples.slice(0, 20).map((row) => ({
+							id: row?.id,
+							created_at: row?.created_at,
+							source: row?.source,
+							prediction_is_potable: row?.prediction_is_potable,
+							prediction_probability: row?.prediction_probability,
+							risk_level: row?.risk_level,
+							ph: row?.ph,
+							turbidity: row?.turbidity,
+							conductivity: row?.conductivity,
+							hardness: row?.hardness,
+						})),
+					},
+				};
+			}
+
 			const response = await chatWithGemini(analysisPayload, threadSnapshot, scopedPrompt);
 			appendAssistantMessage(
 				threadKey,
@@ -488,6 +506,10 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 
 				const samples = samplesResult.data || [];
 				setSavedSamples(samples);
+				// Store the most recent sample for richer chatbot context (mirrors web dashboard)
+				if (samples.length > 0) {
+					setLastSample(samples[0]);
+				}
 				const totalSamples = samples.length;
 				const now = Date.now();
 				const dayAgo = now - 24 * 60 * 60 * 1000;
@@ -708,6 +730,14 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 	}, [refreshUnreadNotifications, sessionUserId]);
 
 	const currentThread = chatThreads[activeChatTab === 'quality' ? 'quality' : 'data'] || [];
+
+	// Auto-scroll chat to bottom when messages change or loading state toggles
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			chatScrollRef.current?.scrollToEnd?.({ animated: true });
+		}, 120);
+		return () => clearTimeout(timer);
+	}, [currentThread.length, chatLoading]);
 
 	useEffect(() => {
 		if (openChatSignal) {
@@ -1005,10 +1035,12 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 							</View>
 
 							<ScrollView
+								ref={chatScrollRef}
 								className="mt-5"
 								contentContainerClassName="gap-3 pb-4"
 								showsVerticalScrollIndicator={false}
 								style={{ maxHeight: 320 }}
+								onContentSizeChange={() => chatScrollRef.current?.scrollToEnd?.({ animated: true })}
 							>
 								{currentThread.map((message) => {
 									const isUser = message.role === 'user';
@@ -1027,11 +1059,7 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 										</View>
 									);
 								})}
-								{chatLoading && (
-									<View className={`max-w-[85%] self-start rounded-2xl border px-4 py-3 ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-300 bg-slate-100'}`}>
-										<Text className={`text-[13px] ${isDark ? 'text-slate-300' : 'text-slate-500'}`}>Thinking...</Text>
-									</View>
-								)}
+								{chatLoading && <ThinkingBubble isDark={isDark} />}
 							</ScrollView>
 
 							<View className="mt-4 flex-row items-center gap-3">

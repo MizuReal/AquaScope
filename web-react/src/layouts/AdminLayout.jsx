@@ -10,8 +10,7 @@ const navItems = [
   { label: "User control", href: "/admin/users", icon: "users" },
   { label: "System Analytics", href: "/admin/analytics", icon: "analytics" },
   { label: "Forum Control", href: "/admin/forum", icon: "forum" },
-  { label: "System Settings", href: "/admin/system-settings", icon: "system" },
-  { label: "Settings", href: "/admin/settings", icon: "settings" },
+  { label: "Profile", href: "/admin/profile", icon: "profile" },
   { label: "Logout", href: "/logout", icon: "logout" },
 ];
 
@@ -61,21 +60,11 @@ function NavIcon({ icon }) {
     );
   }
 
-  if (icon === "system") {
+  if (icon === "profile") {
     return (
       <svg {...commonProps}>
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-      </svg>
-    );
-  }
-
-  if (icon === "settings") {
-    return (
-      <svg {...commonProps}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z" />
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
       </svg>
     );
   }

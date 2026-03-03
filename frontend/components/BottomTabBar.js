@@ -274,15 +274,12 @@ const BottomTabBar = ({ state, navigation }) => {
                 }}
                 {...panResponder.panHandlers}
               >
-                {/* Drag-handle bar (visual hint) */}
-                <View
-                  style={{
-                    width: 28,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: isDark ? 'rgba(103,232,249,0.45)' : 'rgba(8,145,178,0.35)',
-                    marginBottom: 4,
-                  }}
+                {/* Drag-handle arrow (visual hint) */}
+                <Feather
+                  name="chevron-up"
+                  size={14}
+                  color={isDark ? 'rgba(103,232,249,0.7)' : 'rgba(8,145,178,0.6)'}
+                  style={{ marginBottom: 2 }}
                 />
 
                 <TouchableOpacity

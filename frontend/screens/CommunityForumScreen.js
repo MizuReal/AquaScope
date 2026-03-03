@@ -35,49 +35,6 @@ import { useForumNotifications } from '../hooks/useForumNotifications';
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 
-// ── Category icon map (Ionicons names) ─────────────────────────────────────
-const CATEGORY_ICONS = {
-  all: 'globe-outline',
-  mine: 'person-outline',
-  general: 'chatbubble-outline',
-  'water-quality': 'water-outline',
-  water_quality: 'water-outline',
-  waterquality: 'water-outline',
-  water: 'water-outline',
-  analysis: 'bar-chart-outline',
-  bacteria: 'bug-outline',
-  microbial: 'bug-outline',
-  chemical: 'flask-outline',
-  chemicals: 'flask-outline',
-  treatment: 'construct-outline',
-  field: 'leaf-outline',
-  alert: 'warning-outline',
-  alerts: 'warning-outline',
-  safety: 'shield-outline',
-  ph: 'flask-outline',
-  contamination: 'nuclear-outline',
-  regulations: 'clipboard-outline',
-  tech: 'settings-outline',
-  technology: 'settings-outline',
-  news: 'newspaper-outline',
-  research: 'search-outline',
-  help: 'help-circle-outline',
-  discussion: 'chatbubbles-outline',
-  announcement: 'megaphone-outline',
-  announcements: 'megaphone-outline',
-  report: 'document-text-outline',
-  reports: 'document-text-outline',
-  tips: 'bulb-outline',
-  community: 'people-outline',
-};
-
-const getCategoryIcon = (slug, label) => {
-  const raw = (slug || label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (CATEGORY_ICONS[slug?.toLowerCase()]) return CATEGORY_ICONS[slug.toLowerCase()];
-  if (CATEGORY_ICONS[raw]) return CATEGORY_ICONS[raw];
-  const key = Object.keys(CATEGORY_ICONS).find((k) => raw.includes(k.replace(/[^a-z0-9]/g, '')) || k.replace(/[^a-z0-9]/g, '').includes(raw));
-  return key ? CATEGORY_ICONS[key] : 'pricetag-outline';
-};
 const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const MAX_CATEGORIES = 5;
@@ -1620,7 +1577,6 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                 .filter((t) => t.id !== 'all' && t.id !== 'mine')
                 .map((tag) => {
                   const isActive = selectedTopics.includes(tag.id);
-                  const iconName = getCategoryIcon(tag.slug, tag.label);
                   const iconColor = isActive ? '#22d3ee' : (isDark ? '#94a3b8' : '#64748b');
                   return (
                     <TouchableOpacity
@@ -1634,7 +1590,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                           : { borderColor: colors.chipBorder, backgroundColor: isDark ? 'rgba(2,6,23,0.45)' : '#f8fafc' },
                       ]}
                     >
-                      <Ionicons name={iconName} size={13} color={iconColor} />
+                      <Ionicons name="pricetag-outline" size={13} color={iconColor} />
                       <Text style={[styles.topicChipLabel, { color: isActive ? '#22d3ee' : colors.text }]} numberOfLines={1}>
                         {tag.label}
                       </Text>
@@ -1952,7 +1908,6 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                 <View style={styles.categoriesWrap}>
                   {categories.map((category) => {
                     const active = composeCategories.includes(category.id);
-                    const iconName = getCategoryIcon(category.slug, category.label);
                     const iconColor = active ? '#22d3ee' : (isDark ? '#94a3b8' : '#64748b');
                     return (
                       <TouchableOpacity
@@ -1965,7 +1920,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                             : { borderColor: colors.chipBorder, backgroundColor: isDark ? 'rgba(2,6,23,0.45)' : '#f8fafc' },
                         ]}
                       >
-                        <Ionicons name={iconName} size={12} color={iconColor} />
+                        <Ionicons name="pricetag-outline" size={12} color={iconColor} />
                         <Text style={[styles.categoryChipText, { color: active ? '#22d3ee' : colors.text }]}>{category.label}</Text>
                         {active && <Ionicons name="checkmark" size={10} color="#22d3ee" />}
                       </TouchableOpacity>

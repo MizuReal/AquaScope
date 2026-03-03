@@ -354,28 +354,76 @@ class MicrobialRiskPredictor:
 
     def __init__(self, dataset_path: Optional[Path] = None) -> None:
         self.dataset_path = Path(dataset_path or DATASET_PATH)
-        if not self.dataset_path.exists():
-            raise FileNotFoundError(self.dataset_path)
         self.label_encoder = LabelEncoder()
         self.label_encoder.classes_ = LABEL_ENCODER_CLASSES
-        self.pipeline = self._train_pipeline()
-        self.model_version = "microbial_rf_v1"
         self.settings = get_settings()
         self.samples_table = (self.settings.supabase_samples_table or "").strip()
+        self.pipeline = self._train_pipeline()
+        self.model_version = "microbial_rf_v1"
 
-    # ---- training --------------------------------------------------------
+    # ---- training-data loading: Supabase first, CSV fallback -------------
 
     def _load_training_frame(self) -> pd.DataFrame:
-        df = pd.read_csv(self.dataset_path)
-        # Normalise column names
-        rename = {k: v for k, v in COLUMN_MAP.items() if k in df.columns}
-        df = df.rename(columns=rename)
+        """Load training data from Supabase `water_potability`, CSV fallback."""
+        client = get_supabase_client()
+        if client:
+            try:
+                df = self._fetch_training_from_supabase(client)
+                if not df.empty:
+                    logger.info(
+                        "Microbial-risk: loaded %d training rows from Supabase water_potability",
+                        len(df),
+                    )
+                    df = label_dataframe(df)
+                    return df
+            except Exception:
+                logger.exception("Microbial-risk: Supabase training-data fetch failed")
+
+        # Fallback: local CSV
+        if self.dataset_path.exists():
+            logger.info("Microbial-risk: falling back to local CSV: %s", self.dataset_path)
+            df = pd.read_csv(self.dataset_path)
+            rename = {k: v for k, v in COLUMN_MAP.items() if k in df.columns}
+            df = df.rename(columns=rename)
+            for col in FEATURE_COLUMNS:
+                if col not in df.columns:
+                    df[col] = np.nan
+            df = label_dataframe(df)
+            return df
+
+        raise RuntimeError(
+            "No training data available: Supabase fetch failed and local CSV not found at "
+            f"{self.dataset_path}"
+        )
+
+    def _fetch_training_from_supabase(self, client) -> pd.DataFrame:
+        """Paginate over the water_potability table and return a DataFrame."""
+        select_cols = ",".join(list(FEATURE_COLUMNS) + ["is_potable"])
+        all_rows: list = []
+        page_size = 1000
+        offset = 0
+        while True:
+            resp = (
+                client.table("water_potability")
+                .select(select_cols)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            data = getattr(resp, "data", None) or []
+            if not data:
+                break
+            all_rows.extend(data)
+            if len(data) < page_size:
+                break
+            offset += page_size
+
+        if not all_rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(all_rows)
         for col in FEATURE_COLUMNS:
-            if col not in df.columns:
-                df[col] = np.nan
-        # Generate microbial_risk labels using rule-based scoring
-        df = label_dataframe(df)
-        return df
+            df[col] = pd.to_numeric(df.get(col), errors="coerce") if col in df.columns else np.nan
+        return df[list(FEATURE_COLUMNS)]
 
     def _train_pipeline(self) -> Pipeline:
         df = self._load_training_frame()

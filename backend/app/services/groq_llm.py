@@ -297,7 +297,7 @@ def chat_message(
         system_prompt = DASHBOARD_SYSTEM_PROMPT
         context = _build_dashboard_context(analysis)
         handshake = "Got it! I can see your dashboard activity. How can I help you today?"
-    elif focus == "water_quality" and analysis.get("source") == "web-dashboard":
+    elif focus == "water_quality" and analysis.get("source") in ("web-dashboard", "mobile-app"):
         system_prompt = FILTRATION_SYSTEM_PROMPT
         context = _build_dashboard_water_context(analysis)
         handshake = "Got it! I have your latest water sample data. How can I help?"

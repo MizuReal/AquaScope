@@ -21,6 +21,7 @@ import { useAppTheme } from '../utils/theme';
 
 const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE || 'profiles';
 const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 const getExtensionFromMimeType = (mimeType) => {
   if (!mimeType || typeof mimeType !== 'string') return 'jpg';
@@ -50,6 +51,13 @@ const ProfileScreen = ({ onNavigate }) => {
   });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordStatus, setPasswordStatus] = useState('');
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const screenAnim = useRef(new Animated.Value(0)).current;
 
   const handleChange = (key, value) => {
@@ -91,6 +99,83 @@ const ProfileScreen = ({ onNavigate }) => {
       setStatus('Unable to save profile right now.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordChange = (key, value) => {
+    setPasswordForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleUpdatePassword = async () => {
+    setPasswordStatus('');
+
+    const sessionResult = await supabase.auth.getSession();
+    const user = sessionResult?.data?.session?.user || null;
+
+    if (!user) {
+      setPasswordStatus('Please sign in to update your password.');
+      return;
+    }
+
+    if (!passwordForm.oldPassword) {
+      setPasswordStatus('Old password is required.');
+      return;
+    }
+    if (!passwordForm.newPassword) {
+      setPasswordStatus('New password is required.');
+      return;
+    }
+    if (!passwordForm.confirmPassword) {
+      setPasswordStatus('Confirm password is required.');
+      return;
+    }
+    if (!PASSWORD_REGEX.test(passwordForm.newPassword)) {
+      setPasswordStatus('Password must be at least 8 characters and include uppercase, lowercase, and a number.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordStatus('Passwords do not match.');
+      return;
+    }
+    if (passwordForm.oldPassword === passwordForm.newPassword) {
+      setPasswordStatus('New password must be different from old password.');
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      const email = user.email || profile.email;
+
+      if (!email) {
+        setPasswordStatus('Unable to verify your account. Please sign in again.');
+        return;
+      }
+
+      const { data: verifyData, error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: passwordForm.oldPassword,
+      });
+
+      if (verifyError || !verifyData?.user || verifyData.user.id !== user.id) {
+        setPasswordStatus('Old password is invalid.');
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+
+      if (error) {
+        console.warn('[Supabase] password update failed:', error.message || error);
+        setPasswordStatus(error.message || 'Unable to update password right now.');
+        return;
+      }
+
+      setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordStatus('Password updated.');
+    } catch (error) {
+      console.warn('[Supabase] password update error:', error?.message || error);
+      setPasswordStatus('Unable to update password right now.');
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -543,6 +628,145 @@ const ProfileScreen = ({ onNavigate }) => {
                 <Feather name="cloud" size={11} color={isDark ? '#334155' : '#94a3b8'} />
                 <Text style={{ fontSize: 11, color: isDark ? '#334155' : '#94a3b8' }}>
                   Changes sync to Supabase when saved.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── Update password card ── */}
+          <View style={{
+            borderRadius: 20,
+            borderWidth: 1,
+            padding: 16,
+            borderColor: isDark ? 'rgba(14,165,233,0.2)' : '#e2e8f0',
+            backgroundColor: isDark ? 'rgba(2,15,40,0.6)' : '#ffffff',
+          }}>
+            {/* Card header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <View style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: isDark ? 'rgba(14,165,233,0.15)' : '#e0f2fe',
+              }}>
+                <Feather name="lock" size={13} color={isDark ? '#38bdf8' : '#0284c7'} />
+              </View>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? '#7dd3fc' : '#0284c7' }}>
+                Update password
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: isDark ? '#475569' : '#94a3b8', marginBottom: 14 }}>
+              Use a strong password to secure your account.
+            </Text>
+
+            {/* Old password */}
+            <View style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <Feather name="key" size={12} color={isDark ? '#475569' : '#94a3b8'} />
+                <Text style={{ fontSize: 11, fontWeight: '500', color: isDark ? '#94a3b8' : '#64748b' }}>
+                  Old password
+                </Text>
+              </View>
+              <InputField
+                value={passwordForm.oldPassword}
+                onChangeText={(v) => handlePasswordChange('oldPassword', v)}
+                placeholder="Enter current password"
+                secureTextEntry
+                autoComplete="current-password"
+                editable={!passwordLoading}
+              />
+            </View>
+
+            {/* New password */}
+            <View style={{ marginBottom: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <Feather name="lock" size={12} color={isDark ? '#475569' : '#94a3b8'} />
+                <Text style={{ fontSize: 11, fontWeight: '500', color: isDark ? '#94a3b8' : '#64748b' }}>
+                  New password
+                </Text>
+              </View>
+              <InputField
+                value={passwordForm.newPassword}
+                onChangeText={(v) => handlePasswordChange('newPassword', v)}
+                placeholder="Min 8 chars, upper, lower, number"
+                secureTextEntry
+                autoComplete="new-password"
+                editable={!passwordLoading}
+              />
+            </View>
+
+            {/* Confirm password */}
+            <View style={{ marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <Feather name="check-circle" size={12} color={isDark ? '#475569' : '#94a3b8'} />
+                <Text style={{ fontSize: 11, fontWeight: '500', color: isDark ? '#94a3b8' : '#64748b' }}>
+                  Confirm password
+                </Text>
+              </View>
+              <InputField
+                value={passwordForm.confirmPassword}
+                onChangeText={(v) => handlePasswordChange('confirmPassword', v)}
+                placeholder="Re-enter new password"
+                secureTextEntry
+                autoComplete="new-password"
+                editable={!passwordLoading}
+              />
+            </View>
+
+            <Text style={{ fontSize: 10, color: isDark ? '#475569' : '#94a3b8', marginBottom: 12 }}>
+              Must be at least 8 characters with uppercase, lowercase, and a number.
+            </Text>
+
+            {/* Update password button + status */}
+            <PredictButton
+              title={passwordLoading ? 'Updating…' : 'Update password'}
+              onPress={handleUpdatePassword}
+              disabled={passwordLoading}
+            />
+            {passwordStatus ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 }}>
+                <Feather
+                  name={
+                    passwordStatus.toLowerCase().includes('unable') ||
+                    passwordStatus.toLowerCase().includes('required') ||
+                    passwordStatus.toLowerCase().includes('invalid') ||
+                    passwordStatus.toLowerCase().includes('match') ||
+                    passwordStatus.toLowerCase().includes('different')
+                      ? 'alert-circle'
+                      : 'check-circle'
+                  }
+                  size={11}
+                  color={
+                    passwordStatus.toLowerCase().includes('unable') ||
+                    passwordStatus.toLowerCase().includes('required') ||
+                    passwordStatus.toLowerCase().includes('invalid') ||
+                    passwordStatus.toLowerCase().includes('match') ||
+                    passwordStatus.toLowerCase().includes('different')
+                      ? (isDark ? '#fca5a5' : '#dc2626')
+                      : (isDark ? '#4ade80' : '#16a34a')
+                  }
+                />
+                <Text style={{
+                  fontSize: 11,
+                  color:
+                    passwordStatus.toLowerCase().includes('unable') ||
+                    passwordStatus.toLowerCase().includes('required') ||
+                    passwordStatus.toLowerCase().includes('invalid') ||
+                    passwordStatus.toLowerCase().includes('match') ||
+                    passwordStatus.toLowerCase().includes('different')
+                      ? (isDark ? '#fca5a5' : '#dc2626')
+                      : (isDark ? '#4ade80' : '#16a34a'),
+                }}>
+                  {passwordStatus}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8 }}>
+                <Feather name="shield" size={11} color={isDark ? '#334155' : '#94a3b8'} />
+                <Text style={{ fontSize: 11, color: isDark ? '#334155' : '#94a3b8' }}>
+                  Password changes apply immediately after update.
                 </Text>
               </View>
             )}

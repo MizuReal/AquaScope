@@ -1485,7 +1485,7 @@ const DataInputScreen = ({ onNavigate }) => {
                   Image-assisted capture
                 </Text>
                 <Text className={`mt-2 text-[13px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  Snap the standardized sheet; EasyOCR fills all 10 water-quality fields instantly when legible.
+                  Snap the standardized sheet; EasyOCR fills all 9 water-quality fields instantly when legible.
                 </Text>
               </View>
               <View className={`rounded-2xl border px-3 py-2 ${isDark ? 'border-sky-900/60 bg-slate-900/60' : 'border-slate-300 bg-slate-100'}`}>
@@ -1697,11 +1697,11 @@ const DataInputScreen = ({ onNavigate }) => {
                   <View
                     style={{
                       width: 6, height: 6, borderRadius: 3,
-                      backgroundColor: totalFilledCount === 10 ? '#10b981' : '#f59e0b',
+                      backgroundColor: totalFilledCount === 9 ? '#10b981' : '#f59e0b',
                     }}
                   />
                   <Text className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {totalFilledCount}/10
+                    {totalFilledCount}/9
                   </Text>
                 </View>
               )}

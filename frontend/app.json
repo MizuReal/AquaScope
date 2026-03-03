@@ -32,8 +32,6 @@
       "@react-native-community/datetimepicker"
     ],
     "extra": {
-      "googleAndroidClientId": "595591413760-nurkaqnv63bb23t3f29sqth0b9ipg93d.apps.googleusercontent.com",
-      "googleWebClientId": "595591413760-86kvgae5jlrs2hobj3s553ageqo5261e.apps.googleusercontent.com",
       "eas": {
         "projectId": "8da85cb7-c439-493b-83d8-21d3b1963a76"
       }
