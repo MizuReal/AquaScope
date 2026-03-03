@@ -222,7 +222,15 @@ const PostCard = memo(function PostCard({
         <Text style={[styles.mutedText, { color: colors.subtle }]}>{formatRelativeTime(post.created_at)}</Text>
       </View>
 
-      <Text style={[styles.threadTitle, { color: colors.title }]}>{post.title}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <Text style={[styles.threadTitle, { color: colors.title, marginTop: 0, flex: 1 }]}>{post.title}</Text>
+        {post.is_locked && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: isDark ? 'rgba(251,191,36,0.5)' : '#fcd34d', backgroundColor: isDark ? 'rgba(120,53,15,0.3)' : '#fffbeb', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 10, color: isDark ? '#fcd34d' : '#92400e' }}>🔒</Text>
+            <Text style={{ fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color: isDark ? '#fcd34d' : '#92400e' }}>Locked</Text>
+          </View>
+        )}
+      </View>
       <Text style={[styles.threadBody, { color: colors.text }]}>
         {post.body?.length > 180 ? `${post.body.slice(0, 180)}...` : post.body}
       </Text>
@@ -332,6 +340,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
   const [replyError, setReplyError] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
   const [replyTarget, setReplyTarget] = useState(null);
+  const replyInputRef = useRef(null);
 
   const [composeVisible, setComposeVisible] = useState(false);
   const [composeTitle, setComposeTitle] = useState('');
@@ -582,7 +591,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     const toIndex = offset + limit - 1;
     const threadResult = await supabase
       .from('forum_threads')
-      .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
       .order('created_at', { ascending: false })
       .range(offset, toIndex);
 
@@ -732,7 +741,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     try {
       const threadResult = await supabase
         .from('forum_threads')
-        .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+.select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
         .eq('user_id', sessionUser.id)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -894,7 +903,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
 
     const threadResult = await supabase
       .from('forum_threads')
-      .select('id, user_id, title, body, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
       .eq('id', threadId)
       .maybeSingle();
 
@@ -2058,8 +2067,24 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                       <Text style={[styles.mutedText, { color: colors.subtle }]}>{formatRelativeTime(activeThread.created_at)}</Text>
                     </View>
 
-                    <Text style={[styles.threadTitle, { color: colors.title }]}>{activeThread.title}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[styles.threadTitle, { color: colors.title, flex: 1 }]}>{activeThread.title}</Text>
+                      {activeThread.is_locked && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: isDark ? 'rgba(251,191,36,0.5)' : '#fcd34d', backgroundColor: isDark ? 'rgba(120,53,15,0.3)' : '#fffbeb', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+                          <Text style={{ fontSize: 10, color: isDark ? '#fcd34d' : '#92400e' }}>🔒</Text>
+                          <Text style={{ fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color: isDark ? '#fcd34d' : '#92400e' }}>Locked</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[styles.threadBody, { color: colors.text }]}>{activeThread.body}</Text>
+
+                    {activeThread.is_locked && (
+                      <View style={{ marginTop: 12, borderWidth: 1, borderColor: isDark ? 'rgba(251,191,36,0.4)' : '#fde68a', backgroundColor: isDark ? 'rgba(120,53,15,0.25)' : '#fffbeb', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#fcd34d' : '#92400e' }}>
+                          {activeThread.lock_reason || 'This thread has been locked by an administrator.'}
+                        </Text>
+                      </View>
+                    )}
 
                     <View style={styles.tagWrap}>
                       {(activeThread.categories || []).map((tag) => (
@@ -2131,9 +2156,16 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                           <Text style={[styles.replyCount, { color: colors.text }]}>{item.likeCount}</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity activeOpacity={0.8} onPress={() => setReplyTarget(item)} style={styles.rowStartGapSmall}>
-                          <Text style={[styles.replyAction, { color: '#38bdf8' }]}>↩</Text>
-                        </TouchableOpacity>
+                        {!activeThread?.is_locked && (
+                          <TouchableOpacity activeOpacity={0.8} onPress={() => {
+                            setReplyTarget(item);
+                            const mention = `@${item.authorName} `;
+                            setReplyText((prev) => prev.startsWith(mention) ? prev : mention);
+                            setTimeout(() => replyInputRef.current?.focus(), 0);
+                          }} style={styles.rowStartGapSmall}>
+                            <Text style={[styles.replyAction, { color: '#38bdf8' }]}>↩</Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
 
                       {!!item.parent_post_id && <Text style={[styles.mutedText, { color: colors.subtle }]}>↩</Text>}
@@ -2152,10 +2184,15 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                   )
                 }
                 ListFooterComponent={
+                  activeThread?.is_locked ? (
+                    <View style={[styles.replyComposer, { borderColor: isDark ? 'rgba(251,191,36,0.4)' : '#fde68a', backgroundColor: isDark ? 'rgba(120,53,15,0.2)' : '#fffbeb', alignItems: 'center', paddingVertical: 16 }]}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? '#fcd34d' : '#92400e' }}>🔒 This thread is locked. Replies are disabled.</Text>
+                    </View>
+                  ) : (
                   <View style={[styles.replyComposer, { borderColor: colors.inputBorder, backgroundColor: colors.inputBg }]}>
                     {!!replyTarget && (
                       <View style={styles.replyTargetRow}>
-                        <Text style={styles.replyingToText}>Replying to {replyTarget.authorName}</Text>
+                        <Text style={styles.replyingToText}>Replying to <Text style={{ fontWeight: '700', color: '#0284c7', backgroundColor: 'rgba(14,165,233,0.12)', borderRadius: 4, overflow: 'hidden', paddingHorizontal: 4 }}>@{replyTarget.authorName}</Text></Text>
                         <TouchableOpacity onPress={() => setReplyTarget(null)}>
                           <Text style={[styles.mutedText, { color: colors.muted }]}>Cancel</Text>
                         </TouchableOpacity>
@@ -2163,6 +2200,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                     )}
 
                     <TextInput
+                      ref={replyInputRef}
                       value={replyText}
                       onChangeText={setReplyText}
                       placeholder="Write a reply"
@@ -2187,6 +2225,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                       )}
                     </TouchableOpacity>
                   </View>
+                  )
                 }
               />
             )}

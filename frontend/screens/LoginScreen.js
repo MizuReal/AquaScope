@@ -14,6 +14,7 @@ import LottieView from 'lottie-react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import PredictButton from '../components/PredictButton';
 import { supabase } from '../utils/supabaseClient';
+import { checkProfileActive, useAuth } from '../utils/AuthContext';
 import { useAppTheme } from '../utils/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -132,15 +133,25 @@ const TrustBadge = ({ icon, label, isDark }) => (
 );
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
-const LoginScreen = ({ onLoginSuccess }) => {
+const LoginScreen = () => {
   const { isDark } = useAppTheme();
+  const { deactivationNotice, clearDeactivationNotice, reportDeactivation } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Surface deactivation notice from AuthContext into the local error banner
+  useEffect(() => {
+    if (deactivationNotice) {
+      setError(deactivationNotice);
+      clearDeactivationNotice();
+    }
+  }, [deactivationNotice, clearDeactivationNotice]);
   const [canResend, setCanResend] = useState(false);
   const [resending, setResending] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('login'); // 'login' | 'register'
 
@@ -195,7 +206,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
 
     setLoading(true);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password: trimmedPassword,
       });
@@ -213,9 +224,18 @@ const LoginScreen = ({ onLoginSuccess }) => {
         return;
       }
 
+      // Check account deactivation status
+      const isActive = await checkProfileActive(signInData.user.id);
+      if (!isActive) {
+        // Persist notice in AuthContext (survives LoginScreen remount from navigator swap)
+        reportDeactivation();
+        await supabase.auth.signOut();
+        return;
+      }
+
       setError('');
       setCanResend(false);
-      if (onLoginSuccess) onLoginSuccess();
+      // Session is now live — AuthProvider will pick it up automatically
     } catch (e) {
       setError('Unexpected error occurred. Please try again.');
     } finally {
@@ -276,7 +296,7 @@ const LoginScreen = ({ onLoginSuccess }) => {
       }
 
       setError('');
-      if (onLoginSuccess) onLoginSuccess();
+      // Session is now live — AuthProvider will pick it up automatically
     } catch (e) {
       setError('Unexpected error occurred. Please try again.');
     } finally {
@@ -320,6 +340,36 @@ const LoginScreen = ({ onLoginSuccess }) => {
       setError('Unexpected error occurred. Please try again.');
     } finally {
       setResending(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setNotice('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError('Enter your email first, then tap Forgot password.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setSendingReset(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: 'https://aquascope.vercel.app/reset-password',
+      });
+      if (resetError) throw resetError;
+      setNotice('If this email is registered, a password reset link has been sent.');
+    } catch (e) {
+      setError(e?.message || 'Unable to send password reset email.');
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -520,6 +570,20 @@ const LoginScreen = ({ onLoginSuccess }) => {
               onChangeText={setPassword}
               isDark={isDark}
             />
+
+            {/* Forgot password – login only */}
+            {isLogin && (
+              <TouchableOpacity
+                className="mt-2 self-end"
+                activeOpacity={0.75}
+                onPress={handleForgotPassword}
+                disabled={sendingReset || loading}
+              >
+                <Text className={`text-[12px] font-semibold ${sendingReset ? (isDark ? 'text-slate-600' : 'text-slate-400') : 'text-sky-400'}`}>
+                  {sendingReset ? 'Sending…' : 'Forgot password?'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {mode === 'register' && (
               <>

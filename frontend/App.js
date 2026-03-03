@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { enableScreens } from 'react-native-screens';
@@ -17,8 +17,8 @@ import PredictionHistoryScreen from './screens/PredictionHistoryScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import CommunityForumScreen from './screens/CommunityForumScreen';
-import { supabase } from './utils/supabaseClient';
 import { ThemeProvider, useAppTheme } from './utils/theme';
+import { AuthProvider, useAuth } from './utils/AuthContext';
 import BottomTabBar from './components/BottomTabBar';
 
 const Tab = createBottomTabNavigator();
@@ -90,9 +90,9 @@ function ProfileTab({ navigation }) {
 
 /* ── Small themed helpers (subscribe to theme individually) ── */
 
-function LoginWithTheme({ onLoginSuccess }) {
+function LoginWithTheme() {
   const { isDark } = useAppTheme();
-  return <View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}><LoginScreen onLoginSuccess={onLoginSuccess} /></View>;
+  return <View className={`flex-1 ${isDark ? 'bg-aquadark' : 'bg-slate-100'}`}><LoginScreen /></View>;
 }
 
 function ThemedStatusBar() {
@@ -129,7 +129,7 @@ const LOGIN_SCREEN_OPTIONS = {
 
 const AppContent = React.memo(function AppContent() {
   const { isDark } = useAppTheme();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, loading } = useAuth();
 
   const navigationTheme = useMemo(() => {
     if (isDark) {
@@ -153,38 +153,8 @@ const AppContent = React.memo(function AppContent() {
     };
   }, [isDark]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const initAuth = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn('[Supabase] getSession error:', error.message);
-        }
-        if (isMounted) {
-          setIsAuthenticated(!!data?.session);
-        }
-      } catch (e) {
-        console.warn('[Supabase] Unexpected getSession error:', e);
-      }
-    };
-
-    initAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        setIsAuthenticated(!!session);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  // Wait for auth context to resolve before rendering navigator
+  if (loading) return null;
 
   return (
     <SafeAreaProvider>
@@ -211,7 +181,7 @@ const AppContent = React.memo(function AppContent() {
             </>
           ) : (
             <Tab.Screen name="Login">
-              {() => <LoginWithTheme onLoginSuccess={() => setIsAuthenticated(true)} />}
+              {() => <LoginWithTheme />}
             </Tab.Screen>
           )}
         </Tab.Navigator>
@@ -224,7 +194,9 @@ const AppContent = React.memo(function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
