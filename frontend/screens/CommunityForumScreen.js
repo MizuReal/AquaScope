@@ -25,6 +25,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 import Filter from 'bad-words';
 import LottieView from 'lottie-react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import * as Crypto from 'expo-crypto';
 import forumAnim from '../assets/public/forumanim.json';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
@@ -38,6 +40,8 @@ const SUPABASE_PROFILES_TABLE = process.env.EXPO_PUBLIC_SUPABASE_PROFILES_TABLE 
 const SUPABASE_AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 const SUPABASE_URL = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
 const MAX_CATEGORIES = 5;
+const MAX_IMAGE_SIZE_MB = 5;
+const SUPABASE_FORUM_PHOTOS_BUCKET = 'forum-photos';
 const THREADS_BATCH_SIZE = 5;
 const BOTTOM_TAB_BAR_HEIGHT = 56;
 const BOTTOM_TAB_BAR_MARGIN = 20;
@@ -192,6 +196,12 @@ const PostCard = memo(function PostCard({
         {post.body?.length > 180 ? `${post.body.slice(0, 180)}...` : post.body}
       </Text>
 
+      {post.image_url ? (
+        <View style={{ marginTop: 10, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(56,189,248,0.25)' : '#e2e8f0' }}>
+          <Image source={{ uri: post.image_url }} style={{ width: '100%', height: 180 }} resizeMode="cover" />
+        </View>
+      ) : null}
+
       <View style={styles.tagWrap}>
         {(post.categories || []).map((tag) => (
           <View
@@ -303,6 +313,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
   const [composeTitle, setComposeTitle] = useState('');
   const [composeBody, setComposeBody] = useState('');
   const [composeCategories, setComposeCategories] = useState([]);
+  const [composeImage, setComposeImage] = useState(null);
   const [composeError, setComposeError] = useState('');
   const [composeLoading, setComposeLoading] = useState(false);
 
@@ -548,7 +559,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     const toIndex = offset + limit - 1;
     const threadResult = await supabase
       .from('forum_threads')
-      .select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .select('id, user_id, title, body, image_url, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
       .order('created_at', { ascending: false })
       .range(offset, toIndex);
 
@@ -698,7 +709,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     try {
       const threadResult = await supabase
         .from('forum_threads')
-.select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+.select('id, user_id, title, body, image_url, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
         .eq('user_id', sessionUser.id)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -860,7 +871,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
 
     const threadResult = await supabase
       .from('forum_threads')
-      .select('id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
+      .select('id, user_id, title, body, image_url, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))')
       .eq('id', threadId)
       .maybeSingle();
 
@@ -1268,14 +1279,34 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     setComposeError('');
 
     try {
+      // Upload image first if selected
+      let imageUrl = '';
+      if (composeImage) {
+        const ext = composeImage.uri.split('.').pop()?.toLowerCase() || 'jpg';
+        const filePath = `${sessionUser.id}/${Crypto.randomUUID()}.${ext}`;
+        const response = await fetch(composeImage.uri);
+        const blob = await response.blob();
+        const { error: uploadError } = await supabase.storage
+          .from(SUPABASE_FORUM_PHOTOS_BUCKET)
+          .upload(filePath, blob, { contentType: composeImage.mimeType || 'image/jpeg', cacheControl: '3600', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage
+          .from(SUPABASE_FORUM_PHOTOS_BUCKET)
+          .getPublicUrl(filePath);
+        imageUrl = urlData?.publicUrl || '';
+      }
+
+      const insertPayload = {
+        user_id: sessionUser.id,
+        title: trimmedTitle,
+        body: trimmedBody,
+      };
+      if (imageUrl) insertPayload.image_url = imageUrl;
+
       const insertResult = await supabase
         .from('forum_threads')
-        .insert({
-          user_id: sessionUser.id,
-          title: trimmedTitle,
-          body: trimmedBody,
-        })
-        .select('id, user_id, title, body, created_at, updated_at')
+        .insert(insertPayload)
+        .select('id, user_id, title, body, image_url, created_at, updated_at')
         .single();
 
       if (insertResult.error) throw insertResult.error;
@@ -1317,6 +1348,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
       setComposeTitle('');
       setComposeBody('');
       setComposeCategories([]);
+      setComposeImage(null);
       setComposeVisible(false);
     } catch (error) {
       console.warn('[Supabase] create thread failed:', error?.message || error);
@@ -1324,7 +1356,7 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
     } finally {
       setComposeLoading(false);
     }
-  }, [categories, composeBody, composeCategories, composeTitle, containsBadWords, sessionUser]);
+  }, [categories, composeBody, composeCategories, composeImage, composeTitle, containsBadWords, sessionUser]);
 
   const toggleComposeCategory = useCallback((categoryId) => {
     setComposeCategories((prev) => {
@@ -1866,6 +1898,62 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                 />
               </View>
 
+              {/* ── Photo (optional) ─────────────────────────────────── */}
+              <View
+                style={[
+                  styles.composeInputBlock,
+                  {
+                    borderColor: colors.inputBorder,
+                    backgroundColor: isDark ? 'rgba(2,6,23,0.55)' : '#ffffff',
+                  },
+                ]}
+              >
+                <View style={styles.composeFieldHeader}>
+                  <View style={styles.composeFieldIcon}>
+                    <Ionicons name="image-outline" size={13} color="#38bdf8" />
+                  </View>
+                  <Text style={[styles.composeFieldLabel, { color: '#38bdf8' }]}>Photo (optional)</Text>
+                </View>
+                {composeImage ? (
+                  <View style={{ alignItems: 'flex-start' }}>
+                    <View style={{ borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(56,189,248,0.25)' : '#e2e8f0' }}>
+                      <Image source={{ uri: composeImage.uri }} style={{ width: '100%', height: 180 }} resizeMode="cover" />
+                    </View>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => setComposeImage(null)}
+                      style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: isDark ? 'rgba(239,68,68,0.4)' : '#fca5a5', backgroundColor: isDark ? 'rgba(127,29,29,0.3)' : '#fef2f2', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 }}
+                    >
+                      <Ionicons name="close-circle-outline" size={16} color={isDark ? '#f87171' : '#ef4444'} />
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: isDark ? '#f87171' : '#ef4444' }}>Remove photo</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={async () => {
+                      const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ['images'],
+                        allowsEditing: true,
+                        quality: 0.8,
+                      });
+                      if (result.canceled || !result.assets?.length) return;
+                      const asset = result.assets[0];
+                      if (asset.fileSize && asset.fileSize > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+                        setComposeError(`Image must be under ${MAX_IMAGE_SIZE_MB}MB.`);
+                        return;
+                      }
+                      setComposeError('');
+                      setComposeImage({ uri: asset.uri, mimeType: asset.mimeType || 'image/jpeg' });
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: isDark ? 'rgba(100,116,139,0.5)' : '#cbd5e1', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 14 }}
+                  >
+                    <Ionicons name="image-outline" size={18} color={isDark ? '#64748b' : '#94a3b8'} />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: isDark ? '#64748b' : '#94a3b8' }}>Add a photo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {/* ── Categories ───────────────────────────────────────── */}
               <View
                 style={[
@@ -2032,6 +2120,12 @@ const CommunityForumScreen = ({ onNavigate, openNotificationsSignal }) => {
                       )}
                     </View>
                     <Text style={[styles.threadBody, { color: colors.text }]}>{activeThread.body}</Text>
+
+                    {activeThread.image_url ? (
+                      <View style={{ marginTop: 10, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(56,189,248,0.25)' : '#e2e8f0' }}>
+                        <Image source={{ uri: activeThread.image_url }} style={{ width: '100%', height: 240 }} resizeMode="contain" />
+                      </View>
+                    ) : null}
 
                     {activeThread.is_locked && (
                       <View style={{ marginTop: 12, borderWidth: 1, borderColor: isDark ? 'rgba(251,191,36,0.4)' : '#fde68a', backgroundColor: isDark ? 'rgba(120,53,15,0.25)' : '#fffbeb', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>

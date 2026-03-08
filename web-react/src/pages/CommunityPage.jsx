@@ -11,7 +11,9 @@ import forumAnim from "@/assets/lottie/forumanim.json";
 
 const SUPABASE_PROFILES_TABLE = import.meta.env.VITE_PUBLIC_SUPABASE_PROFILES_TABLE || "profiles";
 const SUPABASE_AVATAR_BUCKET = import.meta.env.VITE_PUBLIC_SUPABASE_AVATAR_BUCKET || "avatars";
+const SUPABASE_FORUM_PHOTOS_BUCKET = "forum-photos";
 const MAX_CATEGORIES = 5;
+const MAX_IMAGE_SIZE_MB = 5;
 const THREADS_BATCH_SIZE = 10;
 const THREAD_MODAL_ANIMATION_MS = 220;
 
@@ -200,6 +202,14 @@ const IconSearch = ({ className = "h-4 w-4" }) => (
   <svg {...iconProps} className={className}>
     <circle cx="11" cy="11" r="7" />
     <path d="m20 20-3.5-3.5" />
+  </svg>
+);
+
+const IconImage = ({ className = "h-4 w-4" }) => (
+  <svg {...iconProps} className={className}>
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <path d="m21 15-5-5L5 21" />
   </svg>
 );
 
@@ -532,6 +542,17 @@ function ThreadCard({
         {thread.body?.length > 220 ? `${thread.body.slice(0, 220)}...` : thread.body}
       </p>
 
+      {thread.image_url ? (
+        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+          <img
+            src={thread.image_url}
+            alt="Thread attachment"
+            className="h-auto max-h-64 w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {(thread.categories || []).map((tag) => (
           <span
@@ -630,8 +651,11 @@ export default function CommunityPage() {
   const [composeTitle, setComposeTitle] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [composeCategories, setComposeCategories] = useState([]);
+  const [composeImage, setComposeImage] = useState(null);
+  const [composeImagePreview, setComposeImagePreview] = useState("");
   const [composeError, setComposeError] = useState("");
   const [composeLoading, setComposeLoading] = useState(false);
+  const composeImageInputRef = useRef(null);
   const [likeBusyId, setLikeBusyId] = useState("");
   const [threadLikeBusyId, setThreadLikeBusyId] = useState("");
   const [threadDeleteBusyId, setThreadDeleteBusyId] = useState("");
@@ -763,7 +787,7 @@ export default function CommunityPage() {
     const threadResult = await supabase
       .from("forum_threads")
       .select(
-        "id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+        "id, user_id, title, body, image_url, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
       )
       .order("created_at", { ascending: false })
       .range(offset, toIndex);
@@ -970,7 +994,7 @@ export default function CommunityPage() {
     const threadResult = await supabase
       .from("forum_threads")
       .select(
-        "id, user_id, title, body, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
+        "id, user_id, title, body, image_url, is_locked, lock_reason, created_at, updated_at, forum_thread_categories(category_id, forum_categories(id, slug, label))",
       )
       .eq("id", threadId)
       .maybeSingle();
@@ -1445,14 +1469,32 @@ export default function CommunityPage() {
     setComposeLoading(true);
     setComposeError("");
     try {
+      // Upload image first if selected
+      let imageUrl = "";
+      if (composeImage) {
+        const ext = composeImage.name.split(".").pop()?.toLowerCase() || "jpg";
+        const filePath = `${sessionUser.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from(SUPABASE_FORUM_PHOTOS_BUCKET)
+          .upload(filePath, composeImage, { cacheControl: "3600", upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage
+          .from(SUPABASE_FORUM_PHOTOS_BUCKET)
+          .getPublicUrl(filePath);
+        imageUrl = urlData?.publicUrl || "";
+      }
+
+      const insertPayload = {
+        user_id: sessionUser.id,
+        title: trimmedTitle,
+        body: trimmedBody,
+      };
+      if (imageUrl) insertPayload.image_url = imageUrl;
+
       const insertResult = await supabase
         .from("forum_threads")
-        .insert({
-          user_id: sessionUser.id,
-          title: trimmedTitle,
-          body: trimmedBody,
-        })
-        .select("id, user_id, title, body, created_at, updated_at")
+        .insert(insertPayload)
+        .select("id, user_id, title, body, image_url, created_at, updated_at")
         .single();
 
       if (insertResult.error) throw insertResult.error;
@@ -1503,6 +1545,8 @@ export default function CommunityPage() {
       setComposeTitle("");
       setComposeBody("");
       setComposeCategories([]);
+      setComposeImage(null);
+      setComposeImagePreview("");
       closeCompose();
     } catch (error) {
       console.warn("[Supabase] create thread failed:", error?.message || error);
@@ -1784,6 +1828,58 @@ export default function CommunityPage() {
                 />
               </label>
 
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"><IconImage className="h-3.5 w-3.5" />Photo (optional)</span>
+                <input
+                  ref={composeImageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+                      setComposeError(`Image must be under ${MAX_IMAGE_SIZE_MB}MB.`);
+                      e.target.value = "";
+                      return;
+                    }
+                    setComposeError("");
+                    setComposeImage(file);
+                    setComposeImagePreview(URL.createObjectURL(file));
+                  }}
+                />
+                {composeImagePreview ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={composeImagePreview}
+                      alt="Preview"
+                      className="h-40 w-auto rounded-2xl border border-slate-200 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComposeImage(null);
+                        setComposeImagePreview("");
+                        if (composeImageInputRef.current) composeImageInputRef.current.value = "";
+                      }}
+                      className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-white shadow-md transition hover:bg-rose-600"
+                      aria-label="Remove image"
+                    >
+                      <IconClose className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => composeImageInputRef.current?.click()}
+                    className="inline-flex items-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 px-5 py-3 text-xs font-semibold text-slate-500 transition hover:border-sky-300 hover:text-sky-600"
+                  >
+                    <IconImage className="h-4 w-4" />
+                    Add a photo
+                  </button>
+                )}
+              </div>
+
               <div>
                 <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
                   <IconTag className="h-3.5 w-3.5" />
@@ -1862,6 +1958,18 @@ export default function CommunityPage() {
 
               <h3 className="mt-4 text-lg font-semibold text-slate-900">{activeThread.title}</h3>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{activeThread.body}</p>
+
+              {activeThread.image_url ? (
+                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
+                  <img
+                    src={activeThread.image_url}
+                    alt="Thread attachment"
+                    className="h-auto max-h-[480px] w-full object-contain cursor-pointer"
+                    loading="lazy"
+                    onClick={() => window.open(activeThread.image_url, "_blank", "noopener,noreferrer")}
+                  />
+                </div>
+              ) : null}
 
               {activeThread.is_locked && (
                 <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">

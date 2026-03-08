@@ -415,15 +415,15 @@ export default function UserSamples() {
   const endIndex = Math.min(totalCount, page * pageSize);
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+    <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Prediction history</p>
-          <p className="text-sm text-slate-500">Recent water-quality and container scans tied to your account.</p>
+          <p className="text-sm uppercase tracking-[0.35em] text-slate-600 font-medium">Prediction history</p>
+          <p className="text-base text-slate-600">Recent water-quality and container scans tied to your account.</p>
         </div>
-        <div className="flex rounded-full border border-slate-200 bg-slate-50 p-1 text-xs uppercase tracking-[0.3em]">
-          <button type="button" className={`rounded-full px-4 py-2 transition ${activeTab === "water" ? "bg-sky-600 text-white shadow-sm" : "text-slate-500"}`} onClick={() => switchTab("water")}>Water quality</button>
-          <button type="button" className={`rounded-full px-4 py-2 transition ${activeTab === "container" ? "bg-sky-600 text-white shadow-sm" : "text-slate-500"}`} onClick={() => switchTab("container")}>Container history</button>
+        <div className="flex rounded-full border border-slate-200 bg-slate-50 p-1 text-sm uppercase tracking-[0.3em]">
+          <button type="button" className={`rounded-full px-5 py-2.5 font-medium transition ${activeTab === "water" ? "bg-sky-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-800"}`} onClick={() => switchTab("water")}>Water quality</button>
+          <button type="button" className={`rounded-full px-5 py-2.5 font-medium transition ${activeTab === "container" ? "bg-sky-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-800"}`} onClick={() => switchTab("container")}>Container history</button>
         </div>
       </div>
 
@@ -438,7 +438,7 @@ export default function UserSamples() {
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-100">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
             </span>
-            <span className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-700">Filters</span>
+            <span className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-700">Filters</span>
             {hasActiveFilters && (
               <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-600 px-1.5 text-[10px] font-bold text-white">
                 {activeFilterCount}
@@ -515,19 +515,19 @@ export default function UserSamples() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-sm uppercase tracking-[0.3em] text-slate-600">
         <span>Showing {startIndex}-{endIndex} of {totalCount}</span>
-        <div className="flex items-center gap-2">
-          <label htmlFor="pageSize" className="text-[10px] text-slate-400">Rows</label>
-          <select id="pageSize" className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] text-slate-600" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
+        <div className="flex items-center gap-3">
+          <label htmlFor="pageSize" className="text-xs text-slate-500">Rows</label>
+          <select id="pageSize" className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
             <option value={10}>10</option>
             <option value={20}>20</option>
             <option value={30}>30</option>
           </select>
           <div className="flex items-center gap-2">
-            <button type="button" className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] text-slate-600 disabled:opacity-50" onClick={() => setPage((c) => Math.max(1, c - 1))} disabled={page === 1}>Prev</button>
-            <span className="text-[10px] text-slate-400">Page {page} of {totalPages}</span>
-            <button type="button" className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] text-slate-600 disabled:opacity-50" onClick={() => setPage((c) => Math.min(totalPages, c + 1))} disabled={page >= totalPages}>Next</button>
+            <button type="button" className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-700 disabled:opacity-50" onClick={() => setPage((c) => Math.max(1, c - 1))} disabled={page === 1}>Prev</button>
+            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+            <button type="button" className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-700 disabled:opacity-50" onClick={() => setPage((c) => Math.min(totalPages, c + 1))} disabled={page >= totalPages}>Next</button>
           </div>
         </div>
       </div>
@@ -535,20 +535,20 @@ export default function UserSamples() {
       {loading && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 py-12">
           <svg className="h-8 w-8 animate-spin text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-          <p className="mt-3 text-sm text-slate-500">Loading your history…</p>
+          <p className="mt-3 text-base text-slate-600">Loading your history…</p>
         </div>
       )}
-      {error && !loading && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div>}
+      {error && !loading && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-base text-rose-700">{error}</div>}
       {!loading && !error && items.length === 0 && (
         <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-14 text-center">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-          <p className="mt-3 text-sm font-medium text-slate-500">No records yet</p>
-          <p className="mt-1 text-xs text-slate-400">Run a scan to populate this history.</p>
+          <p className="mt-3 text-base font-medium text-slate-600">No records yet</p>
+          <p className="mt-1 text-sm text-slate-500">Run a scan to populate this history.</p>
         </div>
       )}
 
       {/* ── Card grid ── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2">
         {items.map((item) => {
           const statusStyle = STATUS_STYLES[item.status] || "border-slate-200 bg-slate-50 text-slate-500";
           const confidencePct = Math.round(item.confidence * 100);
@@ -556,10 +556,10 @@ export default function UserSamples() {
 
           // Status icon
           const statusIcon = item.status === "Cleared"
-            ? <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             : item.status === "Alert"
-              ? <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 002.57 20h18.86a1 1 0 00.86-1.28l-8.58-14.86a1 1 0 00-1.72 0z" /></svg>
-              : <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+              ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86l-8.58 14.86A1 1 0 002.57 20h18.86a1 1 0 00.86-1.28l-8.58-14.86a1 1 0 00-1.72 0z" /></svg>
+              : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 
           // Confidence bar color
           const barColor = confidencePct >= 70 ? "from-emerald-400 to-emerald-600" : confidencePct >= 50 ? "from-amber-400 to-amber-500" : "from-rose-400 to-rose-500";
@@ -569,51 +569,51 @@ export default function UserSamples() {
               key={item.id}
               type="button"
               onClick={() => { setDetailItem(item); setDetailOpen(true); }}
-              className="group relative flex w-full flex-col rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sky-200"
+              className="group relative flex w-full flex-col rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:border-sky-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-sky-200"
             >
               {/* Top row: icon + type badge + status */}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isWater ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}>
+                  <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${isWater ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}>
                     {isWater
-                      ? <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21c-4.97 0-8-3.58-8-7.5C4 9.64 12 3 12 3s8 6.64 8 10.5c0 3.92-3.03 7.5-8 7.5z" /></svg>
-                      : <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="6" y="3" width="12" height="18" rx="2" /><path d="M9 3v4h6V3" /></svg>
+                      ? <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 21c-4.97 0-8-3.58-8-7.5C4 9.64 12 3 12 3s8 6.64 8 10.5c0 3.92-3.03 7.5-8 7.5z" /></svg>
+                      : <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><rect x="6" y="3" width="12" height="18" rx="2" /><path d="M9 3v4h6V3" /></svg>
                     }
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{item.location}</p>
-                    <p className="truncate text-[11px] text-slate-400">{item.timestamp}</p>
+                    <p className="truncate text-base font-semibold text-slate-900">{item.location}</p>
+                    <p className="truncate text-sm text-slate-500">{item.timestamp}</p>
                   </div>
                 </div>
-                <span className={`mt-0.5 shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] ${statusStyle}`}>
+                <span className={`mt-0.5 shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] ${statusStyle}`}>
                   {item.status}
                 </span>
               </div>
 
               {/* Prediction + confidence */}
-              <div className="mt-4 flex items-end justify-between gap-4">
+              <div className="mt-5 flex items-end justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">Prediction</p>
-                  <p className="mt-0.5 truncate text-sm font-medium text-slate-700">{item.predictedClass}</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Prediction</p>
+                  <p className="mt-1 truncate text-base font-medium text-slate-800">{item.predictedClass}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400">Confidence</p>
-                  <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{confidencePct}<span className="text-xs font-medium text-slate-400">%</span></p>
+                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Confidence</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{confidencePct}<span className="text-sm font-medium text-slate-500">%</span></p>
                 </div>
               </div>
 
               {/* Confidence bar */}
-              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                 <div className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all`} style={{ width: `${Math.min(100, Math.max(4, confidencePct))}%` }} />
               </div>
 
               {/* Footer: status icon + view hint */}
-              <div className="mt-3 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
+              <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
                   {statusIcon}
-                  <span className="text-[11px] text-slate-500">{item.status === "Cleared" ? "Within safe limits" : item.status === "Alert" ? "Action recommended" : "Needs review"}</span>
+                  <span className="text-sm text-slate-600">{item.status === "Cleared" ? "Within safe limits" : item.status === "Alert" ? "Action recommended" : "Needs review"}</span>
                 </div>
-                <span className="text-[11px] font-medium text-sky-500 opacity-0 transition group-hover:opacity-100">
+                <span className="text-sm font-medium text-sky-500 opacity-0 transition group-hover:opacity-100">
                   View details →
                 </span>
               </div>
