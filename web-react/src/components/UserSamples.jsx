@@ -3,7 +3,7 @@ import Lottie from "lottie-react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
-import { getContainerCleaningSuggestion, getWaterFiltrationSuggestion } from "@/lib/api";
+import { getContainerCleaningSuggestion, getWaterFiltrationSuggestion, assessMicrobialRisk } from "@/lib/api";
 
 import noAnim from "@/assets/lottie/not.json";
 import warnAnim from "@/assets/lottie/warning.json";
@@ -170,6 +170,29 @@ const PARAMETER_COLORS = {
   turbidity: { dot: "bg-indigo-400", badge: "border-indigo-200 bg-indigo-50", text: "text-indigo-700" },
 };
 
+const FIELD_DISPLAY_NAMES = {
+  ph: "pH",
+  hardness: "Hardness",
+  solids: "Total Dissolved Solids",
+  chloramines: "Chloramines",
+  sulfate: "Sulfate",
+  conductivity: "Conductivity",
+  organic_carbon: "Organic Carbon (TOC)",
+  trihalomethanes: "Trihalomethanes",
+  turbidity: "Turbidity",
+};
+
+const buildBacteriaFrequency = (violations) => {
+  const freq = {};
+  for (const v of violations) {
+    for (const b of v.bacteria || []) {
+      if (!freq[b]) freq[b] = [];
+      if (!freq[b].includes(v.field)) freq[b].push(v.field);
+    }
+  }
+  return Object.entries(freq).sort((a, b) => b[1].length - a[1].length);
+};
+
 const formatValue = (value, suffix = "") => {
   if (value === null || value === undefined) return "--";
   if (typeof value === "number" && Number.isFinite(value)) return `${value.toFixed(2)}${suffix}`;
@@ -233,6 +256,8 @@ export default function UserSamples() {
   const [waterAdvisorText, setWaterAdvisorText] = useState("");
   const [waterAdvisorLoading, setWaterAdvisorLoading] = useState(false);
   const [waterAdvisorError, setWaterAdvisorError] = useState("");
+  const [microbialViolations, setMicrobialViolations] = useState([]);
+  const [microbialViolationsLoading, setMicrobialViolationsLoading] = useState(false);
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [startDate, setStartDate] = useState("");
@@ -307,7 +332,7 @@ export default function UserSamples() {
         if (activeTab === "water") {
           let q = supabase
             .from(WATER_SAMPLES_TABLE)
-            .select("id, created_at, source, sample_label, color, notes, risk_level, model_version, prediction_probability, prediction_is_potable, anomaly_checks, microbial_risk, microbial_score, possible_bacteria", { count: "exact" })
+            .select("id, created_at, source, sample_label, color, notes, risk_level, model_version, prediction_probability, prediction_is_potable, anomaly_checks, microbial_risk, microbial_score, possible_bacteria, ph, hardness, solids, chloramines, sulfate, conductivity, organic_carbon, trihalomethanes, turbidity", { count: "exact" })
             .eq("user_id", userId)
             .order("created_at", { ascending: false });
           const sIso = toDateBoundaryIso(startDate, false);
@@ -376,6 +401,35 @@ export default function UserSamples() {
       .catch((err) => { if (!cancelled) setContainerAdvisorError(err?.message || "Failed to get cleaning guidance."); })
       .finally(() => { if (!cancelled) setContainerAdvisorLoading(false); });
 
+    return () => { cancelled = true; };
+  }, [detailOpen, detailItem]);
+
+  // Microbial violations (on-the-fly assessment)
+  useEffect(() => {
+    if (!detailOpen || !detailItem || detailItem.type !== "water") {
+      setMicrobialViolations([]); setMicrobialViolationsLoading(false);
+      return;
+    }
+    const raw = detailItem.raw || {};
+    const sample = {
+      ph: raw.ph ?? null,
+      hardness: raw.hardness ?? null,
+      solids: raw.solids ?? null,
+      chloramines: raw.chloramines ?? null,
+      sulfate: raw.sulfate ?? null,
+      conductivity: raw.conductivity ?? null,
+      organicCarbon: raw.organic_carbon ?? null,
+      trihalomethanes: raw.trihalomethanes ?? null,
+      turbidity: raw.turbidity ?? null,
+    };
+    const provided = Object.values(sample).filter((v) => v !== null);
+    if (provided.length < 2) { setMicrobialViolations([]); return; }
+    let cancelled = false;
+    setMicrobialViolationsLoading(true);
+    assessMicrobialRisk(sample)
+      .then((res) => { if (!cancelled) setMicrobialViolations(res?.microbialViolations || res?.microbial_violations || []); })
+      .catch(() => { if (!cancelled) setMicrobialViolations([]); })
+      .finally(() => { if (!cancelled) setMicrobialViolationsLoading(false); });
     return () => { cancelled = true; };
   }, [detailOpen, detailItem]);
 
@@ -866,12 +920,128 @@ export default function UserSamples() {
                       )}
                       {possibleBacteria.length > 0 && (
                         <div className="mt-4">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">Possible bacteria detected</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Possible bacteria detected</p>
                           <div className="flex flex-wrap gap-2">{possibleBacteria.map((b) => <span key={b} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{b}</span>)}</div>
                         </div>
                       )}
                     </div>
                   )}
+
+                  {/* ── WHO Threshold Violations ── */}
+                  {microbialViolationsLoading ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <svg className="h-5 w-5 animate-spin text-sky-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      <p className="text-sm text-slate-500">Assessing WHO threshold violations…</p>
+                    </div>
+                  ) : microbialViolations.length > 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">WHO Threshold Violations</p>
+                        </div>
+                        <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">{microbialViolations.length}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-4">{microbialViolations.length} parameter{microbialViolations.length > 1 ? "s" : ""} exceeded safe thresholds</p>
+                      <div className="space-y-3">
+                        {microbialViolations.map((v, i) => {
+                          const fieldName = FIELD_DISPLAY_NAMES[v.field] || v.field || "Unknown";
+                          const unit = v.unit || "";
+                          const weightDots = "●".repeat(Math.min(v.weight || 0, 3)) + "○".repeat(3 - Math.min(v.weight || 0, 3));
+                          return (
+                            <div key={`${v.field}-${i}`} className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                              <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-slate-900">{fieldName}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{v.rule || ""}</p>
+                                </div>
+                                <div className="text-right shrink-0 ml-4">
+                                  <p className="text-base font-bold text-slate-800">
+                                    {v.value != null ? Number(v.value).toFixed(2) : "—"}
+                                    {unit && <span className="text-xs font-normal text-slate-500 ml-0.5">{unit}</span>}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">severity {weightDots}</p>
+                                </div>
+                              </div>
+                              {(v.healthRisk || v.health_risk || v.biofilm) && (
+                                <div className="px-4 pb-2 space-y-1">
+                                  {(v.healthRisk || v.health_risk) && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="text-xs text-rose-400 mt-px">⚕</span>
+                                      <p className="text-xs text-slate-600"><span className="font-semibold text-slate-700">Health risk: </span>{v.healthRisk || v.health_risk}</p>
+                                    </div>
+                                  )}
+                                  {v.biofilm && (
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="text-xs text-sky-400 mt-px">◎</span>
+                                      <p className="text-xs text-slate-600"><span className="font-semibold text-slate-700">Biofilm: </span>{v.biofilm}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {(v.bacteria || []).length > 0 && (
+                                <div className="px-4 pb-3 pt-1">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {v.bacteria.map((b, j) => (
+                                      <span key={`${b}-${j}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-medium italic text-slate-600">{b}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : !microbialViolationsLoading && microbialRisk ? (
+                    <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      <p className="text-sm font-semibold text-emerald-700">All parameters within WHO thresholds</p>
+                    </div>
+                  ) : null}
+
+                  {/* ── Possible Microbial Concerns (bacteria ↔ source cross-ref) ── */}
+                  {(() => {
+                    const bacteriaFreq = buildBacteriaFrequency(microbialViolations);
+                    if (bacteriaFreq.length === 0) return null;
+                    const threatColors = (count) => {
+                      if (count >= 3) return { border: "border-rose-200", bg: "bg-rose-50", dot: "bg-rose-500", text: "text-rose-700" };
+                      if (count >= 2) return { border: "border-amber-200", bg: "bg-amber-50", dot: "bg-amber-500", text: "text-amber-700" };
+                      return { border: "border-slate-200", bg: "bg-slate-50", dot: "bg-slate-400", text: "text-slate-600" };
+                    };
+                    return (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">Possible Microbial Concerns</p>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-4">{bacteriaFreq.length} organism{bacteriaFreq.length > 1 ? "s" : ""} identified from {microbialViolations.length} violation{microbialViolations.length > 1 ? "s" : ""}</p>
+                        <div className="space-y-2.5">
+                          {bacteriaFreq.map(([bacterium, sources], i) => {
+                            const tc = threatColors(sources.length);
+                            return (
+                              <div key={`${bacterium}-${i}`} className={`rounded-xl border ${tc.border} ${tc.bg} px-4 py-3`}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tc.dot}`} />
+                                    <p className="text-sm font-semibold italic text-slate-800 truncate">{bacterium}</p>
+                                  </div>
+                                  <span className={`rounded-full bg-white border border-slate-200 px-2.5 py-0.5 text-[11px] font-bold ${tc.text}`}>
+                                    {sources.length} source{sources.length > 1 ? "s" : ""}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {sources.map((src, j) => (
+                                    <span key={`${src}-${j}`} className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">{FIELD_DISPLAY_NAMES[src] || src}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* ── Sample context + anomaly checks ── */}
                   <div className="grid gap-4 lg:grid-cols-2">

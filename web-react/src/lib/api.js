@@ -295,4 +295,17 @@ export async function sendUserDeactivationEmail({ targetUserId, adminUserId, rea
   return payload;
 }
 
+export async function assessMicrobialRisk(sample) {
+  const response = await fetch(`${API_BASE_URL}/predict/microbial-risk`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(sample),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.detail || "Unable to assess microbial risk.");
+  }
+  return response.json();
+}
+
 export { API_BASE_URL };
