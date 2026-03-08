@@ -248,6 +248,16 @@ class PotabilityPredictor:
             logger.exception("Microbial-risk prediction failed; continuing without it")
             microbial_result = {}
 
+        # --- Microbial safety gate: override potability when pathogen risk is elevated ---
+        microbial_risk = microbial_result.get("microbial_risk_level")
+        microbial_override = False
+        if microbial_risk == "high":
+            is_potable = False
+            risk_level = "unsafe"
+            microbial_override = True
+        elif microbial_risk == "medium" and is_potable:
+            risk_level = "borderline"
+
         result = {
             "is_potable": is_potable,
             "probability": round(probability, 4),
@@ -260,7 +270,7 @@ class PotabilityPredictor:
             "meta": meta or {},
             "saved": False,
             "sample_id": None,
-            "message": self._build_summary(is_potable, risk_level),
+            "message": self._build_summary(is_potable, risk_level, microbial_override),
             # Microbial risk fields
             "microbial_risk_level": microbial_result.get("microbial_risk_level"),
             "microbial_risk_probabilities": microbial_result.get("microbial_risk_probabilities"),
@@ -285,7 +295,9 @@ class PotabilityPredictor:
             return "watch"
         return "unsafe"
 
-    def _build_summary(self, is_potable: bool, risk_level: str) -> str:
+    def _build_summary(self, is_potable: bool, risk_level: str, microbial_override: bool = False) -> str:
+        if microbial_override:
+            return "Chemically acceptable but high microbial risk — not potable. Confirmatory lab testing strongly recommended."
         if is_potable and risk_level == "safe":
             return "Sample matches potable water profile with strong confidence."
         if is_potable:
