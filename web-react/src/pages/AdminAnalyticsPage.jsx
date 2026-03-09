@@ -412,8 +412,8 @@ export default function AdminAnalyticsPage() {
       ? "Watch and unsafe concentration should drive next-round verification and source tracing." 
       : "No risk-level assignments available yet.",
     fieldConfidence: a.confVals.length > 0
-      ? `Average field-model confidence is ${pct(a.avgConf)} across ${a.confVals.length} predictions; monitor dips below 70%.`
-      : "No confidence values available yet.",
+      ? `Average field-sample potability score is ${pct(a.avgConf)} across ${a.confVals.length} predictions; monitor dips below 70%.`
+      : "No potability score values available yet.",
     classBreakdown: a.classTop.length > 0
       ? `Container classes show ${a.classTop[0][0]} as the most frequent output, useful for targeted quality audits.`
       : "No container class predictions available yet.",
@@ -605,21 +605,21 @@ export default function AdminAnalyticsPage() {
 
     if (a.confVals.length > 0) {
       charts.push({
-        title: "Field prediction confidence",
-        subtitle: "Histogram of model confidence for field samples.",
-        insight: `Average confidence is ${pct(a.avgConf)} across ${a.confVals.length} samples.`,
+        title: "Field potability score",
+        subtitle: "Histogram of potability scores for field samples.",
+        insight: `Average potability score is ${pct(a.avgConf)} across ${a.confVals.length} samples.`,
         data: [
           {
             x: a.confVals,
             type: "histogram",
             nbinsx: 20,
             marker: { color: "#6366f1", line: { color: "#4338ca", width: 1 } },
-            name: "Confidence",
+            name: "Potability",
           },
         ],
         layout: lay({
           height: 300,
-          xaxis: { title: "Confidence", range: [0, 1], tickfont: { size: 10, color: "#475569" } },
+          xaxis: { title: "Potability", range: [0, 1], tickfont: { size: 10, color: "#475569" } },
           yaxis: { title: "Frequency", rangemode: "tozero", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } },
           showlegend: false,
         }),
@@ -1388,18 +1388,18 @@ export default function AdminAnalyticsPage() {
                 )}
               </div>
 
-              {/* Prediction confidence histogram */}
+              {/* Potability score histogram */}
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-indigo-900">
-                    Prediction confidence
+                    Potability score
                   </p>
                   <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">
                     Histogram
                   </span>
                 </div>
                 <p className="mb-3 text-[11px] text-slate-500">
-                  Model confidence scores across all field samples.
+                  Potability scores across all field samples.
                 </p>
                 {a.confVals.length > 0 ? (
                   <>
@@ -1414,13 +1414,13 @@ export default function AdminAnalyticsPage() {
                             line: { color: "#4338ca", width: 1 },
                           },
                           hovertemplate:
-                            "Confidence: %{x:.2f}<br>Count: %{y}<extra></extra>",
+                            "Potability: %{x:.2f}<br>Count: %{y}<extra></extra>",
                         },
                       ]}
                       layout={lay({
                         height: 260,
                         xaxis: {
-                          title: "Confidence",
+                          title: "Potability",
                           range: [0, 1],
                           tickfont: { size: 10, color: "#475569" },
                         },
@@ -1438,7 +1438,7 @@ export default function AdminAnalyticsPage() {
                     />
                     <div className="mt-2 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs">
                       <span className="text-[10px] uppercase tracking-[0.22em] text-indigo-600">
-                        Avg confidence:{" "}
+                        Avg potability:{" "}
                       </span>
                       <span className="font-semibold text-indigo-700">
                         {pct(a.avgConf)}
@@ -1457,7 +1457,7 @@ export default function AdminAnalyticsPage() {
                   </>
                 ) : (
                   <p className="py-8 text-center text-sm text-slate-400">
-                    No confidence data.
+                    No potability data.
                   </p>
                 )}
               </div>

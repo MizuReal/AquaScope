@@ -256,7 +256,7 @@ const AnalysisScreen = ({ onNavigate }) => {
           strokeWidth: 2,
         },
       ],
-      legend: ['Model confidence (0 – 1)'],
+      legend: ['Potability score (0 – 1)'],
     };
 
     const riskTrend = {
@@ -365,7 +365,7 @@ const AnalysisScreen = ({ onNavigate }) => {
       insights.push(`You have ${total} saved samples with ${formatPercent(total ? potableCount / total : 0)} potable outcomes.`);
       insights.push(`Watch/unsafe samples count is ${watchOrUnsafe}, useful for targeted follow-up checks.`);
       if (Number.isFinite(avgProbability)) {
-        insights.push(`Average model confidence is ${formatPercent(avgProbability)} (median ${formatPercent(medianProbability || 0)}).`);
+        insights.push(`Average potability score is ${formatPercent(avgProbability)} (median ${formatPercent(medianProbability || 0)}).`);
       }
       const phAvg = average(phValues);
       if (Number.isFinite(phAvg)) {
@@ -495,7 +495,7 @@ const AnalysisScreen = ({ onNavigate }) => {
                   <View className={`flex-1 rounded-2xl overflow-hidden border ${isDark ? 'border-slate-800/80 bg-slate-900/80' : 'border-slate-200 bg-slate-50'}`}>
                     <View className="h-1 bg-sky-300" />
                     <View className="p-3">
-                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg confidence</Text>
+                      <Text className={`text-[10px] uppercase tracking-wide font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Avg potability</Text>
                       <Text className={`mt-1 text-[24px] font-bold ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
                         {formatPercent(analytics.avgProbability || 0)}
                       </Text>
@@ -509,10 +509,10 @@ const AnalysisScreen = ({ onNavigate }) => {
               <View className={`px-4 py-3 border-b flex-row items-center justify-between ${isDark ? 'border-sky-900/50 bg-sky-950/60' : 'border-sky-100 bg-sky-100/60'}`}>
                 <View>
                   <Text className={`text-[12px] font-bold uppercase tracking-widest ${isDark ? 'text-sky-300' : 'text-sky-600'}`}>
-                    Confidence trend
+                    Potability trend
                   </Text>
                   <Text className={`mt-0.5 text-[11px] ${isDark ? 'text-slate-500' : 'text-sky-700/60'}`}>
-                    Higher = more certain prediction
+                    Higher = more likely potable
                   </Text>
                 </View>
                 <View className={`rounded-full px-2 py-0.5 ${isDark ? 'bg-sky-900/60' : 'bg-sky-200/80'}`}>
@@ -523,7 +523,7 @@ const AnalysisScreen = ({ onNavigate }) => {
               </View>
               <View className="px-4 pt-3 pb-1">
                 <Text className={`text-[12px] leading-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  How confident the model is in each prediction. Values above 0.7 indicate strong certainty.
+                  How likely the sample is potable based on model prediction. Values above 0.7 indicate strong potability.
                 </Text>
                 {analytics.recentCount > 1 && (
                   <Text className={`mt-1 text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
@@ -550,7 +550,7 @@ const AnalysisScreen = ({ onNavigate }) => {
                 </ScrollView>
               ) : (
                 <View className={`mx-4 mb-4 items-center rounded-xl border p-4 ${isDark ? 'border-slate-800 bg-slate-900/50' : 'border-sky-200 bg-white'}`}>
-                  <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Submit samples to see your confidence trend.</Text>
+                  <Text className={`text-[12px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Submit samples to see your potability trend.</Text>
                 </View>
               )}
             </View>

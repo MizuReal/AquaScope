@@ -553,8 +553,8 @@ const HomeScreen = ({ onNavigate, openChatSignal }) => {
 						caption: latestSample?.source || 'No timeline yet',
 						badge:
 							Number.isFinite(avgConfidence) && avgConfidence >= 0
-								? `Avg confidence ${(avgConfidence * 100).toFixed(0)}%`
-								: 'Confidence pending',
+								? `Avg potability ${(avgConfidence * 100).toFixed(0)}%`
+								: 'Potability pending',
 						badgeClass: 'text-sky-300',
 						borderClass: 'border-sky-500/40',
 					},

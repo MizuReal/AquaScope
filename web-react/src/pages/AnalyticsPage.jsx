@@ -165,11 +165,11 @@ const IconSpark = ({ className = "h-3.5 w-3.5" }) => (
 );
 
 const buildConfidenceInsight = (trend = [], avgProbability = null) => {
-  if (!trend.length) return "No confidence trend is available yet. Add more samples so the assistant can detect reliability patterns.";
+  if (!trend.length) return "No potability trend is available yet. Add more samples so the assistant can detect reliability patterns.";
   const last = trend[trend.length - 1]?.value ?? 0;
   const first = trend[0]?.value ?? 0;
   const direction = last > first + 0.03 ? "improving" : last < first - 0.03 ? "declining" : "stable";
-  return `Confidence appears ${direction}, with the latest prediction at ${Math.round(last * 100)}%. Overall average confidence is ${formatPercent(avgProbability || 0)}, so keep monitoring if values dip below 70%.`;
+  return `Potability score appears ${direction}, with the latest prediction at ${Math.round(last * 100)}%. Overall average potability is ${formatPercent(avgProbability || 0)}, so keep monitoring if values dip below 70%.`;
 };
 
 const buildRiskInsight = (trend = []) => {
@@ -367,7 +367,7 @@ export default function AnalyticsPage() {
     else {
       insights.push(`You have ${total} saved samples with ${formatPercent(total ? potableCount / total : 0)} potable outcomes.`);
       insights.push(`Watch/unsafe samples count is ${watchOrUnsafe}, useful for targeted follow-up checks.`);
-      if (Number.isFinite(avgProbability)) insights.push(`Average model confidence is ${formatPercent(avgProbability)} (median ${formatPercent(medianProbability || 0)}).`);
+      if (Number.isFinite(avgProbability)) insights.push(`Average potability score is ${formatPercent(avgProbability)} (median ${formatPercent(medianProbability || 0)}).`);
       const phAvg = average(phV); if (Number.isFinite(phAvg)) insights.push(`pH trend is ${describePh(phAvg).toLowerCase()} with average ${phAvg.toFixed(2)}.`);
       const turbAvg = average(turbV); if (Number.isFinite(turbAvg)) insights.push(`Turbidity is ${describeTurbidity(turbAvg).toLowerCase()} at ${turbAvg.toFixed(2)} NTU average.`);
     }
@@ -382,15 +382,15 @@ export default function AnalyticsPage() {
     const charts = [];
 
     charts.push({
-      title: "Confidence trend",
-      subtitle: "Latest prediction confidence sequence from recent samples.",
+      title: "Potability trend",
+      subtitle: "Latest potability score sequence from recent samples.",
       insight: buildConfidenceInsight(analytics.confidenceTrend, analytics.avgProbability),
       data: [
-        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Observed confidence", line: { color: "#0284c7", width: 2 }, marker: { color: "#0284c7", size: 6 } },
-        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.5), type: "scatter", mode: "lines", name: "Reference floor (0.50)", line: { color: "#f59e0b", width: 1.5, dash: "dot" } },
-        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.7), type: "scatter", mode: "lines", name: "High-confidence mark (0.70)", line: { color: "#16a34a", width: 1.5, dash: "dot" } },
+        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Potability score", line: { color: "#0284c7", width: 2 }, marker: { color: "#0284c7", size: 6 } },
+        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.5), type: "scatter", mode: "lines", name: "Decision threshold (0.50)", line: { color: "#f59e0b", width: 1.5, dash: "dot" } },
+        { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.7), type: "scatter", mode: "lines", name: "Strong potability mark (0.70)", line: { color: "#16a34a", width: 1.5, dash: "dot" } },
       ],
-      layout: plotLayout({ height: 300, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Confidence", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } }),
+      layout: plotLayout({ height: 300, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Potability", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } }),
     });
 
     charts.push({
@@ -512,7 +512,7 @@ export default function AnalyticsPage() {
             <div className="space-y-3">
               <p className="text-xs uppercase tracking-[0.4em] text-sky-600">Analytics</p>
               <h1 className="text-3xl font-semibold text-sky-950">Comprehensive sample intelligence</h1>
-              <p className="max-w-3xl text-sm text-slate-600">End-to-end analytics across your saved records, including confidence trends, risk distribution, core parameter summaries, microbial profile, and automated insights.</p>
+              <p className="max-w-3xl text-sm text-slate-600">End-to-end analytics across your saved records, including potability trends, risk distribution, core parameter summaries, microbial profile, and automated insights.</p>
             </div>
             <button
               type="button"
@@ -647,22 +647,22 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-2">
-              {/* Confidence trend */}
+              {/* Potability trend */}
               <div className="rounded-xl border border-sky-300 bg-sky-50/40 p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-sky-900">Confidence trend</p>
+                  <p className="text-sm font-semibold text-sky-900">Potability trend</p>
                   <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-600">Recent 12</span>
                 </div>
-                <p className="mb-3 text-[11px] text-slate-500">Latest prediction confidence sequence from recent samples.</p>
+                <p className="mb-3 text-[11px] text-slate-500">Latest potability score sequence from recent samples.</p>
                 {hasChartData ? (
                   <>
                     <Plot data={[
-                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Observed confidence", line: { color: "#0284c7", width: 2 }, marker: { color: "#0284c7", size: 6 }, hovertemplate: "%{x}<br>Confidence: %{y:.3f}<extra></extra>" },
-                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.5), type: "scatter", mode: "lines", name: "Reference floor (0.50)", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.7), type: "scatter", mode: "lines", name: "High-confidence mark (0.70)", line: { color: "#16a34a", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
-                    ]} layout={plotLayout({ height: 270, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Confidence", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
+                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map((p) => p.value), type: "scatter", mode: "lines+markers", name: "Potability score", line: { color: "#0284c7", width: 2 }, marker: { color: "#0284c7", size: 6 }, hovertemplate: "%{x}<br>Potability: %{y:.3f}<extra></extra>" },
+                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.5), type: "scatter", mode: "lines", name: "Decision threshold (0.50)", line: { color: "#f59e0b", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
+                      { x: analytics.confidenceTrend.map((p) => p.label), y: analytics.confidenceTrend.map(() => 0.7), type: "scatter", mode: "lines", name: "Strong potability mark (0.70)", line: { color: "#16a34a", width: 1.5, dash: "dot" }, hovertemplate: "Reference: %{y:.2f}<extra></extra>" },
+                    ]} layout={plotLayout({ height: 270, xaxis: { title: "Recent sample sequence", gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, yaxis: { title: "Potability", range: [0, 1], tick0: 0, dtick: 0.1, gridcolor: "#e2e8f0", tickfont: { size: 10, color: "#475569" } }, legend: { orientation: "h", y: 1.15, x: 0, font: { size: 10, color: "#475569" } } })} config={plotConfig} useResizeHandler style={{ width: "100%", height: "270px" }} />
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Avg confidence</p><p className="mt-1 font-semibold text-slate-700">{formatPercent(analytics.avgProbability || 0)}</p></div>
+                      <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Avg potability</p><p className="mt-1 font-semibold text-slate-700">{formatPercent(analytics.avgProbability || 0)}</p></div>
                       <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Latest reading</p><p className="mt-1 font-semibold text-slate-700">{analytics.confidenceTrend.length ? formatPercent(analytics.confidenceTrend[analytics.confidenceTrend.length - 1].value) : "--"}</p></div>
                     </div>
                     <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">

@@ -76,7 +76,7 @@ const ConfidenceGauge = ({ probability, threshold = 0.5, isDark = true }) => {
 		<View className="mt-4">
 			<View className="flex-row items-center justify-between mb-2">
 				<Text className={`text-[11px] font-semibold uppercase tracking-wide ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-					Model Confidence
+					Potability Score
 				</Text>
 				<View className="flex-row items-center gap-1.5">
 					<View className={`w-2 h-2 rounded-full ${confidence.color}`} />
@@ -116,7 +116,7 @@ const ConfidenceGauge = ({ probability, threshold = 0.5, isDark = true }) => {
 				<Text className={`text-[9px] ${isDark ? 'text-slate-600' : 'text-slate-500'}`}>100%</Text>
 			</View>
 			
-			{/* Confidence Value */}
+			{/* Potability Value */}
 			<View className="items-center mt-3">
 				<Text className={`text-[32px] font-bold ${isDark ? 'text-slate-50' : 'text-slate-900'}`}>{percentage}%</Text>
 				<Text className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>

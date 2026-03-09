@@ -644,14 +644,14 @@ export default function UserSamples() {
                 </span>
               </div>
 
-              {/* Prediction + confidence */}
+              {/* Prediction + potability */}
               <div className="mt-5 flex items-end justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Prediction</p>
                   <p className="mt-1 truncate text-base font-medium text-slate-800">{item.predictedClass}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Confidence</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Potability</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{confidencePct}<span className="text-sm font-medium text-slate-500">%</span></p>
                 </div>
               </div>
@@ -857,7 +857,7 @@ export default function UserSamples() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Model confidence</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Potability score</p>
                         </div>
                         <span className={`text-xs font-bold uppercase tracking-[0.2em] ${confidenceTextClass}`}>{confidenceTier.label}</span>
                       </div>

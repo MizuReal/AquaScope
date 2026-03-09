@@ -28,7 +28,7 @@ const pipelineSteps = [
   { stage: "Data ingestion", detail: "REST API, OCR, or manual entry" },
   { stage: "Fiducial detection", detail: "Auto-align scanned forms with marker recognition" },
   { stage: "Feature extraction", detail: "9 water quality parameters normalized for ML" },
-  { stage: "Potability classifier", detail: "Gradient-boosted model with confidence score" },
+  { stage: "Potability classifier", detail: "Random forest model with potability score" },
   { stage: "Microbial risk grading", detail: "WHO threshold mapping for bacteria counts" },
   { stage: "LLM interpretation", detail: "Groq Llama 3.3 70B contextual explanation" },
 ];
