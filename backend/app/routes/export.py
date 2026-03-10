@@ -95,6 +95,13 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         pages_markup.append(
             '<section class="pdf-page">'
             '<header class="page-header">'
+            '<div class="brand-row">'
+            '<svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+            '<path d="M12 2C12 2 5 10 5 14.5A7 7 0 0 0 19 14.5C19 10 12 2 12 2z"/>'
+            '<path d="M8 14.5c0 1.5.8 2.8 2 3.5" opacity=".5"/>'
+            '</svg>'
+            '<span class="brand-name">Aquascope</span>'
+            '</div>'
             f'<h1 class="report-title">{escaped_title}</h1>'
             f'<p class="report-generated">Generated: {escaped_generated_at}</p>'
             f'<div class="badge-row">{escaped_badges}</div>'
@@ -122,7 +129,7 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         --page-margin-px: calc(var(--page-margin-mm) * var(--px-per-mm) * 1px);
         --safe-width: calc(var(--a4-width-px) - (var(--page-margin-px) * 2));
         --safe-height: calc(var(--a4-height-px) - (var(--page-margin-px) * 2));
-        --header-height: 96px;
+        --header-height: 110px;
         --row-gap: 8px;
         --chart-slot-height: calc((var(--safe-height) - var(--header-height) - var(--row-gap)) / 2);
       }}
@@ -178,6 +185,26 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         min-height: var(--header-height);
         max-height: var(--header-height);
         overflow: hidden;
+      }}
+
+      .brand-row {{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 2px;
+      }}
+
+      .brand-logo {{
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }}
+
+      .brand-name {{
+        font-size: 13px;
+        font-weight: 700;
+        color: #0284c7;
+        letter-spacing: 0.06em;
       }}
 
       .report-title {{
