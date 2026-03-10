@@ -74,6 +74,20 @@ _LIGHT_SOCIAL_TURNS = {
     "okay",
 }
 
+_FOLLOWUP_KEYWORDS = {
+    "plan", "action", "recommend", "suggestion", "suggest", "advice",
+    "summary", "summarize", "next", "improve", "tip", "tips",
+    "week", "today", "daily", "month", "schedule", "steps", "step",
+    "should", "could", "help", "explain", "detail",
+    "tell", "show", "list", "best", "worst", "compare",
+    "check", "monitor", "again", "please",
+    "update", "change", "better", "concern", "problem", "issue",
+    "alert", "warning", "recent", "latest", "last", "previous",
+    "progress", "status", "overview", "report", "insight",
+    "reduce", "increase", "prevent", "avoid", "fix", "resolve",
+    "routine", "maintain", "maintenance", "clean", "frequency",
+}
+
 _OFFTOPIC_REPLY = (
     "I can only answer questions about water safety and your water-quality data. "
     "Please ask a water-safety related question."
@@ -91,7 +105,9 @@ FILTRATION_SYSTEM_PROMPT = (
     "4. If the water is already safe, say so clearly and reassuringly.\n"
     "Keep answers concise (200 words or less). Use short numbered steps or dashes for lists. "
     "Do NOT use markdown symbols such as *, **, #, or backticks. "
-    "Write in plain, friendly, easy-to-understand language."
+    "Write in plain, friendly, easy-to-understand language. "
+    "If the user asks about something completely unrelated to water safety, "
+    "politely let them know you specialize in water-related topics."
 )
 
 CONTAINER_CLEANING_SYSTEM_PROMPT = (
@@ -119,7 +135,9 @@ DASHBOARD_SYSTEM_PROMPT = (
     "4. If data is limited, be honest and encouraging rather than making things up.\n"
     "Keep answers concise (200 words or less). "
     "Do NOT use markdown symbols such as *, **, #, or backticks. "
-    "Write in a warm, easy-to-understand tone as if talking to a non-expert."
+    "Write in a warm, easy-to-understand tone as if talking to a non-expert. "
+    "If the user asks about something completely unrelated to water safety or their data, "
+    "politely let them know you specialize in water-related topics."
 )
 
 COMPARE_SAMPLES_SYSTEM_PROMPT = (
@@ -164,7 +182,7 @@ def _call_with_retry(fn, *args, **kwargs):
                 raise
 
 
-def _is_query_relevant(user_message: str, focus: str) -> bool:
+def _is_query_relevant(user_message: str, focus: str, has_history: bool = False) -> bool:
     text = (user_message or "").strip().lower()
     if not text:
         return True
@@ -175,12 +193,12 @@ def _is_query_relevant(user_message: str, focus: str) -> bool:
     if len(text.split()) <= 2 and any(greet == text for greet in _LIGHT_SOCIAL_TURNS):
         return True
 
-    tokens = [t for t in re.split(r"[^a-z0-9]+", text) if t]
+    tokens = set(t for t in re.split(r"[^a-z0-9]+", text) if t)
     if not tokens:
         return False
 
     keyword_pool = set(_WATER_TOPIC_KEYWORDS)
-    if focus == "my_data":
+    if focus in ("my_data", "water_quality"):
         keyword_pool.update(_DASHBOARD_TOPIC_KEYWORDS)
 
     for token in tokens:
@@ -189,7 +207,20 @@ def _is_query_relevant(user_message: str, focus: str) -> bool:
         if any(token.startswith(stem) for stem in ("contamin", "filter", "predict")):
             return True
 
-    return any(keyword in text for keyword in keyword_pool if len(keyword) >= 6)
+    if any(keyword in text for keyword in keyword_pool if len(keyword) >= 6):
+        return True
+
+    # In a focused dashboard context, allow follow-up messages
+    # (e.g. "give me an action plan", "what should I do next")
+    if focus in ("my_data", "water_quality") and tokens & _FOLLOWUP_KEYWORDS:
+        return True
+
+    # If there is conversation history the user is likely continuing
+    # the topic — let the LLM itself handle any off-topic redirection
+    if has_history:
+        return True
+
+    return False
 
 
 def _build_offtopic_reply(analysis: Dict, focus: str) -> str:
@@ -394,7 +425,7 @@ def chat_message(
 
     focus = (analysis.get("context") or {}).get("focus") or ""
 
-    if not _is_query_relevant(user_message, focus):
+    if not _is_query_relevant(user_message, focus, has_history=bool(history)):
         return _build_offtopic_reply(analysis, focus)
 
     if focus == "my_data":

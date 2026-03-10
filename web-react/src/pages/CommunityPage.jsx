@@ -682,6 +682,36 @@ export default function CommunityPage() {
   const pendingOpenThreadId = location.state?.openThreadId || "";
   const pendingNotificationId = location.state?.notificationId || "";
 
+  /* ── report thread state ── */
+  const [reportModalThread, setReportModalThread] = useState(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  const submitReport = async () => {
+    if (!sessionUser?.id) { setReportError("Please sign in to report."); return; }
+    if (!reportModalThread?.id) return;
+    const reason = reportReason.trim();
+    if (reason.length < 10) { setReportError("Please provide at least 10 characters."); return; }
+    setReportSubmitting(true);
+    setReportError("");
+    try {
+      const { error } = await supabase.from("forum_reports").insert({
+        reporter_id: sessionUser.id,
+        thread_id: reportModalThread.id,
+        reason,
+      });
+      if (error) throw error;
+      addToast("Report submitted. Our team will review it.", "success");
+      setReportModalThread(null);
+      setReportReason("");
+    } catch (e) {
+      setReportError(e?.message || "Failed to submit report.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     const loadAnimation = async () => {
@@ -1932,14 +1962,26 @@ export default function CommunityPage() {
           <div className={`w-full max-w-4xl rounded-3xl border-2 border-cyan-300 bg-slate-50 p-6 shadow-xl transition-all duration-200 ${threadModalActive ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}>
             <div className="flex items-center justify-between gap-3">
               <h2 className="inline-flex items-center gap-2 text-xl font-semibold text-slate-900"><IconUsers className="h-5 w-5 text-sky-700" />Thread</h2>
-              <button
-                type="button"
-                onClick={closeThread}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600"
-              >
-                <IconClose className="h-3.5 w-3.5" />
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                {sessionUser?.id && activeThread.user_id !== sessionUser.id && (
+                  <button
+                    type="button"
+                    onClick={() => { setReportModalThread(activeThread); setReportReason(""); setReportError(""); }}
+                    className="inline-flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-rose-600 transition hover:bg-rose-100"
+                  >
+                    <IconAlert className="h-3.5 w-3.5" />
+                    Report
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeThread}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600"
+                >
+                  <IconClose className="h-3.5 w-3.5" />
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="mt-5 rounded-3xl border-2 border-sky-200 bg-white p-5">
@@ -2114,6 +2156,48 @@ export default function CommunityPage() {
       ) : null}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} onAction={runToastAction} />
+
+      {/* report thread modal */}
+      {reportModalThread && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Report Thread</h2>
+            <p className="mt-1 truncate text-sm text-slate-500">{reportModalThread.title}</p>
+            <label className="mt-4 block text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+              Why are you reporting this thread?
+            </label>
+            <textarea
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Describe the issue (e.g. spam, harassment, misinformation...)"
+              rows={4}
+              className="mt-1 w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-sky-300"
+              disabled={reportSubmitting}
+            />
+            {reportError && (
+              <p className="mt-2 text-sm text-rose-600">{reportError}</p>
+            )}
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setReportModalThread(null); setReportReason(""); setReportError(""); }}
+                disabled={reportSubmitting}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitReport}
+                disabled={reportSubmitting}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:bg-rose-700 disabled:opacity-50"
+              >
+                {reportSubmitting ? "Submitting..." : "Submit Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ForumNotificationsModal
         visible={notificationsVisible}

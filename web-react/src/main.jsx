@@ -18,6 +18,7 @@ import AdminUsersPage from './pages/AdminUsersPage'
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage'
 
 import AdminForumPage from './pages/AdminForumPage'
+import AdminReportsPage from './pages/AdminReportsPage'
 import AdminProfilePage from './pages/AdminProfilePage'
 import ContainerScanPage from './pages/ContainerScanPage'
 import CompareSamplesPage from './pages/CompareSamplesPage'
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="analytics" element={<AdminAnalyticsPage />} />
             <Route path="forum" element={<AdminForumPage />} />
+            <Route path="reports" element={<AdminReportsPage />} />
 
             <Route path="profile" element={<AdminProfilePage />} />
           </Route>
