@@ -1245,10 +1245,7 @@ export default function CommunityPage() {
     const openPendingThread = async () => {
       try {
         if (pendingNotificationId) {
-          const source = notifications.find((item) => item.id === pendingNotificationId);
-          if (source && !source.is_read) {
-            await markNotificationAsRead(pendingNotificationId);
-          }
+          await markNotificationAsRead(pendingNotificationId).catch(() => {});
         }
 
         const existingThread = threads.find((item) => item.id === pendingOpenThreadId);
@@ -1276,18 +1273,8 @@ export default function CommunityPage() {
     return () => {
       active = false;
     };
-  }, [
-    fetchThreadById,
-    location.pathname,
-    markNotificationAsRead,
-    navigate,
-    notifications,
-    openThread,
-    pendingNotificationId,
-    pendingOpenThreadId,
-    setNotificationsError,
-    threads,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionUser?.id, pendingOpenThreadId]);
 
   const deleteThread = async (thread) => {
     if (!sessionUser?.id) {
