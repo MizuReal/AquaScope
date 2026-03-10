@@ -319,7 +319,7 @@ const tickerLabels = [
   { label: "Supabase", color: "text-emerald-400", dot: "bg-emerald-400" },
   { label: "Groq AI", color: "text-violet-400", dot: "bg-violet-400" },
   { label: "React Native", color: "text-sky-400", dot: "bg-sky-400" },
-  { label: "Next.js", color: "text-indigo-300", dot: "bg-indigo-300" },
+  { label: "React Web", color: "text-indigo-300", dot: "bg-indigo-300" },
   { label: "FastAPI", color: "text-rose-400", dot: "bg-rose-400" },
 ];
 
