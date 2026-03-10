@@ -13,6 +13,15 @@ const AUTH_HASH_KEYS = [
   "provider_refresh_token",
 ];
 
+/** Returns true if the URL hash currently contains Supabase auth tokens. */
+function hashHasAuthTokens() {
+  if (typeof window === "undefined") return false;
+  const raw = window.location.hash;
+  if (!raw || raw.length <= 1) return false;
+  const hashParams = new URLSearchParams(raw.slice(1));
+  return AUTH_HASH_KEYS.some((k) => hashParams.has(k));
+}
+
 /** Strip Supabase auth tokens from the URL hash so stale tokens are never re-parsed. */
 function stripAuthHashParams() {
   if (typeof window === "undefined") return;
@@ -52,12 +61,19 @@ export function AuthProvider({ children }) {
     }
 
     let isMounted = true;
+    // Track whether the URL had auth tokens when the page loaded, so we know
+    // to strip them after Supabase has had one chance to consume them.
+    const urlHadTokens = hashHasAuthTokens();
 
     // Single getSession call — shared by all consumers via context
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
       setSession(data?.session ?? null);
       setLoading(false);
+
+      // If getSession resolved but no auth-change event fired yet (e.g. stale
+      // tokens that fail silently), strip them now to prevent a retry loop.
+      if (urlHadTokens) stripAuthHashParams();
     });
 
     // Single onAuthStateChange listener — propagates to all consumers via context
@@ -66,11 +82,9 @@ export function AuthProvider({ children }) {
       setSession(newSession);
       setLoading(false);
 
-      // After Supabase consumes the URL tokens, strip them so a page refresh
-      // won't re-parse stale/expired tokens (causing 429s on /token endpoint).
-      if (_event === "SIGNED_IN" || _event === "TOKEN_REFRESHED") {
-        stripAuthHashParams();
-      }
+      // After Supabase processes the URL tokens (success or failure), strip
+      // them so a page refresh won't re-parse them (preventing 429 loops).
+      if (urlHadTokens) stripAuthHashParams();
     });
 
     return () => {

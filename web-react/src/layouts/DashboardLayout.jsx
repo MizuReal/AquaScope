@@ -156,17 +156,38 @@ export default function DashboardLayout() {
     let isMounted = true;
 
     const guardByProfile = async () => {
-      const { data: profile, error: profileError } = await supabase
-        .from(SUPABASE_PROFILES_TABLE)
-        .select("role, status")
-        .eq("id", userId)
-        .maybeSingle();
+      // Retry once on transient errors (429 rate-limit, network failures)
+      let profile = null;
+      let profileError = null;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await supabase
+          .from(SUPABASE_PROFILES_TABLE)
+          .select("role, status")
+          .eq("id", userId)
+          .maybeSingle();
+        profile = res.data;
+        profileError = res.error;
+        if (!profileError) break;
+        if (attempt === 0) await new Promise((r) => setTimeout(r, 2000));
+        if (!isMounted) return false;
+      }
 
       if (!isMounted) return false;
 
       if (profileError) {
-        navigate("/?auth=required&reason=signin_required", { replace: true });
-        return false;
+        // Only redirect on auth/permission errors, not transient failures
+        const code = profileError?.code;
+        const status = profileError?.status ?? profileError?.statusCode;
+        const isAuthError = code === "PGRST301" || status === 401 || status === 403;
+        if (isAuthError) {
+          navigate("/?auth=required&reason=signin_required", { replace: true });
+          return false;
+        }
+        // For transient errors (429, network), allow through with a warning
+        console.warn("[DashboardLayout] Profile guard transient error, allowing through:", profileError.message);
+        setAuthChecked(true);
+        return true;
       }
 
       if (isDeactivatedAccount(profile?.status)) {
