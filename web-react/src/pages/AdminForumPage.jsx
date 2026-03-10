@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/lib/AuthContext";
@@ -18,6 +18,12 @@ const IconUnlock = ({ className = "h-4 w-4" }) => (
 );
 const IconSearch = ({ className = "h-4 w-4" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+);
+const IconChevron = ({ className = "h-4 w-4", direction = "right" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`${className} transition-transform ${direction === "down" ? "rotate-90" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+);
+const IconTrash = ({ className = "h-4 w-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
 );
 
 function formatRelativeTime(dateStr) {
@@ -46,6 +52,11 @@ export default function AdminForumPage() {
   const [lockReason, setLockReason] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const successTimer = useRef(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [expandedPosts, setExpandedPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [deleteModalThread, setDeleteModalThread] = useState(null);
+  const [deletingId, setDeletingId] = useState("");
 
   /* pagination */
   const [page, setPage] = useState(1);
@@ -196,6 +207,87 @@ export default function AdminForumPage() {
     setLockReason("");
   };
 
+  /* ── toggle thread expand / load posts ── */
+  const toggleExpand = async (threadId) => {
+    if (expandedId === threadId) { setExpandedId(null); return; }
+    setExpandedId(threadId);
+    setExpandedPosts([]);
+    setLoadingPosts(true);
+    try {
+      const { data: posts, error: err } = await supabase
+        .from("forum_posts")
+        .select("id, user_id, body, created_at")
+        .eq("thread_id", threadId)
+        .order("created_at", { ascending: true });
+      if (err) throw err;
+      const userIds = [...new Set((posts || []).map((p) => p.user_id).filter(Boolean))];
+      let profileMap = new Map();
+      if (userIds.length) {
+        const { data: profiles } = await supabase
+          .from(SUPABASE_PROFILES_TABLE)
+          .select("id, display_name")
+          .in("id", userIds);
+        (profiles || []).forEach((p) => profileMap.set(p.id, p));
+      }
+      setExpandedPosts(
+        (posts || []).map((p) => ({
+          ...p,
+          authorName: profileMap.get(p.user_id)?.display_name || "Unknown",
+        })),
+      );
+    } catch {
+      setExpandedPosts([]);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  /* ── delete a single post ── */
+  const deletePost = async (postId) => {
+    if (deletingId) return;
+    setDeletingId(postId);
+    try {
+      await supabase.from("forum_post_likes").delete().eq("post_id", postId);
+      const { error: err } = await supabase.from("forum_posts").delete().eq("id", postId);
+      if (err) throw err;
+      setExpandedPosts((prev) => prev.filter((p) => p.id !== postId));
+      flash("Post deleted.");
+    } catch (e) {
+      setError(e?.message || "Failed to delete post.");
+    } finally {
+      setDeletingId("");
+    }
+  };
+
+  /* ── delete entire thread (cascade) ── */
+  const deleteThread = async (thread) => {
+    if (deletingId) return;
+    setDeletingId(thread.id);
+    setError("");
+    try {
+      const { data: posts } = await supabase.from("forum_posts").select("id").eq("thread_id", thread.id);
+      const postIds = (posts || []).map((p) => p.id);
+      if (postIds.length) {
+        await supabase.from("forum_post_likes").delete().in("post_id", postIds);
+      }
+      await supabase.from("forum_posts").delete().eq("thread_id", thread.id);
+      await supabase.from("forum_thread_likes").delete().eq("thread_id", thread.id);
+      await supabase.from("forum_thread_categories").delete().eq("thread_id", thread.id);
+      const { error: err } = await supabase.from("forum_threads").delete().eq("id", thread.id);
+      if (err) throw err;
+      setThreads((prev) => prev.filter((t) => t.id !== thread.id));
+      setTotalCount((c) => c - 1);
+      if (expandedId === thread.id) setExpandedId(null);
+      loadStats();
+      flash(`Deleted: "${thread.title}"`);
+    } catch (e) {
+      setError(e?.message || "Failed to delete thread.");
+    } finally {
+      setDeletingId("");
+      setDeleteModalThread(null);
+    }
+  };
+
   /* ── pagination computed ── */
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const startIndex = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -208,7 +300,7 @@ export default function AdminForumPage() {
         <p className="text-xs uppercase tracking-[0.4em] text-sky-600">Admin Panel</p>
         <h1 className="text-3xl font-semibold text-slate-900">Forum Thread Control</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Lock or unlock community threads. Locked threads block all new replies.
+          View, lock, unlock, or delete community threads and posts.
         </p>
       </header>
 
@@ -299,83 +391,148 @@ export default function AdminForumPage() {
             </thead>
             <tbody>
               {threads.map((thread) => (
-                <tr
-                  key={thread.id}
-                  className={`border-b border-slate-100 transition hover:bg-slate-50/70 ${thread.is_locked ? "bg-amber-50/30" : ""}`}
-                >
-                  <td className="max-w-[260px] truncate px-4 py-3 font-medium text-slate-900">
-                    {thread.title}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                    <p className="font-medium">{thread.authorName}</p>
-                    {thread.authorOrg && (
-                      <p className="text-[11px] text-slate-400">{thread.authorOrg}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(thread.categories || []).map((c) => (
-                        <span key={c.id} className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
-                          {c.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {thread.is_locked ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-700">
-                        <IconLock className="h-3 w-3" /> Locked
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700">
-                        <IconUnlock className="h-3 w-3" /> Open
-                      </span>
-                    )}
-                  </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-xs text-slate-500">
-                    {thread.is_locked ? (thread.lock_reason || "Thread locked") : "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
-                    {formatRelativeTime(thread.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                <Fragment key={thread.id}>
+                  <tr
+                    className={`border-b border-slate-100 transition hover:bg-slate-50/70 ${thread.is_locked ? "bg-amber-50/30" : ""}`}
+                  >
+                    <td className="max-w-[260px] px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(thread.id)}
+                        className="flex items-center gap-2 text-left font-medium text-slate-900 transition hover:text-sky-700"
+                      >
+                        <IconChevron className="h-3.5 w-3.5 shrink-0" direction={expandedId === thread.id ? "down" : "right"} />
+                        <span className="truncate">{thread.title}</span>
+                      </button>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      <p className="font-medium">{thread.authorName}</p>
+                      {thread.authorOrg && (
+                        <p className="text-[11px] text-slate-400">{thread.authorOrg}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(thread.categories || []).map((c) => (
+                          <span key={c.id} className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
+                            {c.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       {thread.is_locked ? (
-                        <button
-                          type="button"
-                          disabled={busyId === thread.id}
-                          onClick={() => toggleLock(thread)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
-                        >
-                          <IconUnlock className="h-3.5 w-3.5" />
-                          {busyId === thread.id ? "..." : "Unlock"}
-                        </button>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-amber-700">
+                          <IconLock className="h-3 w-3" /> Locked
+                        </span>
                       ) : (
-                        <>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-700">
+                          <IconUnlock className="h-3 w-3" /> Open
+                        </span>
+                      )}
+                    </td>
+                    <td className="max-w-[180px] truncate px-4 py-3 text-xs text-slate-500">
+                      {thread.is_locked ? (thread.lock_reason || "Thread locked") : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                      {formatRelativeTime(thread.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        {thread.is_locked ? (
                           <button
                             type="button"
                             disabled={busyId === thread.id}
                             onClick={() => toggleLock(thread)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
-                            title='Lock with default "Thread locked" reason'
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                           >
-                            <IconLock className="h-3.5 w-3.5" />
-                            {busyId === thread.id ? "..." : "Lock"}
+                            <IconUnlock className="h-3.5 w-3.5" />
+                            {busyId === thread.id ? "..." : "Unlock"}
                           </button>
-                          <button
-                            type="button"
-                            disabled={busyId === thread.id}
-                            onClick={() => { setLockModalThread(thread); setLockReason(""); }}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-                            title="Lock with a custom reason"
-                          >
-                            Lock + Reason
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busyId === thread.id}
+                              onClick={() => toggleLock(thread)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                              title='Lock with default "Thread locked" reason'
+                            >
+                              <IconLock className="h-3.5 w-3.5" />
+                              {busyId === thread.id ? "..." : "Lock"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === thread.id}
+                              onClick={() => { setLockModalThread(thread); setLockReason(""); }}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                              title="Lock with a custom reason"
+                            >
+                              Lock + Reason
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDeleteModalThread(thread)}
+                          disabled={!!deletingId}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                          title="Delete thread"
+                        >
+                          <IconTrash className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedId === thread.id && (
+                    <tr className="border-b border-slate-100 bg-slate-50/60">
+                      <td colSpan={7} className="px-6 py-4">
+                        <div className="space-y-4">
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Thread Body</p>
+                            {thread.body ? (
+                              <p className="whitespace-pre-wrap text-sm text-slate-700">{thread.body}</p>
+                            ) : (
+                              <p className="text-sm italic text-slate-400">No body content</p>
+                            )}
+                          </div>
+                          <div>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                              Replies {loadingPosts ? "" : `(${expandedPosts.length})`}
+                            </p>
+                            {loadingPosts ? (
+                              <p className="text-xs text-slate-400">Loading replies...</p>
+                            ) : expandedPosts.length === 0 ? (
+                              <p className="text-xs italic text-slate-400">No replies yet.</p>
+                            ) : (
+                              <div className="max-h-80 space-y-2 overflow-y-auto">
+                                {expandedPosts.map((post) => (
+                                  <div key={post.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-slate-400">
+                                        <span className="font-medium text-slate-600">{post.authorName}</span>{" · "}{formatRelativeTime(post.created_at)}
+                                      </p>
+                                      <p className="mt-1 break-words whitespace-pre-wrap text-sm text-slate-700">{post.body}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => deletePost(post.id)}
+                                      disabled={deletingId === post.id}
+                                      className="shrink-0 rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 transition hover:bg-rose-100 disabled:opacity-50"
+                                      title="Delete reply"
+                                    >
+                                      <IconTrash className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -414,6 +571,39 @@ export default function AdminForumPage() {
                 className="rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:bg-amber-600"
               >
                 Lock Thread
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* delete confirmation modal */}
+      {deleteModalThread && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-slate-900">Delete Thread</h2>
+            <p className="mt-1 truncate text-sm text-slate-500">
+              {deleteModalThread.title}
+            </p>
+            <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              This will permanently delete the thread, all its replies, and associated likes. This action cannot be undone.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteModalThread(null)}
+                disabled={!!deletingId}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteThread(deleteModalThread)}
+                disabled={!!deletingId}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold uppercase tracking-[0.15em] text-white transition hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingId ? "Deleting..." : "Delete Permanently"}
               </button>
             </div>
           </div>

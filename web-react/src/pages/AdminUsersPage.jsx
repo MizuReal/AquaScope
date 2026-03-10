@@ -138,6 +138,9 @@ export default function AdminUsersPage() {
   // Prevents auth-state events that fire during initialization from superseding the first load.
   const sessionAcquiredRef = useRef(false);
   const { toasts, addToast, dismissToast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const loadProfiles = useCallback(async ({ silent = false, showToastOnError = true } = {}) => {
     if (!supabase) {
@@ -479,8 +482,29 @@ export default function AdminUsersPage() {
     [busyRowId, currentUserId],
   );
 
+  const filteredProfiles = useMemo(() => {
+    let result = profiles;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (p) =>
+          (p.display_name || "").toLowerCase().includes(q) ||
+          (p.organization || "").toLowerCase().includes(q) ||
+          (p.id || "").toLowerCase().includes(q),
+      );
+    }
+    if (roleFilter !== "all") {
+      const roleVal = roleFilter === "admin" ? ADMIN_ROLE_VALUE : 0;
+      result = result.filter((p) => p.role === roleVal);
+    }
+    if (statusFilter !== "all") {
+      result = result.filter((p) => (p.status || "active") === statusFilter);
+    }
+    return result;
+  }, [profiles, searchQuery, roleFilter, statusFilter]);
+
   const table = useReactTable({
-    data: profiles,
+    data: filteredProfiles,
     columns,
     state: {
       sorting,
@@ -517,6 +541,43 @@ export default function AdminUsersPage() {
 
       <article className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm text-slate-500">Deactivate/reactivate accounts and update user role directly from this table.</p>
+
+        {/* search & filter toolbar */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[220px] flex-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, org, or ID..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-sky-300"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-sky-300"
+          >
+            <option value="all">All roles</option>
+            <option value="user">Users only</option>
+            <option value="admin">Admins only</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-sky-300"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="deactivated">Deactivated only</option>
+          </select>
+          {(searchQuery || roleFilter !== "all" || statusFilter !== "all") && (
+            <span className="text-xs text-slate-400">
+              Showing {filteredProfiles.length} of {profiles.length}
+            </span>
+          )}
+        </div>
 
         {configMissing ? (
           <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
