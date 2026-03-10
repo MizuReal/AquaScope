@@ -2,10 +2,9 @@ import { useState, useRef, useEffect } from "react";
 import Lottie from "lottie-react";
 import { useAuth } from "@/lib/AuthContext";
 import { chatWithCopilot } from "@/lib/api";
+import { CHAT_TABS, buildCopilotChatAnalysis, fetchCopilotUserSnapshot } from "@/lib/copilotContext";
 import cuteRobotAnim from "@/assets/lottie/CuteRobot.json";
 import aiAnim from "@/assets/lottie/AI.json";
-
-const CHAT_TABS = { WATER: "water_quality", DATA: "my_data" };
 
 const formatCopilotText = (text = "") =>
   String(text)
@@ -44,6 +43,8 @@ export default function ChatbotWidget() {
   const [chatError, setChatError] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
   const [chatTab, setChatTab] = useState(CHAT_TABS.WATER);
+  const [userStats, setUserStats] = useState({ scans: 0, predictions: 0 });
+  const [lastSample, setLastSample] = useState(null);
   const scrollRef = useRef(null);
 
   // Auto-scroll to bottom on new messages
@@ -52,6 +53,22 @@ export default function ChatbotWidget() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [chatHistory, chatLoading]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+
+    (async () => {
+      const snapshot = await fetchCopilotUserSnapshot(user.id);
+      if (!alive) return;
+      setUserStats(snapshot.userStats);
+      setLastSample(snapshot.lastSample);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
 
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split("@")[0] || "User";
 
@@ -74,11 +91,15 @@ export default function ChatbotWidget() {
     setChatInput("");
     setChatLoading(true);
     setChatError("");
-    const ctx = chatTab === CHAT_TABS.WATER
-      ? { focus: "water_quality", guidance: "Focus on water quality interpretation, filtration suggestions, risk-level explanation, and safe follow-up actions." }
-      : { focus: "my_data", guidance: "Focus on the user's activity and trends, summarize what their dashboard metrics imply, and suggest next steps based on personal data.", user_name: displayName };
     try {
-      const p = await chatWithCopilot({ source: "web-widget", context: ctx }, next, msg);
+      const analysis = buildCopilotChatAnalysis({
+        source: "web-widget",
+        tab: chatTab,
+        displayName,
+        userStats,
+        lastSample,
+      });
+      const p = await chatWithCopilot(analysis, next, msg);
       setChatHistory((prev) => [...prev, { role: "assistant", text: p.reply || "No response received." }]);
     } catch (e) {
       const t = e?.message || "Unable to contact chatbot right now.";
@@ -110,7 +131,7 @@ export default function ChatbotWidget() {
         <button
           type="button"
           onClick={openChat}
-          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full border-2 border-sky-300 bg-white shadow-lg shadow-sky-200/50 transition-transform hover:scale-110 hover:shadow-xl hover:shadow-sky-300/40 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2"
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full border-2 border-sky-500 bg-sky-50 shadow-xl shadow-sky-400/50 transition-transform hover:scale-110 hover:shadow-2xl hover:shadow-sky-500/50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
           aria-label="Open AI chatbot"
           title="AquaScope Copilot"
         >
@@ -120,7 +141,7 @@ export default function ChatbotWidget() {
 
       {/* Chat panel */}
       {open && (
-        <div className={`fixed bottom-6 right-6 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-2xl shadow-sky-200/30 transition-all duration-200 ${active ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-95 opacity-0"}`} style={{ maxHeight: "min(36rem, calc(100dvh - 4rem))" }}>
+        <div className={`fixed bottom-6 right-6 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border-2 border-sky-400 bg-white shadow-2xl shadow-sky-400/40 ring-1 ring-sky-300 transition-all duration-200 ${active ? "translate-y-0 scale-100 opacity-100" : "translate-y-4 scale-95 opacity-0"}`} style={{ maxHeight: "min(36rem, calc(100dvh - 4rem))" }}>
           {/* Header */}
           <div className="flex items-center gap-3 border-b border-sky-100 bg-gradient-to-r from-sky-600 to-cyan-500 px-4 py-3">
             <div className="h-8 w-8 rounded-lg border border-white/20 bg-white/20 p-1">
@@ -136,7 +157,7 @@ export default function ChatbotWidget() {
           </div>
 
           {/* Tab selector */}
-          <div className="grid grid-cols-2 gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2">
+          <div className="grid grid-cols-2 gap-1.5 border-b-2 border-sky-200 bg-sky-50 px-3 py-2">
             <button type="button" className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition ${chatTab === CHAT_TABS.WATER ? "bg-sky-100 text-sky-700" : "text-slate-500 hover:bg-slate-100"}`} onClick={() => handleTabChange(CHAT_TABS.WATER)}>
               <IconWater className="h-3 w-3" />Water quality
             </button>
@@ -146,9 +167,9 @@ export default function ChatbotWidget() {
           </div>
 
           {/* Suggestions */}
-          <div className="flex flex-wrap gap-1.5 border-b border-slate-100 px-3 py-2">
+          <div className="flex flex-wrap gap-1.5 border-b-2 border-sky-200 bg-white px-3 py-2">
             {promptSuggestions.map((s) => (
-              <button key={s} type="button" className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600 transition hover:bg-sky-50 hover:text-sky-700" onClick={() => setChatInput(s)}>
+              <button key={s} type="button" className="rounded-full border border-sky-300 bg-sky-50 px-2.5 py-1 text-[10px] text-sky-700 transition hover:bg-sky-100 hover:border-sky-400 hover:text-sky-800" onClick={() => setChatInput(s)}>
                 {s}
               </button>
             ))}
@@ -159,19 +180,19 @@ export default function ChatbotWidget() {
             {chatHistory.length === 0 ? (
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-700"><IconBot className="h-3 w-3" /></span>
-                <div className="rounded-xl rounded-tl-none border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <div className="rounded-xl rounded-tl-none border-2 border-sky-200 bg-sky-50 px-3 py-2 text-xs text-slate-700">
                   <p className="font-medium">How can I help you today?</p>
                   <p className="mt-1 text-[11px] text-slate-500">{chatTab === CHAT_TABS.WATER ? "Ask about risk levels, filtration, or water parameters." : "Ask about your activity and recommendations."}</p>
                 </div>
               </div>
             ) : chatHistory.map((m, i) => (
-              <div key={`${m.role}-${i}`} className={`max-w-[88%] rounded-xl border px-3 py-2 text-xs ${m.role === "user" ? "ml-auto border-sky-300 bg-sky-100 text-slate-800" : "border-slate-200 bg-white text-slate-700"}`}>
+              <div key={`${m.role}-${i}`} className={`max-w-[88%] rounded-xl border-2 px-3 py-2 text-xs ${m.role === "user" ? "ml-auto border-sky-400 bg-sky-100 text-slate-800" : "border-sky-200 bg-sky-50 text-slate-700"}`}>
                 <div className="mb-0.5 inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-slate-400">{m.role === "user" ? <IconData className="h-2.5 w-2.5" /> : <IconBot className="h-2.5 w-2.5" />}{m.role === "user" ? "You" : "Copilot"}</div>
                 <p className="whitespace-pre-line">{m.role === "assistant" ? formatCopilotText(m.text) : m.text}</p>
               </div>
             ))}
             {chatLoading && (
-              <div className="max-w-[88%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+              <div className="max-w-[88%] rounded-xl border-2 border-sky-200 bg-sky-50 px-3 py-2 text-xs text-slate-700">
                 <div className="mb-0.5 inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-slate-400"><IconBot className="h-2.5 w-2.5" />Copilot</div>
                 <div className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-400" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-400 [animation-delay:120ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-400 [animation-delay:240ms]" /><span className="ml-1 text-[10px] text-slate-400">Thinking...</span></div>
               </div>
@@ -182,9 +203,9 @@ export default function ChatbotWidget() {
           {chatError && <p className="mx-3 rounded-lg border border-rose-300 bg-rose-50 px-2 py-1.5 text-[10px] text-rose-700">{chatError}</p>}
 
           {/* Input */}
-          <div className="flex items-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2.5">
+          <div className="flex items-end gap-2 border-t-2 border-sky-200 bg-sky-50 px-3 py-2.5">
             <textarea
-              className="min-h-[2.5rem] max-h-24 flex-1 resize-none rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none ring-sky-300 placeholder:text-slate-400 focus:ring"
+              className="min-h-[2.5rem] max-h-24 flex-1 resize-none rounded-xl border-2 border-sky-300 bg-white px-3 py-2 text-xs text-slate-800 outline-none ring-sky-400 placeholder:text-slate-400 focus:ring focus:border-sky-500"
               placeholder={chatTab === CHAT_TABS.WATER ? "Ask about water quality..." : "Ask about your data..."}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}

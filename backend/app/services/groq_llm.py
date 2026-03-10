@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -22,6 +23,61 @@ logger = logging.getLogger(__name__)
 _MODEL = "llama-3.3-70b-versatile"
 _MAX_RETRIES = 3
 _INITIAL_BACKOFF = 5  # seconds
+
+_WATER_TOPIC_KEYWORDS = {
+    "water",
+    "potable",
+    "drink",
+    "drinking",
+    "safety",
+    "safe",
+    "unsafe",
+    "sample",
+    "risk",
+    "microbial",
+    "bacteria",
+    "contamin",
+    "filter",
+    "filtration",
+    "boil",
+    "chlorine",
+    "chloramines",
+    "turbidity",
+    "ph",
+    "hardness",
+    "sulfate",
+    "conductivity",
+    "trihalomethanes",
+}
+
+_DASHBOARD_TOPIC_KEYWORDS = {
+    "dashboard",
+    "data",
+    "activity",
+    "scan",
+    "scans",
+    "prediction",
+    "predictions",
+    "history",
+    "trend",
+    "metrics",
+    "result",
+}
+
+_LIGHT_SOCIAL_TURNS = {
+    "hi",
+    "hello",
+    "hey",
+    "thanks",
+    "thank you",
+    "ok",
+    "okay",
+}
+
+_OFFTOPIC_REPLY = (
+    "I can only answer questions about water safety and your water-quality data. "
+    "Please ask a water-safety related question."
+)
 
 FILTRATION_SYSTEM_PROMPT = (
     "You are a friendly and knowledgeable water-safety assistant. "
@@ -93,6 +149,38 @@ def _call_with_retry(fn, *args, **kwargs):
                 time.sleep(wait)
             else:
                 raise
+
+
+def _is_query_relevant(user_message: str, focus: str) -> bool:
+    text = (user_message or "").strip().lower()
+    if not text:
+        return True
+
+    if text in _LIGHT_SOCIAL_TURNS:
+        return True
+
+    if len(text.split()) <= 2 and any(greet == text for greet in _LIGHT_SOCIAL_TURNS):
+        return True
+
+    tokens = [t for t in re.split(r"[^a-z0-9]+", text) if t]
+    if not tokens:
+        return False
+
+    keyword_pool = set(_WATER_TOPIC_KEYWORDS)
+    if focus == "my_data":
+        keyword_pool.update(_DASHBOARD_TOPIC_KEYWORDS)
+
+    for token in tokens:
+        if token in keyword_pool:
+            return True
+        if any(token.startswith(stem) for stem in ("contamin", "filter", "predict")):
+            return True
+
+    return any(keyword in text for keyword in keyword_pool if len(keyword) >= 6)
+
+
+def _build_offtopic_reply(analysis: Dict, focus: str) -> str:
+    return _OFFTOPIC_REPLY
 
 
 def _build_water_context(analysis: Dict) -> str:
@@ -293,11 +381,14 @@ def chat_message(
 
     focus = (analysis.get("context") or {}).get("focus") or ""
 
+    if not _is_query_relevant(user_message, focus):
+        return _build_offtopic_reply(analysis, focus)
+
     if focus == "my_data":
         system_prompt = DASHBOARD_SYSTEM_PROMPT
         context = _build_dashboard_context(analysis)
         handshake = "Got it! I can see your dashboard activity. How can I help you today?"
-    elif focus == "water_quality" and analysis.get("source") in ("web-dashboard", "mobile-app"):
+    elif focus == "water_quality" and analysis.get("source") in ("web-dashboard", "web-widget", "mobile-app"):
         system_prompt = FILTRATION_SYSTEM_PROMPT
         context = _build_dashboard_water_context(analysis)
         handshake = "Got it! I have your latest water sample data. How can I help?"

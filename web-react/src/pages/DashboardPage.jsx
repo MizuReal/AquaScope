@@ -7,22 +7,10 @@ import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 import ForumNotificationsModal from "@/components/forum/ForumNotificationsModal";
 import { useForumNotifications } from "@/hooks/useForumNotifications";
 import { chatWithCopilot } from "@/lib/api";
+import { CHAT_TABS, buildCopilotChatAnalysis, fetchCopilotUserSnapshot } from "@/lib/copilotContext";
 import cuteRobotAnim from "@/assets/lottie/CuteRobot.json";
 import aiAnim from "@/assets/lottie/AI.json";
 import forumAnim from "@/assets/lottie/forumanim.json";
-
-/* ── Water parameters analyzed by the ML model ────────────── */
-const waterParameters = [
-  { name: "pH", range: "6.5 – 8.5", unit: "", desc: "Acidity / alkalinity" },
-  { name: "Hardness", range: "47 – 323", unit: "mg/L", desc: "Calcium & magnesium" },
-  { name: "Solids", range: "320 – 61 227", unit: "ppm", desc: "Total dissolved solids" },
-  { name: "Chloramines", range: "1.4 – 13.1", unit: "ppm", desc: "Disinfection level" },
-  { name: "Sulfate", range: "129 – 481", unit: "mg/L", desc: "Mineral content" },
-  { name: "Conductivity", range: "181 – 753", unit: "μS/cm", desc: "Ionic concentration" },
-  { name: "Organic carbon", range: "2.2 – 28.3", unit: "ppm", desc: "Organic matter" },
-  { name: "Trihalomethanes", range: "0.7 – 124", unit: "μg/L", desc: "Disinfection byproducts" },
-  { name: "Turbidity", range: "1.5 – 6.7", unit: "NTU", desc: "Water clarity" },
-];
 
 const pipelineSteps = [
   { stage: "Data ingestion", detail: "REST API, OCR, or manual entry" },
@@ -48,29 +36,6 @@ const MISSING_SCHEMA_ERROR_CODE = "3F000";
 
 const isMissingRelationError = (error) =>
   error?.code === MISSING_RELATION_ERROR_CODE || error?.code === MISSING_SCHEMA_ERROR_CODE;
-
-const countRowsForUser = async (table, userId) => {
-  const { count, error } = await supabase
-    .from(table)
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId);
-  return { count: count || 0, error };
-};
-
-const resolveContainerScansTableForUser = async (userId) => {
-  for (const table of CONTAINER_SCANS_TABLE_CANDIDATES) {
-    const result = await countRowsForUser(table, userId);
-    if (!result.error) {
-      return result.count;
-    }
-
-    if (isMissingRelationError(result.error)) {
-      continue;
-    }
-  }
-
-  return 0;
-};
 
 /* Fetch last 5 valid moss scans (LightMoss | MediumMoss | HeavyMoss) */
 const MOSS_CLASSES = ["LightMoss", "MediumMoss", "HeavyMoss"];
@@ -116,7 +81,6 @@ const resolveAvatarUrl = async (rawUrlOrPath) => {
     return "";
   }
 };
-const CHAT_TABS = { WATER: "water_quality", DATA: "my_data" };
 
 /* Strip residual markdown symbols from LLM replies */
 const formatCopilotText = (text = "") =>
@@ -307,24 +271,14 @@ export default function DashboardPage() {
     (async () => {
       try {
         const uid = sessionUser.id;
-        const { count: fc } = await supabase
-          .from("field_samples")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", uid);
-        const cc = await resolveContainerScansTableForUser(uid);
-        if (alive) setUserStats({ scans: (fc || 0) + (cc || 0), predictions: fc || 0 });
+        const snapshot = await fetchCopilotUserSnapshot(uid);
+        if (alive) {
+          setUserStats(snapshot.userStats);
+          setLastSample(snapshot.lastSample);
+        }
 
         const mossScans = await fetchRecentMossScans(uid);
         if (alive) { setRecentMossScans(mossScans); setCarouselIdx(0); }
-
-        const { data: sampleData } = await supabase
-          .from("field_samples")
-          .select("id, sample_label, ph, turbidity, risk_level, prediction_is_potable, prediction_probability, hardness, chloramines, created_at")
-          .eq("user_id", uid)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (alive && sampleData) setLastSample(sampleData);
       } catch {
       }
 
@@ -366,11 +320,15 @@ export default function DashboardPage() {
     if (!msg || chatLoading) return;
     const next = [...chatHistory, { role: "user", text: msg }];
     setChatHistory(next); setChatInput(""); setChatLoading(true); setChatError("");
-    const ctx = chatTab === CHAT_TABS.WATER
-      ? { focus: "water_quality", guidance: "Focus on water quality interpretation, filtration suggestions, risk-level explanation, and safe follow-up actions. The user's most recent sample data is provided — reference it directly when relevant.", water_parameters: waterParameters, ...(lastSample ? { last_sample: { label: lastSample.sample_label || "last sample", ph: lastSample.ph, turbidity: lastSample.turbidity, hardness: lastSample.hardness, chloramines: lastSample.chloramines, risk_level: lastSample.risk_level, is_potable: lastSample.prediction_is_potable, confidence: lastSample.prediction_probability, recorded_at: lastSample.created_at } } : {}) }
-      : { focus: "my_data", guidance: "Focus on the user's activity and trends, summarize what their dashboard metrics imply, and suggest next steps based on personal data.", dashboard_metrics: userStats, user_name: displayName, ...(lastSample ? { last_sample: { risk_level: lastSample.risk_level, is_potable: lastSample.prediction_is_potable, recorded_at: lastSample.created_at } } : {}) };
     try {
-      const p = await chatWithCopilot({ source: "web-dashboard", user_stats: userStats, context: ctx }, next, msg);
+      const analysis = buildCopilotChatAnalysis({
+        source: "web-dashboard",
+        tab: chatTab,
+        displayName,
+        userStats,
+        lastSample,
+      });
+      const p = await chatWithCopilot(analysis, next, msg);
       setChatHistory((prev) => [...prev, { role: "assistant", text: p.reply || "No response received." }]);
     } catch (e) { const t = e?.message || "Unable to contact chatbot right now."; setChatError(t); setChatHistory((prev) => [...prev, { role: "assistant", text: `Error: ${t}` }]); }
     finally { setChatLoading(false); }
@@ -610,10 +568,10 @@ export default function DashboardPage() {
       {/* Chat modal */}
       {chatOpen && (
         <div className={`fixed inset-0 z-50 flex h-[100dvh] items-end justify-center overflow-y-auto bg-slate-900/50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-200 sm:items-center ${chatModalActive ? "opacity-100" : "opacity-0"}`} onClick={closeChatModal}>
-          <div className={`my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-3xl border border-sky-200 bg-gradient-to-b from-white to-sky-50/40 p-5 shadow-2xl transition-all duration-200 ${chatModalActive ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"}`} onClick={(e) => e.stopPropagation()}>
+          <div className={`my-auto w-full max-w-3xl max-h-[calc(100dvh-2rem)] overflow-hidden rounded-3xl border-2 border-sky-400 bg-gradient-to-b from-white to-sky-50/40 p-5 shadow-2xl ring-1 ring-sky-300 transition-all duration-200 ${chatModalActive ? "translate-y-0 opacity-100" : "translate-y-12 opacity-0"}`} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl border border-sky-200 bg-sky-50 p-1"><Lottie animationData={aiAnim} loop autoplay className="h-full w-full" /></div>
+                <div className="h-10 w-10 rounded-xl border-2 border-sky-300 bg-sky-100 p-1"><Lottie animationData={aiAnim} loop autoplay className="h-full w-full" /></div>
                 <div>
                   <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800"><IconBot className="h-4 w-4" />AquaScope Copilot</p>
                   <p className="text-xs text-slate-500">
@@ -623,24 +581,24 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <button type="button" className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={closeChatModal}><IconClose className="h-3.5 w-3.5" />Close</button>
+              <button type="button" className="inline-flex items-center gap-1 rounded-full border-2 border-slate-400 px-3 py-1 text-sm text-slate-600 hover:bg-slate-100" onClick={closeChatModal}><IconClose className="h-3.5 w-3.5" />Close</button>
             </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <button type="button" className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-left text-sm font-medium transition ${chatTab === CHAT_TABS.WATER ? "border-sky-300 bg-sky-50 text-sky-700" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`} onClick={() => handleChatTabChange(CHAT_TABS.WATER)}><IconWater className="h-4 w-4" />Ask about water quality</button>
-              <button type="button" className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-left text-sm font-medium transition ${chatTab === CHAT_TABS.DATA ? "border-sky-300 bg-sky-50 text-sky-700" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"}`} onClick={() => handleChatTabChange(CHAT_TABS.DATA)}><IconData className="h-4 w-4" />Ask about my data</button>
+              <button type="button" className={`inline-flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-left text-sm font-medium transition ${chatTab === CHAT_TABS.WATER ? "border-sky-400 bg-sky-100 text-sky-700" : "border-slate-300 bg-white text-slate-600 hover:bg-sky-50 hover:border-sky-300"}`} onClick={() => handleChatTabChange(CHAT_TABS.WATER)}><IconWater className="h-4 w-4" />Ask about water quality</button>
+              <button type="button" className={`inline-flex items-center gap-2 rounded-xl border-2 px-4 py-2 text-left text-sm font-medium transition ${chatTab === CHAT_TABS.DATA ? "border-sky-400 bg-sky-100 text-sky-700" : "border-slate-300 bg-white text-slate-600 hover:bg-sky-50 hover:border-sky-300"}`} onClick={() => handleChatTabChange(CHAT_TABS.DATA)}><IconData className="h-4 w-4" />Ask about my data</button>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {promptSuggestions.map((s) => (<button key={s} type="button" className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 transition hover:bg-sky-50 hover:text-sky-700" onClick={() => setChatInput(s)}>{s}</button>))}
+              {promptSuggestions.map((s) => (<button key={s} type="button" className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs text-sky-700 transition hover:bg-sky-100 hover:border-sky-400" onClick={() => setChatInput(s)}>{s}</button>))}
             </div>
 
-            <div className="mt-4 h-[min(20rem,38dvh)] space-y-2 overflow-y-auto rounded-2xl border border-sky-100 bg-white/90 p-4">
+            <div className="mt-4 h-[min(20rem,38dvh)] space-y-2 overflow-y-auto rounded-2xl border-2 border-sky-300 bg-sky-50/60 p-4">
               {chatHistory.length === 0 ? (
                 <div className="space-y-2">
                   <div className="flex items-start gap-3">
                     <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-sky-200 bg-sky-50 text-sky-700"><IconBot className="h-3.5 w-3.5" /></span>
-                    <div className="rounded-2xl rounded-tl-none border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm space-y-1.5">
+                    <div className="rounded-2xl rounded-tl-none border-2 border-sky-200 bg-sky-50 px-4 py-3 text-sm text-slate-700 shadow-sm space-y-1.5">
                       <p className="font-medium">How can I help you today?</p>
                       {sampleGreeting ? (
                         <p className="text-xs text-slate-500 leading-relaxed">
@@ -662,13 +620,13 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ) : chatHistory.map((m, i) => (
-                <div key={`${m.role}-${i}`} className={`max-w-[85%] rounded-2xl border px-4 py-3 text-sm shadow-sm ${m.role === "user" ? "ml-auto border-sky-300 bg-sky-100 text-slate-800" : "border-slate-200 bg-white text-slate-700"}`}>
+                <div key={`${m.role}-${i}`} className={`max-w-[85%] rounded-2xl border-2 px-4 py-3 text-sm shadow-sm ${m.role === "user" ? "ml-auto border-sky-400 bg-sky-100 text-slate-800" : "border-sky-200 bg-sky-50 text-slate-700"}`}>
                   <div className="mb-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">{m.role === "user" ? <IconData className="h-3 w-3" /> : <IconBot className="h-3 w-3" />}{m.role === "user" ? "You" : "Copilot"}</div>
                   <p className="whitespace-pre-line">{m.role === "assistant" ? formatCopilotText(m.text) : m.text}</p>
                 </div>
               ))}
               {chatLoading && (
-                <div className="max-w-[85%] rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+                <div className="max-w-[85%] rounded-2xl border-2 border-sky-200 bg-sky-50 px-4 py-3 text-sm text-slate-700 shadow-sm">
                   <div className="mb-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-slate-500"><IconBot className="h-3 w-3" />Copilot</div>
                   <div className="inline-flex items-center gap-1.5 text-slate-500"><span className="h-2 w-2 animate-bounce rounded-full bg-sky-400" /><span className="h-2 w-2 animate-bounce rounded-full bg-sky-400 [animation-delay:120ms]" /><span className="h-2 w-2 animate-bounce rounded-full bg-sky-400 [animation-delay:240ms]" /><span className="ml-1 text-xs">Thinking...</span></div>
                 </div>
@@ -678,7 +636,7 @@ export default function DashboardPage() {
             {chatError && <p className="mt-3 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-700">{chatError}</p>}
 
             <div className="mt-4 flex items-end gap-3">
-              <textarea className="min-h-[88px] flex-1 resize-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none ring-sky-300 focus:ring" placeholder={chatTab === CHAT_TABS.WATER ? "Ask about filtration methods, risk interpretation, or safe water actions..." : "Ask about your trends, usage summary, and recommended next steps..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
+              <textarea className="min-h-[88px] flex-1 resize-none rounded-2xl border-2 border-sky-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none ring-sky-400 focus:ring focus:border-sky-500" placeholder={chatTab === CHAT_TABS.WATER ? "Ask about filtration methods, risk interpretation, or safe water actions..." : "Ask about your trends, usage summary, and recommended next steps..."} value={chatInput} onChange={(e) => setChatInput(e.target.value)} />
               <button type="button" className={`inline-flex min-w-[116px] items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition ${chatLoading || !chatInput.trim() ? "cursor-not-allowed bg-slate-200 text-slate-500" : "bg-sky-600 text-white hover:bg-sky-700"}`} onClick={handleSendChat} disabled={chatLoading || !chatInput.trim()}>
                 {chatLoading ? (<><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" opacity="0.3" /><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>Sending...</>) : (<><IconSend className="h-4 w-4" />Send message</>)}
               </button>
