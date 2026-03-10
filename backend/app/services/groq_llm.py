@@ -122,6 +122,19 @@ DASHBOARD_SYSTEM_PROMPT = (
     "Write in a warm, easy-to-understand tone as if talking to a non-expert."
 )
 
+COMPARE_SAMPLES_SYSTEM_PROMPT = (
+    "You are a helpful water-quality comparison assistant. "
+    "The user provides readings from two water samples taken at different times or locations. "
+    "Your job:\n"
+    "1. Compare the two samples and highlight the most important differences.\n"
+    "2. For each parameter that changed significantly, explain whether the change is an improvement or a concern.\n"
+    "3. Summarize the overall trend in 1-2 sentences (is the water getting better, worse, or staying the same?).\n"
+    "4. Suggest one practical next step.\n"
+    "Keep the response concise (180 words or less). "
+    "Do NOT use markdown symbols such as *, **, #, or backticks. "
+    "Use plain numbered steps or dashes for lists instead."
+)
+
 
 _client_instance: Optional[Groq] = None
 
@@ -474,5 +487,79 @@ def chat_container_message(
         messages=messages,
         temperature=0.5,
         max_tokens=420,
+    )
+    return response.choices[0].message.content or ""
+
+
+# ── Sample comparison ────────────────────────────────────────────────
+
+_COMPARE_PARAMS = [
+    ("ph", "pH", ""),
+    ("hardness", "Hardness", "mg/L"),
+    ("solids", "Total Dissolved Solids", "mg/L"),
+    ("chloramines", "Chloramines", "ppm"),
+    ("sulfate", "Sulfate", "mg/L"),
+    ("conductivity", "Conductivity", "µS/cm"),
+    ("organic_carbon", "Organic Carbon", "mg/L"),
+    ("trihalomethanes", "Trihalomethanes", "µg/L"),
+    ("turbidity", "Turbidity", "NTU"),
+]
+
+
+def _build_compare_context(sample_a: Dict, sample_b: Dict) -> str:
+    """Build a plain-text comparison block from two sample dicts."""
+    lines: list[str] = []
+
+    label_a = sample_a.get("sample_label") or sample_a.get("source") or "Sample A"
+    label_b = sample_b.get("sample_label") or sample_b.get("source") or "Sample B"
+    date_a = sample_a.get("created_at") or ""
+    date_b = sample_b.get("created_at") or ""
+
+    lines.append(f"Sample A: {label_a} ({date_a})")
+    risk_a = sample_a.get("risk_level") or "unknown"
+    potable_a = sample_a.get("prediction_is_potable")
+    lines.append(f"  Potable: {'yes' if potable_a else 'no'}, Risk: {risk_a}")
+
+    lines.append(f"Sample B: {label_b} ({date_b})")
+    risk_b = sample_b.get("risk_level") or "unknown"
+    potable_b = sample_b.get("prediction_is_potable")
+    lines.append(f"  Potable: {'yes' if potable_b else 'no'}, Risk: {risk_b}")
+
+    lines.append("")
+    lines.append("Parameter comparison:")
+    for key, label, unit in _COMPARE_PARAMS:
+        val_a = sample_a.get(key)
+        val_b = sample_b.get(key)
+        str_a = f"{val_a:.2f}" if isinstance(val_a, (int, float)) else "N/A"
+        str_b = f"{val_b:.2f}" if isinstance(val_b, (int, float)) else "N/A"
+        delta = ""
+        if isinstance(val_a, (int, float)) and isinstance(val_b, (int, float)):
+            diff = val_b - val_a
+            delta = f" (change: {diff:+.2f})"
+        lines.append(f"  {label}: {str_a} -> {str_b} {unit}{delta}")
+
+    return "\n".join(lines)
+
+
+def get_compare_summary(sample_a: Dict, sample_b: Dict) -> str:
+    """One-shot AI comparison of two water samples."""
+    client = _get_client()
+    context = _build_compare_context(sample_a, sample_b)
+
+    response = _call_with_retry(
+        client.chat.completions.create,
+        model=_MODEL,
+        messages=[
+            {"role": "system", "content": COMPARE_SAMPLES_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Here are two water samples to compare:\n\n{context}\n\n"
+                    "Please compare them and highlight key changes."
+                ),
+            },
+        ],
+        temperature=0.4,
+        max_tokens=512,
     )
     return response.choices[0].message.content or ""

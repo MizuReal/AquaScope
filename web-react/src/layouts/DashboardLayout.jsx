@@ -13,6 +13,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   { label: "My scans", href: "/dashboard/scans", icon: "scans" },
   { label: "Container", href: "/dashboard/container-scan", icon: "container" },
+  { label: "Compare", href: "/dashboard/compare", icon: "compare" },
   { label: "Community", href: "/dashboard/community", icon: "community" },
   { label: "Analytics", href: "/dashboard/analytics", icon: "analytics" },
   { label: "Profile", href: "/dashboard/profile", icon: "profile" },
@@ -61,6 +62,21 @@ function NavIcon({ icon }) {
         <rect x="6" y="11" width="3" height="7" rx="0.8" />
         <rect x="11" y="8" width="3" height="10" rx="0.8" />
         <rect x="16" y="5" width="3" height="13" rx="0.8" />
+      </svg>
+    );
+  }
+
+  if (icon === "compare") {
+    return (
+      <svg {...commonProps}>
+        <path d="M16 3h5v5" />
+        <path d="M8 3H3v5" />
+        <path d="M21 3l-7 7" />
+        <path d="M3 3l7 7" />
+        <path d="M3 21h18" />
+        <path d="M7 14v4" />
+        <path d="M12 12v6" />
+        <path d="M17 10v8" />
       </svg>
     );
   }

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.services.groq_llm import (
     chat_container_message,
     chat_message,
+    get_compare_summary,
     get_container_cleaning_suggestion,
     get_filtration_suggestion,
 )
@@ -128,3 +129,32 @@ def chat_container(body: ChatRequest) -> ChatResponse:
             detail = "AI rate limit reached. Please wait a moment and try again."
         raise HTTPException(status_code=code, detail=detail) from exc
     return ChatResponse(reply=reply)
+
+
+# ── Compare samples ──────────────────────────────────────────────────
+
+class CompareRequest(BaseModel):
+    sample_a: Dict
+    sample_b: Dict
+
+
+class CompareResponse(BaseModel):
+    summary: str
+
+
+@router.post("/compare-samples", response_model=CompareResponse)
+def compare_samples(body: CompareRequest) -> CompareResponse:
+    """One-shot AI comparison of two water samples."""
+    logger.info("=== /compare-samples hit ===")
+    try:
+        text = get_compare_summary(body.sample_a, body.sample_b)
+        logger.info("  compare summary length: %d chars", len(text))
+    except Exception as exc:
+        logger.exception("Groq compare-samples failed")
+        code = 502
+        detail = str(exc)
+        if GroqRateLimitError and isinstance(exc, GroqRateLimitError):
+            code = 429
+            detail = "AI rate limit reached. Please wait a moment and try again."
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return CompareResponse(summary=text)

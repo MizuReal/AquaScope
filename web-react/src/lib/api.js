@@ -308,4 +308,20 @@ export async function assessMicrobialRisk(sample) {
   return response.json();
 }
 
+export async function getCompareSummary(sampleA, sampleB) {
+  const response = await fetch(`${API_BASE_URL}/chat/compare-samples`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ sample_a: sampleA, sample_b: sampleB }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    if (response.status === 429) {
+      throw new Error("AI rate limit reached — please wait a moment and retry.");
+    }
+    throw new Error(payload?.detail || "Comparison failed.");
+  }
+  return response.json();
+}
+
 export { API_BASE_URL };

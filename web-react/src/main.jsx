@@ -20,6 +20,7 @@ import AdminAnalyticsPage from './pages/AdminAnalyticsPage'
 import AdminForumPage from './pages/AdminForumPage'
 import AdminProfilePage from './pages/AdminProfilePage'
 import ContainerScanPage from './pages/ContainerScanPage'
+import CompareSamplesPage from './pages/CompareSamplesPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
@@ -39,6 +40,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="scans" element={<ScansPage />} />
             <Route path="container-scan" element={<ContainerScanPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="compare" element={<CompareSamplesPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="community" element={<CommunityPage />} />
