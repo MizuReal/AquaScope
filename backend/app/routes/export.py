@@ -217,6 +217,7 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         gap: 8px;
         height: calc(var(--safe-height) - var(--header-height) - 8px);
         min-height: calc(var(--safe-height) - var(--header-height) - 8px);
+        padding-bottom: 2px;
       }}
 
       .chart-card {{
@@ -224,9 +225,9 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
         background: #ffffff;
         border-radius: 10px;
         padding: 8px;
-        height: var(--chart-slot-height);
-        min-height: var(--chart-slot-height);
-        max-height: var(--chart-slot-height);
+        height: calc(var(--chart-slot-height) - 2px);
+        min-height: calc(var(--chart-slot-height) - 2px);
+        max-height: calc(var(--chart-slot-height) - 2px);
         overflow: hidden;
         display: flex;
         flex-direction: column;
