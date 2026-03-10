@@ -102,8 +102,8 @@ export default function Navigation() {
     params.delete("auth");
     params.delete("reason");
     const nextSearch = params.toString();
-    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash || ""}`, { replace: true });
-  }, [location.hash, location.pathname, location.search, navigate]);
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (location.pathname !== "/") return;
@@ -153,10 +153,10 @@ export default function Navigation() {
 
     params.delete("signup");
     const nextSearch = params.toString();
-    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash || ""}`, { replace: true });
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
 
     return () => window.clearTimeout(timer);
-  }, [location.hash, location.pathname, location.search, navigate, sessionUser]);
+  }, [location.pathname, location.search, navigate, sessionUser]);
 
   const hydrateIdentity = useCallback(async (user, activeRef) => {
     if (!user) {

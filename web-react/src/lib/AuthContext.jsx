@@ -2,6 +2,32 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 import { isSupabaseConfigured, supabase } from "@/lib/supabaseClient";
 
+const AUTH_HASH_KEYS = [
+  "access_token",
+  "refresh_token",
+  "expires_in",
+  "expires_at",
+  "token_type",
+  "type",
+  "provider_token",
+  "provider_refresh_token",
+];
+
+/** Strip Supabase auth tokens from the URL hash so stale tokens are never re-parsed. */
+function stripAuthHashParams() {
+  if (typeof window === "undefined") return;
+  const raw = window.location.hash;
+  if (!raw || raw.length <= 1) return;
+
+  const hashParams = new URLSearchParams(raw.slice(1));
+  if (!AUTH_HASH_KEYS.some((k) => hashParams.has(k))) return;
+
+  AUTH_HASH_KEYS.forEach((k) => hashParams.delete(k));
+  const remaining = hashParams.toString();
+  const newUrl = `${window.location.pathname}${window.location.search}${remaining ? `#${remaining}` : ""}`;
+  window.history.replaceState(null, "", newUrl);
+}
+
 /**
  * Single source of truth for Supabase auth state across the whole app.
  *
@@ -39,6 +65,12 @@ export function AuthProvider({ children }) {
       if (!isMounted) return;
       setSession(newSession);
       setLoading(false);
+
+      // After Supabase consumes the URL tokens, strip them so a page refresh
+      // won't re-parse stale/expired tokens (causing 429s on /token endpoint).
+      if (_event === "SIGNED_IN" || _event === "TOKEN_REFRESHED") {
+        stripAuthHashParams();
+      }
     });
 
     return () => {

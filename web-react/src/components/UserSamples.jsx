@@ -765,13 +765,29 @@ export default function UserSamples() {
                       )}
 
                       {isValid && (
-                        <div className="rounded-3xl border border-slate-200 bg-white p-6">
-                          <div className="mb-2 flex items-center justify-between">
-                            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Container advisor</p>
-                            <span className="rounded-full border border-sky-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-sky-700">AI</span>
+                        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white p-5">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                              </span>
+                              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">Container advisor</p>
+                            </div>
+                            <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-violet-700">AI</span>
                           </div>
-                          <p className="mb-3 text-xs text-slate-500">Based on class: {containerMeta.label}</p>
-                          {containerAdvisorLoading ? <p className="text-sm text-slate-500">Generating cleaning guidance...</p> : containerAdvisorError ? <p className="text-sm text-rose-700">{containerAdvisorError}</p> : <p className="text-sm leading-6 text-slate-700">{formatAdvisorText(containerAdvisorText)}</p>}
+                          <p className="mb-3 text-[11px] text-slate-400">Automated cleaning &amp; maintenance guidance based on container class: <span className={`font-semibold ${containerMeta.color}`}>{containerMeta.label}</span>.</p>
+                          {containerAdvisorLoading ? (
+                            <div className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50/50 p-4">
+                              <svg className="h-5 w-5 animate-spin text-violet-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                              <p className="text-sm text-slate-500">Generating cleaning guidance…</p>
+                            </div>
+                          ) : containerAdvisorError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{containerAdvisorError}</div>
+                          ) : containerAdvisorText ? (
+                            <div className="rounded-xl border border-violet-100 bg-white p-4 text-sm leading-relaxed text-slate-700 whitespace-pre-line">{formatAdvisorText(containerAdvisorText)}</div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">Advisor results will appear here.</div>
+                          )}
                         </div>
                       )}
 
@@ -920,8 +936,25 @@ export default function UserSamples() {
                       )}
                       {possibleBacteria.length > 0 && (
                         <div className="mt-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Possible bacteria detected</p>
-                          <div className="flex flex-wrap gap-2">{possibleBacteria.map((b) => <span key={b} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{b}</span>)}</div>
+                          <p className={`text-xs font-semibold uppercase tracking-[0.2em] mb-2 ${microbialStyle.text}`}>Possible bacteria detected</p>
+                          <div className="flex flex-wrap gap-2">
+                            {possibleBacteria.map((b) => (
+                              <span
+                                key={b}
+                                className={`rounded-full border px-3 py-1 text-xs font-medium italic ${
+                                  (microbialRisk || "").toLowerCase() === "high"
+                                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                                    : (microbialRisk || "").toLowerCase() === "medium"
+                                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                                      : (microbialRisk || "").toLowerCase() === "low"
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : "border-slate-200 bg-slate-50 text-slate-600"
+                                }`}
+                              >
+                                {b}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
