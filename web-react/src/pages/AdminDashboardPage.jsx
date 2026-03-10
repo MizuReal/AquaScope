@@ -737,8 +737,8 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      <article className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Operational health</p>
+      <article className="mt-8 rounded-2xl border-2 border-sky-200 bg-white p-6 shadow-sm">
+        <p className="text-xs uppercase tracking-[0.35em] text-sky-600">Operational health</p>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           {healthItems.map((item) => (
             <div key={item.label} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
@@ -760,17 +760,7 @@ export default function AdminDashboardPage() {
         </div>
       </article>
 
-      <article className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Access policy</p>
-        <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Admin authorization follows public.profiles.role where
-          <strong className="text-sky-600"> {ADMIN_ROLE_VALUE} = admin</strong>.
-          Account status uses public.profiles.status with active/deactivated states.
-          <span className="ml-1 block text-xs text-slate-400 sm:inline">
-            Snapshot tables: {resolvedTables.field} / {resolvedTables.container}
-          </span>
-        </div>
-      </article>
+
     </section>
   );
 }
