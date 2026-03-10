@@ -159,22 +159,16 @@ const PredictionAnalytics = ({ probability, threshold, isDark = true }) => {
 	const p = probability;
 	const t = threshold;
 
-	// Certainty — how far from the 50/50 uncertainty point (0 = coin flip, 1 = fully certain)
-	const certainty = Math.abs(p - 0.5) * 2;
-	// Threshold margin — normalized distance from decision boundary
-	const margin = Math.min(Math.abs(p - t) / t, 1);
-	// Signal strength — dominant-class probability (always the "winning" side)
-	const signalStrength = p >= 0.5 ? p : 1 - p;
-	// Decision stability — would a ±5pp shift flip the result?
+	// Decision stability — would a small shift flip the result?
 	const distFromThreshold = Math.abs(p - t);
 	const stability = Math.min(distFromThreshold / 0.15, 1); // normalized: 15pp+ = fully stable
 
 	// Interpretation
 	const getVerdict = () => {
-		if (certainty >= 0.7 && stability >= 0.6)
-			return { text: 'Strong prediction — high certainty with stable margin from threshold.', color: 'text-emerald-400' };
-		if (certainty >= 0.4 && stability >= 0.3)
-			return { text: 'Moderate prediction — reasonable certainty but monitor for input sensitivity.', color: 'text-sky-400' };
+		if (p >= 0.85 && stability >= 0.6)
+			return { text: 'Strong prediction — high confidence with stable margin from threshold.', color: 'text-emerald-400' };
+		if (p >= 0.65 && stability >= 0.3)
+			return { text: 'Moderate prediction — reasonable confidence but monitor for input sensitivity.', color: 'text-sky-400' };
 		if (stability < 0.3)
 			return { text: 'Borderline — small input changes could flip the outcome. Treat with caution.', color: 'text-amber-400' };
 		return { text: 'Weak signal — probability is close to uncertainty zone. Additional data recommended.', color: 'text-rose-400' };
@@ -188,22 +182,10 @@ const PredictionAnalytics = ({ probability, threshold, isDark = true }) => {
 			</Text>
 			<View className="gap-3">
 				<AnalyticsMetric
-					label="Certainty"
-					value={certainty}
+					label="Threshold Distance"
+					value={Math.min(Math.abs(p - t) / Math.max(t, 1 - t), 1)}
 					isDark={isDark}
-					description="Distance from 50/50 uncertainty — higher means the model is more decisive"
-				/>
-				<AnalyticsMetric
-					label="Threshold Margin"
-					value={margin}
-					isDark={isDark}
-					description={`Buffer from the ${Math.round(t * 100)}% decision boundary — larger margin = more room for error`}
-				/>
-				<AnalyticsMetric
-					label="Signal Strength"
-					value={signalStrength}
-					isDark={isDark}
-					description="Dominant-class probability — raw strength of the predicted outcome"
+					description={`Normalized gap from the ${Math.round(t * 100)}% decision boundary`}
 				/>
 				<AnalyticsMetric
 					label="Decision Stability"

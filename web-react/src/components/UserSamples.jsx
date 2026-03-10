@@ -819,15 +819,12 @@ export default function UserSamples() {
               const microbialMaxScore = detailItem.raw?.microbial_max_score || 14;
               const possibleBacteria = detailItem.raw?.possible_bacteria || [];
               const microbialStyle = MICROBIAL_STYLES[(microbialRisk || "").toLowerCase()] || MICROBIAL_STYLES.default;
-              const certainty = Math.abs(confidenceValue - 0.5) * 2;
-              const margin = Math.min(Math.abs(confidenceValue - decisionThreshold) / decisionThreshold, 1);
-              const signalStrength = confidenceValue >= 0.5 ? confidenceValue : 1 - confidenceValue;
               const distFromThreshold = Math.abs(confidenceValue - decisionThreshold);
               const stability = Math.min(distFromThreshold / 0.15, 1);
               const analyticsVerdict =
-                certainty >= 0.7 && stability >= 0.6
+                confidenceValue >= 0.85 && stability >= 0.6
                   ? { text: "Strong prediction with stable margin.", color: "text-emerald-600", icon: "✦" }
-                  : certainty >= 0.4 && stability >= 0.3
+                  : confidenceValue >= 0.65 && stability >= 0.3
                     ? { text: "Moderate prediction. Monitor for input sensitivity.", color: "text-sky-600", icon: "◆" }
                     : stability < 0.3
                       ? { text: "Borderline. Small changes could flip the outcome.", color: "text-amber-600", icon: "▲" }
@@ -896,9 +893,7 @@ export default function UserSamples() {
                       </div>
                       <div className="grid gap-2.5 sm:grid-cols-2">
                         {[
-                          { label: "Certainty", value: certainty, color: "border-l-emerald-400" },
-                          { label: "Margin", value: margin, color: "border-l-sky-400" },
-                          { label: "Signal strength", value: signalStrength, color: "border-l-violet-400" },
+                          { label: "Threshold distance", value: Math.min(Math.abs(confidenceValue - decisionThreshold) / Math.max(decisionThreshold, 1 - decisionThreshold), 1), color: "border-l-sky-400" },
                           { label: "Stability", value: stability, color: "border-l-amber-400" },
                         ].map((metric) => (
                           <div key={metric.label} className={`rounded-xl border border-slate-100 border-l-[3px] ${metric.color} bg-slate-50 p-3`}>
