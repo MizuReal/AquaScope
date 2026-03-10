@@ -85,7 +85,7 @@ def _build_export_html(payload: AnalyticsExportRequest) -> str:
                     f'<div class="plot" id="{chart_id}" data-chart="{config_b64}"></div>'
                     f"{metrics_markup}"
                     '<div class="insight">'
-                    '<p class="insight-label">Chatbot trend insight</p>'
+                    '<p class="insight-label">Trend Insight</p>'
                     f'<p class="insight-text">{html.escape(chart.insight)}</p>'
                     "</div>"
                     "</article>"

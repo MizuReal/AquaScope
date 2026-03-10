@@ -1084,7 +1084,7 @@ export default function AdminAnalyticsPage() {
                       style={{ width: "100%", height: "260px" }}
                     />
                     <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.registration}</p>
                     </div>
                   </>
@@ -1157,7 +1157,7 @@ export default function AdminAnalyticsPage() {
                       </div>
                     </div>
                     <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.accountComposition}</p>
                     </div>
                   </>
@@ -1246,7 +1246,7 @@ export default function AdminAnalyticsPage() {
                       style={{ width: "100%", height: "270px" }}
                     />
                     <div className="mt-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs text-violet-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.ingestion}</p>
                     </div>
                   </>
@@ -1311,7 +1311,7 @@ export default function AdminAnalyticsPage() {
                       </div>
                     </div>
                     <div className="mt-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs text-emerald-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.potability}</p>
                     </div>
                   </>
@@ -1377,7 +1377,7 @@ export default function AdminAnalyticsPage() {
                       style={{ width: "100%", height: "260px" }}
                     />
                     <div className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.risk}</p>
                     </div>
                   </>
@@ -1451,7 +1451,7 @@ export default function AdminAnalyticsPage() {
                       </span>
                     </div>
                     <div className="mt-2 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs text-indigo-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.fieldConfidence}</p>
                     </div>
                   </>
@@ -1530,7 +1530,7 @@ export default function AdminAnalyticsPage() {
                         }}
                       />
                       <div className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs text-amber-800">
-                        <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                        <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                         <p className="mt-1 leading-relaxed">{cardInsights.classBreakdown}</p>
                       </div>
                     </>
@@ -1594,7 +1594,7 @@ export default function AdminAnalyticsPage() {
                           </div>
                         </div>
                         <div className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs text-amber-800">
-                          <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                          <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                           <p className="mt-1 leading-relaxed">{cardInsights.scanValidity}</p>
                         </div>
                       </>
@@ -1649,7 +1649,7 @@ export default function AdminAnalyticsPage() {
                         style={{ width: "100%", height: "220px" }}
                       />
                       <div className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs text-amber-800">
-                        <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                        <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                         <p className="mt-1 leading-relaxed">{cardInsights.containerConfidence}</p>
                       </div>
                     </div>
@@ -1700,7 +1700,7 @@ export default function AdminAnalyticsPage() {
                   style={{ width: "100%", height: "280px" }}
                 />
                 <div className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                   <p className="mt-1 leading-relaxed">{cardInsights.microbial}</p>
                 </div>
               </div>
@@ -1813,7 +1813,7 @@ export default function AdminAnalyticsPage() {
                   </div>
                 </div>
                 <div className="mt-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs text-emerald-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                   <p className="mt-1 leading-relaxed">{cardInsights.forumActivity}</p>
                 </div>
               </div>
@@ -1892,7 +1892,7 @@ export default function AdminAnalyticsPage() {
                   </div>
                 </div>
                 <div className="mt-2 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs text-emerald-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                   <p className="mt-1 leading-relaxed">{cardInsights.category}</p>
                 </div>
               </div>
@@ -1964,7 +1964,7 @@ export default function AdminAnalyticsPage() {
                       }}
                     />
                     <div className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.contributors}</p>
                     </div>
                   </>
@@ -2027,7 +2027,7 @@ export default function AdminAnalyticsPage() {
                       }}
                     />
                     <div className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{cardInsights.source}</p>
                     </div>
                   </>
@@ -2089,7 +2089,7 @@ export default function AdminAnalyticsPage() {
                   }}
                 />
                 <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                  <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                   <p className="mt-1 leading-relaxed">{cardInsights.organization}</p>
                 </div>
               </div>

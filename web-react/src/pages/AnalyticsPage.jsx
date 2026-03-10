@@ -666,7 +666,7 @@ export default function AnalyticsPage() {
                       <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Latest reading</p><p className="mt-1 font-semibold text-slate-700">{analytics.confidenceTrend.length ? formatPercent(analytics.confidenceTrend[analytics.confidenceTrend.length - 1].value) : "--"}</p></div>
                     </div>
                     <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{buildConfidenceInsight(analytics.confidenceTrend, analytics.avgProbability)}</p>
                     </div>
                   </>
@@ -693,7 +693,7 @@ export default function AnalyticsPage() {
                       <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-rose-600">Peak risk</p><p className="mt-1 font-semibold text-rose-700">{analytics.riskTrend.length ? Math.max(...analytics.riskTrend.map((p) => p.value)).toFixed(2) : "--"}</p></div>
                     </div>
                     <div className="mt-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{buildRiskInsight(analytics.riskTrend)}</p>
                     </div>
                   </>
@@ -715,7 +715,7 @@ export default function AnalyticsPage() {
                       <div className="rounded-lg border border-slate-300 bg-white px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Busiest day</p><p className="mt-1 font-semibold text-slate-700">{(() => { const b = [...analytics.dayBuckets].sort((a, c) => c.count - a.count)[0]; return b ? `${compactDateLabel(b.date)} (${b.count})` : "--"; })()}</p></div>
                     </div>
                     <div className="mt-2 rounded-lg border border-slate-400 bg-white px-3 py-2 text-xs text-slate-700">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{buildVolumeInsight(analytics.dayBuckets)}</p>
                     </div>
                   </>
@@ -741,7 +741,7 @@ export default function AnalyticsPage() {
                       ))}
                     </div>
                     <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{buildOutcomeInsight(analytics.statusDistribution)}</p>
                     </div>
                   </>
@@ -771,7 +771,7 @@ export default function AnalyticsPage() {
                           <div className="col-span-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-amber-700">Reference</p><p className="mt-1 font-medium text-amber-700">{refDesc}</p><p className="mt-1 text-[11px] text-amber-700">Out-of-reference points: {plot.outOfReference} / {plot.count}</p></div>
                         </div>
                         <div className="mt-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs text-sky-800">
-                          <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                          <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                           <p className="mt-1 leading-relaxed">{buildParameterInsight(plot)}</p>
                         </div>
                       </>) : <p className="mt-3 text-sm text-slate-500">No valid values recorded yet for this parameter.</p>}
@@ -797,7 +797,7 @@ export default function AnalyticsPage() {
                       <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2"><p className="text-[10px] uppercase tracking-[0.22em] text-rose-700">Flagged checks</p><p className="mt-1 text-lg font-semibold text-rose-700">{analytics.flaggedAnomalyChecks}</p></div>
                     </div>
                     <div className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Chatbot trend insight</p>
+                      <p className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.14em]"><IconBot className="h-3.5 w-3.5" />Trend Insight</p>
                       <p className="mt-1 leading-relaxed">{buildAnomalyInsight(analytics.totalAnomalyChecks, analytics.flaggedAnomalyChecks, analytics.anomalyRecentTrend)}</p>
                     </div>
                   </div>
