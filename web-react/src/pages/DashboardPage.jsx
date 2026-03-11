@@ -510,7 +510,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {sampleGreeting.pct && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Confidence</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Potability %</p>
                       <p className="mt-1 text-lg font-bold text-slate-800">{sampleGreeting.pct}</p>
                     </div>
                   )}
