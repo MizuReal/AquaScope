@@ -1,52 +1,117 @@
 # Aquascope
 
-## Scope
+## Overview
 
-- **React Native Mobile**: Android mobile application
-- **React Website**: https://aquascope.vercel.app
+Aquascope is a multi-platform application for aquatic data analysis and visualization, featuring:
 
-- **DATABASE:SUPABASE**
-- **GROQ AI**
+- **React Native Mobile App**: Android application
+- **React Web App**: [https://aquascope.vercel.app](https://aquascope.vercel.app)
+- **Backend**: FastAPI (Python)
+- **Database**: Supabase
+- **AI Integration**: GROQ AI
 
-## MUST HAVE
-- NODEJS
-- PYTHON 3.11
-- MODEL FOR MOSS CLASSIFICATION (CHECK /MODEL IN ROOT DIRECTORY)
+---
+
+## Prerequisites
+
+Ensure the following are installed on your system:
+
+- [Node.js](https://nodejs.org/) (v16+ recommended)
+- [Python 3.11](https://www.python.org/downloads/release/python-3110/)
+- [Git](https://git-scm.com/)
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli`)
+- **Moss Classification Model** (see `/model` directory in project root)
+
+---
 
 ## Installation
-### BACKEND SETUP
+
+### 1. Clone the Repository
+
+```bash
+git clone <REPO_URL>
+cd aquascope
+```
+
+---
+
+### 2. Backend Setup
+
+#### Create and Activate Virtual Environment
+
 ```bash
 python -m venv .venv
 ```
 
-**Activation:**
-- Windows: `.venv/Scripts/Activate`
-- Linux: `.venv/bin/activate
+- **Windows:**  
+    ```bash
+    .venv\Scripts\activate
+    ```
+- **Linux/macOS:**  
+    ```bash
+    source .venv/bin/activate
+    ```
+
+#### Install Python Dependencies
+
 ```bash
-#Inside .venv run this:
 pip install -r requirements.txt
 ```
 
-### FRONTEND SETUP
+---
+
+### 3. Frontend Setup
+
+#### Mobile App (`/frontend`)
+
 ```bash
-#nagivate to /frontend (mobile)
-npm install
-```
-```bash
-#naviage to /web-react (website)
+cd frontend
 npm install
 ```
 
-## Run Setup
+#### Web App (`/web-react`)
+
 ```bash
-#/frontend
-npx expo start
+cd ../web-react
+npm install
 ```
+
+---
+
+## Running the Applications
+
+### 1. Start the Backend
+
 ```bash
-#/web-react
-npm run dev
-```
-```bash
-#/backend
+cd ../backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+### 2. Start the Mobile App
+
+```bash
+cd ../frontend
+npx expo start
+```
+
+### 3. Start the Web App
+
+```bash
+cd ../web-react
+npm run dev
+```
+
+---
+
+## Additional Notes
+
+- **Environment Variables:**  
+    Copy `.env.example` to `.env` in each relevant directory and update values as needed.
+- **Database Setup:**  
+    Ensure Supabase is configured and credentials are set in the backend `.env` file.
+- **Model Files:**  
+    Place the moss classification model files in the `/model` directory as required.
+
+---
+
+For troubleshooting or further documentation, refer to the `README.md` or contact the maintainers.
