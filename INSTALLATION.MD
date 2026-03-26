@@ -74,18 +74,27 @@ cd AquaScope
 
 ### 2. Backend Setup
 
-#### Create and Activate Virtual Environment
+#### Create Virtual Environment
 
 - **Linux/macOS:**
-        ```bash
-        python3.11 -m venv .venv
-        source .venv/bin/activate
-        ```
+    ```bash
+    python3.11 -m venv .venv
+    ```
 - **Windows:**
-        ```bash
-        python -m venv .venv
-        .venv\Scripts\activate
-        ```
+    ```bash
+    python -m venv .venv
+    ```
+
+#### Activate Virtual Environment
+
+- **Linux/macOS:**
+    ```bash
+    source .venv/bin/activate
+    ```
+- **Windows:**
+    ```bash
+    .venv\Scripts\activate
+    ```
 
 #### Install Python Dependencies
 
