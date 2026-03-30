@@ -119,7 +119,15 @@ npm install
 cd ../web-react
 npm install
 ```
-
+## NOTE: LINUX MINT HAS A PREINSTALL PYTHON 3.12 .venv should be running as 3.11
+# RUN THIS COMMAND
+```bash
+deactivate
+rm -rf .venv
+python3.11 -m venv .venv
+source .venv/bin/activate
+python --version
+```
 ---
 
 ## Running the Applications
