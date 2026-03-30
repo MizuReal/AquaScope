@@ -166,7 +166,7 @@ npm run dev
 - **Database Setup:**  
     Ensure Supabase is configured and credentials are set in the backend `.env` file.
 - **Model Files:**  
-    Place the moss classification model files in the `/model` directory as required.
+    Place the moss classification model files in the `/moss_model` directory as required.
 
 ---
 
