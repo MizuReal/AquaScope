@@ -32,32 +32,35 @@ The backend requires **Python 3.11.11**.
 Some distributions (e.g., Linux Mint) may have Python 3.12 preinstalled.
 
 ### Installing Python 3.11.11 on Debian-based Linux
-
 1. **Install build dependencies:**
-        ```bash
-        sudo apt update
-        sudo apt install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev \
-        libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget
-        ```
+
+    ```sh
+    sudo apt update
+    sudo apt install -y build-essential zlib1g-dev libncurses5-dev libgdbm-dev \
+    libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev wget
+    ```
 
 2. **Download Python 3.11.11 source:**
-        ```bash
-        wget https://www.python.org/ftp/python/3.11.11/Python-3.11.11.tgz
-        ```
+
+    ```sh
+    wget https://www.python.org/ftp/python/3.11.11/Python-3.11.11.tgz
+    ```
 
 3. **Extract and build:**
-        ```bash
-        tar -xf Python-3.11.11.tgz
-        cd Python-3.11.11
-        ./configure --enable-optimizations
-        make -j$(nproc)
-        sudo make altinstall
-        ```
+
+    ```sh
+    tar -xf Python-3.11.11.tgz
+    cd Python-3.11.11
+    ./configure --enable-optimizations
+    make -j$(nproc)
+    sudo make altinstall
+    ```
 
 4. **Verify installation:**
-        ```bash
-        python3.11 --version
-        ```
+
+    ```sh
+    python3.11 --version
+    ```
 
 ---
 
